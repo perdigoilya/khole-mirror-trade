@@ -3,7 +3,6 @@ import { ArrowRight, Zap, BarChart3, Shield, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Navigation from "@/components/Navigation";
-import Footer from "@/components/Footer";
 import nameLogo from "@/assets/name-logo.png";
 
 const Index = () => {
@@ -26,15 +25,15 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen bg-background overflow-hidden flex flex-col">
       <Navigation />
       
-      <main className="pt-32 pb-20">
+      <main className="flex-1 flex items-center justify-center px-4">
         {/* Hero Section */}
-        <section className="container mx-auto px-4 text-center">
-          <div className="max-w-4xl mx-auto space-y-8">
+        <section className="container mx-auto text-center">
+          <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-center space-x-3">
-              <img src={nameLogo} alt="FOMO APP" className="h-32 md:h-48 w-auto" />
+              <img src={nameLogo} alt="FOMO APP" className="h-24 md:h-32 w-auto" />
               <Badge 
                 variant="outline" 
                 className="border-primary text-primary text-xs px-2 py-1"
@@ -43,7 +42,7 @@ const Index = () => {
               </Badge>
             </div>
 
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               The professional terminal for prediction market trading. Built for speed. Designed for traders.
             </p>
 
@@ -52,7 +51,7 @@ const Index = () => {
               <ExternalLink className="h-4 w-4 text-primary" />
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
               <Button 
                 asChild
                 size="lg"
@@ -75,37 +74,33 @@ const Index = () => {
                 </Link>
               </Button>
             </div>
-          </div>
-        </section>
 
-        {/* Features Section */}
-        <section className="container mx-auto px-4 mt-32">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {features.map((feature, index) => (
-              <div 
-                key={index}
-                className="group p-8 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300"
-              >
-                <div className="flex items-start space-x-4">
-                  <div className="p-2 rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                    <feature.icon className="h-6 w-6" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-2 text-foreground">
-                      {feature.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {feature.description}
-                    </p>
+            {/* Features Section */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl mx-auto pt-8">
+              {features.map((feature, index) => (
+                <div 
+                  key={index}
+                  className="group p-4 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300"
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="p-2 rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      <feature.icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <h3 className="text-base font-semibold mb-1 text-foreground">
+                        {feature.title}
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {feature.description}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
       </main>
-
-      <Footer />
     </div>
   );
 };
