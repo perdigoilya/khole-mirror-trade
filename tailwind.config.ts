@@ -14,7 +14,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        mono: ['"JetBrains Mono"', 'monospace'],
+        sans: ['"Space Grotesk"', 'sans-serif'],
         display: ['"Bebas Neue"', 'sans-serif'],
       },
       colors: {
