@@ -163,7 +163,7 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
             <p className="text-sm font-semibold text-foreground">Need an API Key?</p>
             <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
               <li>Log in to your Kalshi account</li>
-              <li>Go to Profile Settings</li>
+              <li>Go to <a href="https://kalshi.com/account/profile" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Profile Settings</a></li>
               <li>Find the "API Keys" section</li>
               <li>Click "Create New API Key" and save both the Key ID and Private Key</li>
             </ol>
