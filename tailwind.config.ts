@@ -15,6 +15,7 @@ export default {
     extend: {
       fontFamily: {
         mono: ['"JetBrains Mono"', 'monospace'],
+        display: ['"Bebas Neue"', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
