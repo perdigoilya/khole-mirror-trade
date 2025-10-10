@@ -1,8 +1,16 @@
 import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useKalshi } from "@/contexts/KalshiContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +20,11 @@ const Markets = () => {
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  
+  const [platform, setPlatform] = useState("kalshi");
+  const [sortBy, setSortBy] = useState("trending");
+  const [timeFilter, setTimeFilter] = useState("all-time");
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     if (isConnected && credentials) {
@@ -64,12 +77,57 @@ const Markets = () => {
           <ConnectionRequired />
         ) : (
           <div className="container mx-auto px-4">
-            <div className="max-w-6xl mx-auto">
-              <div className="mb-8">
+            <div className="max-w-7xl mx-auto">
+              <div className="mb-6">
                 <h1 className="text-4xl font-bold mb-2">Markets</h1>
                 <p className="text-muted-foreground">
                   Real-time prediction markets. Lightning-fast execution.
                 </p>
+              </div>
+
+              {/* Filter Bar */}
+              <div className="flex flex-wrap items-center gap-3 mb-6 p-4 bg-card border border-border rounded-lg">
+                <Select value={platform} onValueChange={setPlatform}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kalshi">Kalshi</SelectItem>
+                    <SelectItem value="polymarket">Polymarket</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trending">Trending</SelectItem>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="top">Top</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={timeFilter} onValueChange={setTimeFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all-time">All Time</SelectItem>
+                    <SelectItem value="this-month">This Month</SelectItem>
+                    <SelectItem value="this-week">This Week</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="ml-auto"
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filters
+                </Button>
               </div>
 
               <div className="space-y-4">
