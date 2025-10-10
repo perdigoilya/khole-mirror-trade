@@ -45,10 +45,15 @@ const Index = () => {
               The professional terminal for prediction market trading. Built for speed. Designed for traders.
             </p>
 
-            <div className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5">
+            <a 
+              href="https://four.meme/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer"
+            >
               <span className="text-base text-foreground font-medium">$FOMO now live on Four.meme</span>
               <ExternalLink className="h-5 w-5 text-primary" />
-            </div>
+            </a>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
               <Button 
