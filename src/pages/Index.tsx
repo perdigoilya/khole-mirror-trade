@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
+import nameLogo from "@/assets/name-logo.png";
 
 const Index = () => {
   const features = [
@@ -33,10 +34,7 @@ const Index = () => {
         <section className="container mx-auto px-4 text-center">
           <div className="max-w-4xl mx-auto space-y-8">
             <div className="flex items-center justify-center space-x-3">
-              <h1 className="text-6xl md:text-8xl font-bold">
-                <span className="text-primary">k</span>
-                <span className="text-foreground">hole</span>
-              </h1>
+              <img src={nameLogo} alt="FOMO APP" className="h-16 md:h-24 w-auto" />
               <Badge 
                 variant="outline" 
                 className="border-primary text-primary text-xs px-2 py-1"
