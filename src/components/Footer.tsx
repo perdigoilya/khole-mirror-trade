@@ -2,9 +2,9 @@ import { Link } from "react-router-dom";
 
 const Footer = () => {
   return (
-    <footer className="border-t border-border py-8 mt-20">
+    <footer className="border-t border-border py-4">
       <div className="container mx-auto px-4">
-        <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+        <div className="flex flex-col md:flex-row justify-between items-center space-y-2 md:space-y-0">
           <p className="text-sm text-muted-foreground">
             Built with precision for serious traders
           </p>
