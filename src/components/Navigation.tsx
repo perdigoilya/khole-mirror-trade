@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Home, TrendingUp, Star, PieChart, HelpCircle, Twitter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import logo from "@/assets/logo.png";
 
 const Navigation = () => {
   const location = useLocation();
@@ -21,10 +22,7 @@ const Navigation = () => {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center space-x-2">
-            <span className="text-2xl font-bold">
-              <span className="text-primary">k</span>
-              <span className="text-foreground">hole</span>
-            </span>
+            <img src={logo} alt="khole" className="h-8 w-auto" />
           </Link>
 
           <div className="hidden md:flex items-center space-x-1">
