@@ -34,7 +34,7 @@ const Index = () => {
         <section className="container mx-auto px-4 text-center">
           <div className="max-w-4xl mx-auto space-y-8">
             <div className="flex items-center justify-center space-x-3">
-              <img src={nameLogo} alt="FOMO APP" className="h-16 md:h-24 w-auto" />
+              <img src={nameLogo} alt="FOMO APP" className="h-32 md:h-48 w-auto" />
               <Badge 
                 variant="outline" 
                 className="border-primary text-primary text-xs px-2 py-1"
