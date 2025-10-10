@@ -1,11 +1,16 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, TrendingUp, Star, PieChart, HelpCircle, Twitter } from "lucide-react";
+import { Home, TrendingUp, Star, PieChart, HelpCircle, Twitter, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
+import { useKalshi } from "@/contexts/KalshiContext";
+import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
+import { useState } from "react";
 
 const Navigation = () => {
   const location = useLocation();
+  const { isConnected } = useKalshi();
+  const [showConnectDialog, setShowConnectDialog] = useState(false);
   
   const isActive = (path: string) => location.pathname === path;
   
@@ -53,11 +58,28 @@ const Navigation = () => {
             </a>
           </div>
 
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
-            Connect to Kalshi
+          <Button 
+            onClick={() => setShowConnectDialog(true)}
+            className={cn(
+              "font-semibold",
+              isConnected 
+                ? "bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50" 
+                : "bg-primary hover:bg-primary/90 text-primary-foreground"
+            )}
+          >
+            {isConnected ? (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Connected
+              </>
+            ) : (
+              "Connect to Kalshi"
+            )}
           </Button>
         </div>
       </div>
+      
+      <ConnectKalshiDialog open={showConnectDialog} onOpenChange={setShowConnectDialog} />
     </nav>
   );
 };
