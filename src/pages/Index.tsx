@@ -3,6 +3,7 @@ import { ArrowRight, Zap, BarChart3, Shield, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Navigation from "@/components/Navigation";
+import Footer from "@/components/Footer";
 import nameLogo from "@/assets/name-logo.png";
 
 const Index = () => {
@@ -101,6 +102,8 @@ const Index = () => {
           </div>
         </section>
       </main>
+      
+      <Footer />
     </div>
   );
 };
