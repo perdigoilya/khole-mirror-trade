@@ -73,8 +73,8 @@ const Index = () => {
                 variant="outline"
                 className="border-border hover:bg-muted font-display text-lg px-8 py-6"
               >
-                <Link to="/portfolio">
-                  View Portfolio
+                <Link to="/feed">
+                  NEWS FEED
                 </Link>
               </Button>
             </div>
