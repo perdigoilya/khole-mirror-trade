@@ -168,7 +168,7 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
               <li>Click "Create New API Key" and save both the Key ID and Private Key</li>
             </ol>
             <a
-              href="https://kalshi.com"
+              href="https://docs.kalshi.com/getting_started/api_keys"
               target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-primary hover:underline inline-block"
