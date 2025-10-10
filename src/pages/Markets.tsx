@@ -84,10 +84,7 @@ const Markets = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
       <main className="flex-1 pt-10 pb-20">
-        {!isConnected ? (
-          <ConnectionRequired />
-        ) : (
-          <div className="container mx-auto px-4">
+        <div className="container mx-auto px-4">
             <div className="max-w-7xl mx-auto">
               <div className="mb-6">
                 <h1 className="text-4xl font-bold mb-2">Markets</h1>
@@ -142,8 +139,20 @@ const Markets = () => {
               </div>
 
               <div className="space-y-4">
+                {!user && (
+                  <div className="p-4 mb-4 rounded-lg border border-primary/30 bg-primary/5">
+                    <p className="text-sm text-muted-foreground text-center">
+                      <a href="/auth" className="text-primary font-semibold hover:underline">Log in</a> to connect your Kalshi account and view live markets
+                    </p>
+                  </div>
+                )}
                 {loading ? (
                   <p className="text-muted-foreground text-center py-8">Loading markets...</p>
+                ) : !isConnected && user ? (
+                  <div className="text-center py-12">
+                    <p className="text-muted-foreground mb-4">Connect your Kalshi account to view markets</p>
+                    <ConnectionRequired />
+                  </div>
                 ) : markets.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">No markets available</p>
                 ) : (
@@ -192,7 +201,6 @@ const Markets = () => {
               </div>
             </div>
           </div>
-        )}
       </main>
 
       <Footer />

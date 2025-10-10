@@ -22,7 +22,7 @@ const Navigation = () => {
   
   // Redirect to auth if trying to access protected pages without login
   useEffect(() => {
-    const protectedRoutes = ["/markets", "/portfolio", "/watchlist", "/feed"];
+    const protectedRoutes = ["/portfolio", "/watchlist"];
     if (protectedRoutes.includes(location.pathname) && !user) {
       navigate("/auth");
     }

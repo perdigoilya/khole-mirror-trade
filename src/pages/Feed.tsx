@@ -17,37 +17,38 @@ interface NewsItem {
 }
 
 const Feed = () => {
-  const { isConnected } = useKalshi();
+  const { isConnected, user } = useKalshi();
   const [mainFeed, setMainFeed] = useState<NewsItem[]>([]);
   const [relevantFeed, setRelevantFeed] = useState<NewsItem[]>([]);
 
   useEffect(() => {
-    if (isConnected) {
-      // Mock data - will be replaced with real API
-      setMainFeed([
-        {
-          id: "1",
-          title: "Fed announces interest rate decision",
-          source: "Bloomberg",
-          timestamp: "2 min ago",
-          category: "Economics",
-        },
-        {
-          id: "2",
-          title: "Tech stocks rally on AI developments",
-          source: "Reuters",
-          timestamp: "15 min ago",
-          category: "Technology",
-        },
-        {
-          id: "3",
-          title: "Election polls show tight race in key states",
-          source: "CNN",
-          timestamp: "32 min ago",
-          category: "Politics",
-        },
-      ]);
+    // Main feed is always available - mock data for now
+    setMainFeed([
+      {
+        id: "1",
+        title: "Fed announces interest rate decision",
+        source: "Bloomberg",
+        timestamp: "2 min ago",
+        category: "Economics",
+      },
+      {
+        id: "2",
+        title: "Tech stocks rally on AI developments",
+        source: "Reuters",
+        timestamp: "15 min ago",
+        category: "Technology",
+      },
+      {
+        id: "3",
+        title: "Election polls show tight race in key states",
+        source: "CNN",
+        timestamp: "32 min ago",
+        category: "Politics",
+      },
+    ]);
 
+    // Relevant feed only loads if user is connected
+    if (isConnected && user) {
       setRelevantFeed([
         {
           id: "r1",
@@ -67,16 +68,13 @@ const Feed = () => {
         },
       ]);
     }
-  }, [isConnected]);
+  }, [isConnected, user]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
       <main className="flex-1 pt-10 pb-20">
-        {!isConnected ? (
-          <ConnectionRequired />
-        ) : (
-          <div className="container mx-auto px-4">
+        <div className="container mx-auto px-4">
             <div className="max-w-7xl mx-auto">
               <div className="mb-8">
                 <h1 className="text-4xl font-bold mb-2">News Feed</h1>
@@ -115,26 +113,43 @@ const Feed = () => {
                       News filtered for your watchlist and positions
                     </p>
                     <Separator className="mb-4" />
-                    <div className="space-y-4">
-                      {relevantFeed.map((item) => (
-                        <Card key={item.id} className="p-4 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer">
-                          <Badge variant="default" className="mb-2 text-xs">
-                            {item.category}
-                          </Badge>
-                          <h4 className="text-sm font-semibold mb-2">{item.title}</h4>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{item.source}</span>
-                            <span>{item.timestamp}</span>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
+                    
+                    {!user || !isConnected ? (
+                      <div className="p-6 rounded-lg border border-border bg-card text-center">
+                        <p className="text-sm text-muted-foreground mb-4">
+                          {!user 
+                            ? "Log in to see personalized news for your watchlist and positions"
+                            : "Connect your Kalshi account to see personalized news"}
+                        </p>
+                        <a 
+                          href={!user ? "/auth" : "#"}
+                          onClick={!user ? undefined : (e) => { e.preventDefault(); /* Open connect dialog */ }}
+                          className="text-primary font-semibold hover:underline"
+                        >
+                          {!user ? "Log in" : "Connect Kalshi"}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {relevantFeed.map((item) => (
+                          <Card key={item.id} className="p-4 border-primary/30 hover:border-primary/50 transition-colors cursor-pointer">
+                            <Badge variant="default" className="mb-2 text-xs">
+                              {item.category}
+                            </Badge>
+                            <h4 className="text-sm font-semibold mb-2">{item.title}</h4>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>{item.source}</span>
+                              <span>{item.timestamp}</span>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        )}
       </main>
 
       <Footer />
