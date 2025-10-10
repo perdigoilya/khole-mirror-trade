@@ -9,18 +9,18 @@ const Index = () => {
   const features = [
     {
       icon: Zap,
-      title: "Lightning Fast",
-      description: "Real-time WebSocket feeds. Sub-second updates. Professional-grade performance.",
+      title: "Alpha-Matched News Feed",
+      description: "Real-time news matched with relevant markets. Snipe opportunities before resolution. Be first to confirmed results.",
     },
     {
       icon: BarChart3,
-      title: "Professional Interface",
-      description: "Clean, focused design. Advanced charting. Intuitive portfolio management.",
+      title: "High-Performance Terminal",
+      description: "Real-time WebSocket feeds. Instant order execution. Advanced charting. Built for serious traders.",
     },
     {
       icon: Shield,
-      title: "Secure & Private",
-      description: "Direct Kalshi API integration. Local-only storage. Your keys never leave your device.",
+      title: "Streamlined Trading",
+      description: "Professional portfolio management. Direct Kalshi integration. Zero friction, maximum speed.",
     },
   ];
 
@@ -42,7 +42,7 @@ const Index = () => {
             </div>
 
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              The professional terminal for prediction market trading. Built for speed. Designed for traders.
+              Match breaking news with prediction markets in real-time. Snipe opportunities before resolution. The alpha terminal for serious traders.
             </p>
 
             <a 
