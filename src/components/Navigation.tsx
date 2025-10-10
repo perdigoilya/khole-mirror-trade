@@ -36,7 +36,7 @@ const Navigation = () => {
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  "flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors",
+                  "flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-display tracking-wide transition-colors",
                   isActive(item.path)
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -51,7 +51,7 @@ const Navigation = () => {
               href="https://twitter.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-display tracking-wide text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <Twitter className="h-4 w-4" />
               <span>Twitter</span>
@@ -61,7 +61,7 @@ const Navigation = () => {
           <Button 
             onClick={() => setShowConnectDialog(true)}
             className={cn(
-              "font-semibold",
+              "font-display tracking-wide",
               isConnected 
                 ? "bg-primary/20 text-primary hover:bg-primary/30 border border-primary/50" 
                 : "bg-primary hover:bg-primary/90 text-primary-foreground"
