@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      followed_twitter_accounts: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          id: string
+          twitter_user_id: string | null
+          twitter_username: string
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          twitter_user_id?: string | null
+          twitter_username: string
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          twitter_user_id?: string | null
+          twitter_username?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -32,6 +56,42 @@ export type Database = {
           email?: string
           id?: string
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      twitter_feed: {
+        Row: {
+          author_name: string | null
+          author_username: string
+          category: string | null
+          created_at: string
+          fetched_at: string | null
+          id: string
+          relevant: boolean | null
+          text: string
+          tweet_id: string
+        }
+        Insert: {
+          author_name?: string | null
+          author_username: string
+          category?: string | null
+          created_at: string
+          fetched_at?: string | null
+          id?: string
+          relevant?: boolean | null
+          text: string
+          tweet_id: string
+        }
+        Update: {
+          author_name?: string | null
+          author_username?: string
+          category?: string | null
+          created_at?: string
+          fetched_at?: string | null
+          id?: string
+          relevant?: boolean | null
+          text?: string
+          tweet_id?: string
         }
         Relationships: []
       }

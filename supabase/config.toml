@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.kalshi-portfolio]
 verify_jwt = false
+
+[functions.twitter-fetch]
+verify_jwt = false
