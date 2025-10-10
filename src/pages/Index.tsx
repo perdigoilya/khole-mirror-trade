@@ -46,7 +46,7 @@ const Index = () => {
             </p>
 
             <div className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5">
-              <span className="text-base text-foreground font-medium">$KHOLE now live on Pump.fun</span>
+              <span className="text-base text-foreground font-medium">$FOMO now live on Four.meme</span>
               <ExternalLink className="h-5 w-5 text-primary" />
             </div>
 
