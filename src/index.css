@@ -17,7 +17,7 @@ All colors MUST be HSL.
     --popover: 0 0% 6%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 142 76% 36%;
+    --primary: 45 91% 49%;
     --primary-foreground: 0 0% 4%;
 
     --secondary: 0 0% 10%;
@@ -26,7 +26,7 @@ All colors MUST be HSL.
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 65%;
 
-    --accent: 142 76% 36%;
+    --accent: 45 91% 49%;
     --accent-foreground: 0 0% 4%;
 
     --destructive: 0 84% 60%;
@@ -34,14 +34,14 @@ All colors MUST be HSL.
 
     --border: 0 0% 15%;
     --input: 0 0% 15%;
-    --ring: 142 76% 36%;
+    --ring: 45 91% 49%;
 
     --radius: 0.375rem;
 
-    /* Terminal green variations */
-    --terminal-green: 142 76% 36%;
-    --terminal-green-bright: 142 86% 46%;
-    --terminal-green-dim: 142 66% 26%;
+    /* Golden yellow variations */
+    --terminal-green: 45 91% 49%;
+    --terminal-green-bright: 45 95% 59%;
+    --terminal-green-dim: 45 85% 39%;
     
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(var(--terminal-green)), hsl(var(--terminal-green-bright)));
