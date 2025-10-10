@@ -14,7 +14,91 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_kalshi_credentials: {
+        Row: {
+          api_key_id: string
+          created_at: string | null
+          id: string
+          private_key: string
+          user_id: string
+        }
+        Insert: {
+          api_key_id: string
+          created_at?: string | null
+          id?: string
+          private_key: string
+          user_id: string
+        }
+        Update: {
+          api_key_id?: string
+          created_at?: string | null
+          id?: string
+          private_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_kalshi_credentials_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      watchlist: {
+        Row: {
+          added_at: string | null
+          id: string
+          market_ticker: string
+          market_title: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string | null
+          id?: string
+          market_ticker: string
+          market_title: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string | null
+          id?: string
+          market_ticker?: string
+          market_title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watchlist_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
