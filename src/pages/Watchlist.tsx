@@ -28,10 +28,10 @@ const Watchlist = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Navigation />
       
-      <main className="pt-24 pb-20">
+      <main className="flex-1 pt-24 pb-20">
         {!isConnected ? (
           <ConnectionRequired />
         ) : (
