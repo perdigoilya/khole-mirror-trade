@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Zap, BarChart3, Shield, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import nameLogo from "@/assets/name-logo.png";
 
@@ -26,8 +25,7 @@ const Index = () => {
   ];
 
   return (
-    <div className="h-screen bg-background overflow-hidden flex flex-col">
-      <Navigation />
+    <div className="h-screen bg-background overflow-hidden flex flex-col pt-14">
       
       <main className="flex-1 flex items-center justify-center px-4 py-8">
         {/* Hero Section */}

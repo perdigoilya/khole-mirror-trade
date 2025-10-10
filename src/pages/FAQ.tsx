@@ -1,4 +1,3 @@
-import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import {
   Accordion,
@@ -36,10 +35,9 @@ const FAQ = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Navigation />
+    <div className="min-h-screen bg-background flex flex-col pt-14">
       
-      <main className="flex-1 pt-24 pb-20">
+      <main className="flex-1 pt-10 pb-20">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto">
             <div className="mb-12 text-center">

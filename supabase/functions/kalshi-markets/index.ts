@@ -21,7 +21,7 @@ serve(async (req) => {
     }
 
     // Fetch markets from Kalshi API
-    const response = await fetch('https://trading-api.kalshi.com/trade-api/v2/markets', {
+    const response = await fetch('https://api.elections.kalshi.com/trade-api/v2/markets', {
       headers: {
         'Authorization': `Bearer ${apiKeyId}:${privateKey}`,
         'Content-Type': 'application/json',

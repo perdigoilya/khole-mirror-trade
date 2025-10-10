@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,14 +6,46 @@ import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
 import { useKalshi } from "@/contexts/KalshiContext";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Navigation = () => {
   const location = useLocation();
-  const { isConnected } = useKalshi();
+  const navigate = useNavigate();
+  const { isConnected, user, credentials } = useKalshi();
   const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const { toast } = useToast();
   
   const isActive = (path: string) => location.pathname === path;
+  
+  // Redirect to auth if trying to access protected pages without login
+  useEffect(() => {
+    const protectedRoutes = ["/markets", "/portfolio", "/watchlist", "/feed"];
+    if (protectedRoutes.includes(location.pathname) && !user) {
+      navigate("/auth");
+    }
+  }, [location.pathname, user, navigate]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!searchTerm.trim()) return;
+    
+    if (!isConnected || !credentials) {
+      toast({
+        title: "Connect Kalshi",
+        description: "Please connect your Kalshi account to search markets",
+        variant: "destructive",
+      });
+      setShowConnectDialog(true);
+      return;
+    }
+
+    // Navigate to markets page with search term
+    navigate(`/markets?search=${encodeURIComponent(searchTerm)}`);
+  };
   
   const navItems = [
     { path: "/markets", label: "Markets" },
@@ -53,27 +85,48 @@ const Navigation = () => {
 
           {/* Center: Search Bar */}
           <div className="flex-1 max-w-md hidden lg:block">
-            <div className="relative">
+            <form onSubmit={handleSearch} className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search markets..." 
                 className="pl-10 bg-muted/50 border-border"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
-            </div>
+            </form>
           </div>
 
           {/* Right: Connect + Login */}
           <div className="flex items-center space-x-2">
-            <Button 
-              onClick={() => setShowConnectDialog(true)}
-              variant={isConnected ? "outline" : "default"}
-              className="font-medium text-sm"
-            >
-              {isConnected ? "Connected" : "Connect Kalshi"}
-            </Button>
-            <Button variant="outline" className="font-medium text-sm">
-              Login
-            </Button>
+            {user ? (
+              <>
+                <Button 
+                  onClick={() => setShowConnectDialog(true)}
+                  variant={isConnected ? "outline" : "default"}
+                  className="font-medium text-sm"
+                >
+                  {isConnected ? "Connected" : "Connect Kalshi"}
+                </Button>
+                <Button 
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    navigate("/auth");
+                  }}
+                  variant="outline" 
+                  className="font-medium text-sm"
+                >
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <Button 
+                onClick={() => navigate("/auth")}
+                variant="default" 
+                className="font-medium text-sm"
+              >
+                Login
+              </Button>
+            )}
           </div>
         </div>
       </div>

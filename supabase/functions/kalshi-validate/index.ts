@@ -21,7 +21,7 @@ serve(async (req) => {
     }
 
     // Test the credentials by making a simple API call to Kalshi
-    const response = await fetch('https://trading-api.kalshi.com/trade-api/v2/exchange/status', {
+    const response = await fetch('https://api.elections.kalshi.com/trade-api/v2/exchange/status', {
       headers: {
         'Authorization': `Bearer ${apiKeyId}:${privateKey}`,
         'Content-Type': 'application/json',

@@ -21,7 +21,7 @@ serve(async (req) => {
     }
 
     // Fetch portfolio/positions from Kalshi API
-    const response = await fetch('https://trading-api.kalshi.com/trade-api/v2/portfolio/positions', {
+    const response = await fetch('https://api.elections.kalshi.com/trade-api/v2/portfolio/positions', {
       headers: {
         'Authorization': `Bearer ${apiKeyId}:${privateKey}`,
         'Content-Type': 'application/json',

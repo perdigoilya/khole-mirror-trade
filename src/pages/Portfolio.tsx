@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { useKalshi } from "@/contexts/KalshiContext";
@@ -55,10 +54,9 @@ const Portfolio = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Navigation />
+    <div className="min-h-screen bg-background flex flex-col pt-14">
       
-      <main className="flex-1 pt-24 pb-20">
+      <main className="flex-1 pt-10 pb-20">
         {!isConnected ? (
           <ConnectionRequired />
         ) : (

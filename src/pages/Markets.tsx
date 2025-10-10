@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -14,12 +13,14 @@ import {
 import { useKalshi } from "@/contexts/KalshiContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
 const Markets = () => {
-  const { isConnected, credentials } = useKalshi();
+  const { isConnected, credentials, user } = useKalshi();
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   
   const [platform, setPlatform] = useState("kalshi");
   const [sortBy, setSortBy] = useState("trending");
@@ -28,11 +29,12 @@ const Markets = () => {
 
   useEffect(() => {
     if (isConnected && credentials) {
-      fetchMarkets();
+      const searchTerm = searchParams.get("search");
+      fetchMarkets(searchTerm);
     }
-  }, [isConnected, credentials]);
+  }, [isConnected, credentials, searchParams]);
 
-  const fetchMarkets = async () => {
+  const fetchMarkets = async (searchTerm?: string | null) => {
     setLoading(true);
     try {
       const response = await fetch(
@@ -49,7 +51,17 @@ const Markets = () => {
       const data = await response.json();
       
       if (response.ok && data.markets) {
-        setMarkets(data.markets.slice(0, 10));
+        let filteredMarkets = data.markets;
+        
+        // Filter by search term if provided
+        if (searchTerm) {
+          filteredMarkets = filteredMarkets.filter((market: any) =>
+            market.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            market.ticker?.toLowerCase().includes(searchTerm.toLowerCase())
+          );
+        }
+        
+        setMarkets(filteredMarkets.slice(0, 10));
       } else {
         toast({
           title: "Error",
@@ -69,10 +81,9 @@ const Markets = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Navigation />
+    <div className="min-h-screen bg-background flex flex-col pt-14">
       
-      <main className="flex-1 pt-24 pb-20">
+      <main className="flex-1 pt-10 pb-20">
         {!isConnected ? (
           <ConnectionRequired />
         ) : (
