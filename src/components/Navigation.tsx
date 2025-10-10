@@ -48,7 +48,7 @@ const Navigation = () => {
             ))}
             
             <a
-              href="https://twitter.com"
+              href="https://x.com/tryFOMOapp"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center space-x-2 px-4 py-2 rounded-md text-base font-display tracking-wide text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
