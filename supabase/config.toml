@@ -1,0 +1,10 @@
+project_id = "pxzwzayroweafcroouvc"
+
+[functions.kalshi-validate]
+verify_jwt = false
+
+[functions.kalshi-markets]
+verify_jwt = false
+
+[functions.kalshi-portfolio]
+verify_jwt = false

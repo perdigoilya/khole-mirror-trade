@@ -1,38 +1,59 @@
+import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useKalshi } from "@/contexts/KalshiContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
+import { useToast } from "@/hooks/use-toast";
 
 const Markets = () => {
-  const { isConnected } = useKalshi();
-  const mockMarkets = [
-    {
-      id: 1,
-      title: "Will Bitcoin reach $100,000 by end of 2025?",
-      probability: 67,
-      volume: "$1.2M",
-      trending: "up",
-      change: "+5.2%",
-    },
-    {
-      id: 2,
-      title: "Will the Federal Reserve cut rates in Q1 2025?",
-      probability: 45,
-      volume: "$890K",
-      trending: "down",
-      change: "-2.1%",
-    },
-    {
-      id: 3,
-      title: "Will unemployment rate fall below 4% by March?",
-      probability: 73,
-      volume: "$654K",
-      trending: "up",
-      change: "+8.4%",
-    },
-  ];
+  const { isConnected, credentials } = useKalshi();
+  const [markets, setMarkets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (isConnected && credentials) {
+      fetchMarkets();
+    }
+  }, [isConnected, credentials]);
+
+  const fetchMarkets = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-markets`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(credentials),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (response.ok && data.markets) {
+        setMarkets(data.markets.slice(0, 10));
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to fetch markets",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch markets",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -52,52 +73,53 @@ const Markets = () => {
               </div>
 
               <div className="space-y-4">
-                {mockMarkets.map((market) => (
-                  <div
-                    key={market.id}
-                    className="p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300 cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-3 text-foreground">
-                          {market.title}
-                        </h3>
-                        
-                        <div className="flex items-center space-x-6">
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Probability</p>
-                            <p className="text-2xl font-bold text-primary">{market.probability}%</p>
-                          </div>
+                {loading ? (
+                  <p className="text-muted-foreground text-center py-8">Loading markets...</p>
+                ) : markets.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No markets available</p>
+                ) : (
+                  markets.map((market, index) => (
+                    <div
+                      key={market.ticker || index}
+                      className="p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300 cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-3 text-foreground">
+                            {market.title || market.ticker}
+                          </h3>
                           
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Volume</p>
-                            <p className="text-lg font-semibold text-foreground">{market.volume}</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">24h Change</p>
-                            <div className="flex items-center space-x-1">
-                              {market.trending === "up" ? (
-                                <TrendingUp className="h-4 w-4 text-primary" />
-                              ) : (
-                                <TrendingDown className="h-4 w-4 text-destructive" />
-                              )}
-                              <p className={`text-lg font-semibold ${
-                                market.trending === "up" ? "text-primary" : "text-destructive"
-                              }`}>
-                                {market.change}
+                          <div className="flex items-center space-x-6">
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-1">YES Price</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {market.yes_bid ? `$${(market.yes_bid / 100).toFixed(2)}` : 'N/A'}
+                              </p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-1">NO Price</p>
+                              <p className="text-lg font-semibold text-destructive">
+                                {market.no_bid ? `$${(market.no_bid / 100).toFixed(2)}` : 'N/A'}
+                              </p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm text-muted-foreground mb-1">Volume</p>
+                              <p className="text-lg font-semibold text-foreground">
+                                {market.volume ? `$${(market.volume / 100).toLocaleString()}` : 'N/A'}
                               </p>
                             </div>
                           </div>
                         </div>
+                        
+                        <Badge variant="outline" className="border-primary text-primary">
+                          {market.status || 'Live'}
+                        </Badge>
                       </div>
-                      
-                      <Badge variant="outline" className="border-primary text-primary">
-                        Live
-                      </Badge>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>

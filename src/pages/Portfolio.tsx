@@ -1,35 +1,58 @@
+import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { useKalshi } from "@/contexts/KalshiContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
+import { useToast } from "@/hooks/use-toast";
 
 const Portfolio = () => {
-  const { isConnected } = useKalshi();
-  const positions = [
-    {
-      id: 1,
-      market: "Bitcoin to $100K",
-      position: "YES",
-      shares: 150,
-      avgPrice: 0.67,
-      currentPrice: 0.72,
-      pnl: "+$7.50",
-      pnlPercent: "+7.5%",
-      isProfit: true,
-    },
-    {
-      id: 2,
-      market: "Fed Rate Cut Q1",
-      position: "NO",
-      shares: 200,
-      avgPrice: 0.55,
-      currentPrice: 0.52,
-      pnl: "+$6.00",
-      pnlPercent: "+5.5%",
-      isProfit: true,
-    },
-  ];
+  const { isConnected, credentials } = useKalshi();
+  const [positions, setPositions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (isConnected && credentials) {
+      fetchPortfolio();
+    }
+  }, [isConnected, credentials]);
+
+  const fetchPortfolio = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-portfolio`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(credentials),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (response.ok && data.positions) {
+        setPositions(data.positions);
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to fetch portfolio",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch portfolio",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -73,67 +96,75 @@ const Portfolio = () => {
               <div className="space-y-4">
                 <h2 className="text-2xl font-bold mb-4">Active Positions</h2>
                 
-                {positions.map((position) => (
-                  <div
-                    key={position.id}
-                    className="p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-foreground">
-                        {position.market}
-                      </h3>
-                      <span className={`px-3 py-1 rounded-md text-sm font-semibold ${
-                        position.position === "YES" 
-                          ? "bg-primary/10 text-primary" 
-                          : "bg-destructive/10 text-destructive"
-                      }`}>
-                        {position.position}
-                      </span>
-                    </div>
+                {loading ? (
+                  <p className="text-muted-foreground text-center py-8">Loading positions...</p>
+                ) : positions.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-8">No active positions</p>
+                ) : (
+                  positions.map((position, index) => {
+                    const pnl = position.total_traded || 0;
+                    const isProfit = pnl >= 0;
                     
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Shares</p>
-                        <p className="text-lg font-semibold text-foreground">{position.shares}</p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Avg Price</p>
-                        <p className="text-lg font-semibold text-foreground">${position.avgPrice}</p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">Current Price</p>
-                        <p className="text-lg font-semibold text-foreground">${position.currentPrice}</p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">P&L</p>
-                        <p className={`text-lg font-semibold ${
-                          position.isProfit ? "text-primary" : "text-destructive"
-                        }`}>
-                          {position.pnl}
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm text-muted-foreground mb-1">P&L %</p>
-                        <div className="flex items-center space-x-1">
-                          {position.isProfit ? (
-                            <ArrowUpRight className="h-4 w-4 text-primary" />
-                          ) : (
-                            <ArrowDownRight className="h-4 w-4 text-destructive" />
-                          )}
-                          <p className={`text-lg font-semibold ${
-                            position.isProfit ? "text-primary" : "text-destructive"
+                    return (
+                      <div
+                        key={position.market_ticker || index}
+                        className="p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300"
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-foreground">
+                            {position.market_ticker}
+                          </h3>
+                          <span className={`px-3 py-1 rounded-md text-sm font-semibold ${
+                            position.position === "yes" 
+                              ? "bg-primary/10 text-primary" 
+                              : "bg-destructive/10 text-destructive"
                           }`}>
-                            {position.pnlPercent}
-                          </p>
+                            {position.position?.toUpperCase() || 'N/A'}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Position</p>
+                            <p className="text-lg font-semibold text-foreground">
+                              {position.position_count || 0}
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Total Traded</p>
+                            <p className="text-lg font-semibold text-foreground">
+                              ${(Math.abs(position.total_traded || 0) / 100).toFixed(2)}
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">Resting Orders</p>
+                            <p className="text-lg font-semibold text-foreground">
+                              {position.resting_order_count || 0}
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <p className="text-sm text-muted-foreground mb-1">P&L</p>
+                            <div className="flex items-center space-x-1">
+                              {isProfit ? (
+                                <ArrowUpRight className="h-4 w-4 text-primary" />
+                              ) : (
+                                <ArrowDownRight className="h-4 w-4 text-destructive" />
+                              )}
+                              <p className={`text-lg font-semibold ${
+                                isProfit ? "text-primary" : "text-destructive"
+                              }`}>
+                                ${(pnl / 100).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>

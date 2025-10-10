@@ -24,7 +24,7 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
     setPrivateKey("");
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (!apiKeyId.trim()) {
       toast({
         title: "API Key ID required",
@@ -43,13 +43,43 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
       return;
     }
 
-    connect({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim() });
-    toast({
-      title: "Connected to Kalshi",
-      description: "Your credentials have been saved securely",
-    });
-    onOpenChange(false);
-    handleClear();
+    // Validate credentials with backend
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-validate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim() }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.valid) {
+        connect({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim() });
+        toast({
+          title: "Connected to Kalshi",
+          description: "Your credentials have been validated successfully",
+        });
+        onOpenChange(false);
+        handleClear();
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: data.error || "Invalid API credentials",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to validate credentials. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
