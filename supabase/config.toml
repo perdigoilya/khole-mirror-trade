@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.twitter-fetch]
 verify_jwt = false
+
+[functions.polymarket-markets]
+verify_jwt = false

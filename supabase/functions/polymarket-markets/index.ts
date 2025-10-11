@@ -55,8 +55,9 @@ serve(async (req) => {
     const formattedMarkets = (markets as any[])
       .slice(0, 50)
       .map((market: any) => {
-        const yesOutcome = market.outcomes?.find((o: any) => (o.name || o.ticker)?.toLowerCase() === "yes");
-        const noOutcome = market.outcomes?.find((o: any) => (o.name || o.ticker)?.toLowerCase() === "no");
+        const outcomesArr = Array.isArray(market.outcomes) ? market.outcomes : undefined;
+        const yesOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'yes');
+        const noOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'no');
 
         const rawYes = yesOutcome?.price ?? market.yesPrice ?? market.best_buy_yes_cost ?? market.best_bid_yes ?? market.best_bid?.yes;
         const rawNo  = noOutcome?.price  ?? market.noPrice  ?? market.best_buy_no_cost  ?? market.best_bid_no  ?? market.best_bid?.no;
