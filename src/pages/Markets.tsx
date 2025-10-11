@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import * as React from "react";
 import Footer from "@/components/Footer";
 import { Filter, Star, TrendingUp, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,16 @@ const Markets = () => {
   const [sortBy, setSortBy] = useState("trending");
   const [timeFilter, setTimeFilter] = useState("all-time");
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Advanced filter states
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [minVolume, setMinVolume] = useState<number>(0);
+  const [maxVolume, setMaxVolume] = useState<number>(10000000);
+  const [minLiquidity, setMinLiquidity] = useState<number>(0);
+  const [maxLiquidity, setMaxLiquidity] = useState<number>(1000000);
+  const [minPrice, setMinPrice] = useState<number>(0);
+  const [maxPrice, setMaxPrice] = useState<number>(100);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
     // Fetch markets on mount and when platform/search params change
@@ -72,15 +83,6 @@ const Markets = () => {
           );
         }
         
-        // Apply sorting
-        if (sortBy === 'trending' || sortBy === 'top') {
-          filteredMarkets = [...filteredMarkets].sort((a: any, b: any) => 
-            (b.volumeRaw || 0) - (a.volumeRaw || 0)
-          );
-        } else if (sortBy === 'new') {
-          filteredMarkets = [...filteredMarkets].reverse();
-        }
-        
         setMarkets(filteredMarkets);
       } else {
         toast({
@@ -100,12 +102,95 @@ const Markets = () => {
     }
   };
 
+  // Apply all filters and sorting
+  const filteredAndSortedMarkets = React.useMemo(() => {
+    let result = [...markets];
+    
+    // Time filter
+    if (timeFilter !== 'all-time') {
+      const now = new Date();
+      const filterDate = new Date();
+      
+      if (timeFilter === 'today') {
+        filterDate.setHours(0, 0, 0, 0);
+      } else if (timeFilter === 'this-week') {
+        filterDate.setDate(now.getDate() - 7);
+      } else if (timeFilter === 'this-month') {
+        filterDate.setMonth(now.getMonth() - 1);
+      }
+      
+      result = result.filter((market: any) => {
+        if (!market.endDate || market.endDate === 'TBD') return true;
+        const endDate = new Date(market.endDate);
+        return endDate >= filterDate;
+      });
+    }
+    
+    // Category filter
+    if (categoryFilter !== 'all') {
+      result = result.filter((market: any) => 
+        market.category?.toLowerCase() === categoryFilter.toLowerCase()
+      );
+    }
+    
+    // Volume filter
+    result = result.filter((market: any) => {
+      const vol = market.volumeRaw || 0;
+      return vol >= minVolume && vol <= maxVolume;
+    });
+    
+    // Liquidity filter
+    result = result.filter((market: any) => {
+      const liq = market.liquidityRaw || 0;
+      return liq >= minLiquidity && liq <= maxLiquidity;
+    });
+    
+    // Price filter
+    result = result.filter((market: any) => {
+      const price = market.yesPrice || 50;
+      return price >= minPrice && price <= maxPrice;
+    });
+    
+    // Status filter
+    if (statusFilter !== 'all') {
+      result = result.filter((market: any) => 
+        market.status?.toLowerCase() === statusFilter.toLowerCase()
+      );
+    }
+    
+    // Apply sorting
+    if (sortBy === 'trending' || sortBy === 'top') {
+      result.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
+    } else if (sortBy === 'new') {
+      result.reverse();
+    }
+    
+    return result;
+  }, [markets, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
+  
+  // Get unique categories from markets
+  const categories = React.useMemo(() => {
+    const cats = new Set(markets.map((m: any) => m.category).filter(Boolean));
+    return ['all', ...Array.from(cats)];
+  }, [markets]);
+
   const getOutcomeBadge = (yesPrice: number) => {
     if (yesPrice >= 75) return { label: "Yes", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" };
     if (yesPrice >= 60) return { label: "Likely", color: "bg-lime-500/20 text-lime-400 border-lime-500/30" };
     if (yesPrice >= 40) return { label: "Even", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" };
     if (yesPrice >= 25) return { label: "Unlikely", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" };
     return { label: "No", color: "bg-red-500/20 text-red-400 border-red-500/30" };
+  };
+  
+  const resetFilters = () => {
+    setCategoryFilter('all');
+    setMinVolume(0);
+    setMaxVolume(10000000);
+    setMinLiquidity(0);
+    setMaxLiquidity(1000000);
+    setMinPrice(0);
+    setMaxPrice(100);
+    setStatusFilter('all');
   };
 
   return (
@@ -168,10 +253,107 @@ const Markets = () => {
 
           {/* Markets Table */}
           <div className="bg-card/30 border border-border rounded-lg overflow-hidden">
+            {/* Advanced Filters Panel */}
+            {showFilters && (
+              <div className="p-6 bg-card/50 border-b border-border">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Category Filter */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground font-medium">Category</label>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>
+                            {cat === 'all' ? 'All Categories' : cat}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Status Filter */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground font-medium">Status</label>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Price Range */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground font-medium">
+                      Yes Price: {minPrice}¢ - {maxPrice}¢
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        value={minPrice}
+                        onChange={(e) => setMinPrice(Number(e.target.value))}
+                        className="w-full px-2 py-1 text-sm bg-background border border-border rounded"
+                        min={0}
+                        max={100}
+                      />
+                      <input
+                        type="number"
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(Number(e.target.value))}
+                        className="w-full px-2 py-1 text-sm bg-background border border-border rounded"
+                        min={0}
+                        max={100}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Volume Range */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground font-medium">
+                      Min Volume: ${(minVolume / 1000).toFixed(0)}K
+                    </label>
+                    <input
+                      type="range"
+                      value={minVolume}
+                      onChange={(e) => setMinVolume(Number(e.target.value))}
+                      className="w-full"
+                      min={0}
+                      max={1000000}
+                      step={10000}
+                    />
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={resetFilters}
+                  >
+                    Reset Filters
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowFilters(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            )}
+          
             {/* Table Header */}
             <div className="grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-3 bg-card/50 border-b border-border text-sm text-muted-foreground font-medium">
               <div></div>
-              <div>MARKET ({markets.length})</div>
+              <div>MARKET ({filteredAndSortedMarkets.length})</div>
               <div>PRICES</div>
               <div>OUTCOME</div>
               <div>VOLUME</div>
@@ -197,12 +379,20 @@ const Markets = () => {
                 </p>
                 {user && <ConnectionRequired />}
               </div>
-            ) : markets.length === 0 ? (
+            ) : filteredAndSortedMarkets.length === 0 ? (
               <div className="p-12 text-center">
-                <p className="text-muted-foreground">No markets available</p>
+                <p className="text-muted-foreground">No markets match your filters</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={resetFilters}
+                  className="mt-4"
+                >
+                  Reset Filters
+                </Button>
               </div>
             ) : (
-              markets.map((market, index) => {
+              filteredAndSortedMarkets.map((market, index) => {
                 const yesPrice = typeof market.yesPrice === 'number' ? market.yesPrice : 50;
                 const noPrice = typeof market.noPrice === 'number' ? market.noPrice : 50;
                 const yesDecimal = (yesPrice / 100).toFixed(3);
