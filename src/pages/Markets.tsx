@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import * as React from "react";
 import Footer from "@/components/Footer";
-import { Filter, Star, TrendingUp, TrendingDown } from "lucide-react";
+import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,6 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +28,7 @@ const Markets = () => {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   
@@ -214,6 +220,142 @@ const Markets = () => {
     setMinPrice(0);
     setMaxPrice(100);
     setStatusFilter('all');
+  };
+
+  const toggleMarket = (marketId: string) => {
+    setExpandedMarkets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(marketId)) {
+        newSet.delete(marketId);
+      } else {
+        newSet.add(marketId);
+      }
+      return newSet;
+    });
+  };
+
+  const renderMarketRow = (market: any, index: number, isSubMarket: boolean = false) => {
+    let y = typeof market.yesPrice === 'number' ? market.yesPrice : (typeof market.noPrice === 'number' ? 100 - market.noPrice : undefined);
+    let n = typeof market.noPrice === 'number' ? market.noPrice : (typeof y === 'number' ? 100 - y : undefined);
+    if (typeof y === 'number' && typeof n === 'number') {
+      if (Math.abs((y + n) - 100) > 1) n = 100 - y;
+    } else if (typeof y === 'number') {
+      n = 100 - y;
+    } else if (typeof n === 'number') {
+      y = 100 - n;
+    }
+    const outcome = getOutcomeBadge(typeof y === 'number' ? y : 50);
+    const yesLabel = typeof y === 'number' ? `${y}¢` : '—';
+    const noLabel = typeof n === 'number' ? `${n}¢` : '—';
+    
+    return (
+      <div
+        className={`grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer group ${isSubMarket ? 'bg-card/20 pl-16' : ''}`}
+      >
+        {/* Icon/Image */}
+        <div className="flex items-start pt-1">
+          {market.image ? (
+            <img 
+              src={market.image} 
+              alt={market.title}
+              className="w-10 h-10 rounded-full object-cover bg-card"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+          ) : null}
+          <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
+            {(market.title || market.ticker || '?')[0].toUpperCase()}
+          </div>
+        </div>
+
+        {/* Market Info */}
+        <div className="flex flex-col gap-1 min-w-0">
+          <div className="flex items-start gap-2">
+            <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
+              {market.title || market.ticker}
+            </h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!user) {
+                  toast({
+                    title: "Account Required",
+                    description: "Please sign in to add markets to your watchlist",
+                    action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
+                  });
+                } else {
+                  toast({
+                    title: "Added to Watchlist",
+                    description: `${market.title} has been added to your watchlist`,
+                  });
+                }
+              }}
+            >
+              <Star className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground line-clamp-1">
+            {market.description}
+          </p>
+        </div>
+
+        {/* Prices with Bar */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-emerald-400 font-medium">{yesLabel}</span>
+            <span className="text-muted-foreground">/</span>
+            <span className="text-red-400 font-medium">{noLabel}</span>
+          </div>
+          <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
+            <div 
+              className="bg-gradient-to-r from-emerald-500 to-emerald-400"
+              style={{ width: `${typeof y === 'number' ? y : 0}%` }}
+            />
+            <div 
+              className="bg-gradient-to-r from-red-400 to-red-500"
+              style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Outcome Badge */}
+        <div className="flex items-center">
+          <Badge 
+            variant="outline" 
+            className={`${outcome.color} border text-xs px-3 py-1`}
+          >
+            {outcome.label}
+          </Badge>
+        </div>
+
+        {/* Volume */}
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-foreground">{market.volume}</span>
+          <div className="flex items-center gap-1 text-xs text-emerald-400">
+            <TrendingUp className="h-3 w-3" />
+            <span>{Math.floor(Math.random() * 30 + 10)}%</span>
+          </div>
+        </div>
+
+        {/* Liquidity */}
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-foreground">{market.liquidity}</span>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="opacity-60">∅ {(Math.random() * 2 + 0.5).toFixed(1)} comp</span>
+          </div>
+        </div>
+
+        {/* End Date */}
+        <div className="flex items-center">
+          <span className="text-sm text-muted-foreground">{market.endDate}</span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -416,127 +558,40 @@ const Markets = () => {
               </div>
             ) : (
               filteredAndSortedMarkets.map((market, index) => {
-                let y = typeof market.yesPrice === 'number' ? market.yesPrice : (typeof market.noPrice === 'number' ? 100 - market.noPrice : undefined);
-                let n = typeof market.noPrice === 'number' ? market.noPrice : (typeof y === 'number' ? 100 - y : undefined);
-                if (typeof y === 'number' && typeof n === 'number') {
-                  if (Math.abs((y + n) - 100) > 1) n = 100 - y;
-                } else if (typeof y === 'number') {
-                  n = 100 - y;
-                } else if (typeof n === 'number') {
-                  y = 100 - n;
-                }
-                const outcome = getOutcomeBadge(typeof y === 'number' ? y : 50);
-                const yesLabel = typeof y === 'number' ? `${y}¢` : '—';
-                const noLabel = typeof n === 'number' ? `${n}¢` : '—';
+                const isExpanded = expandedMarkets.has(market.id);
+                const hasSubMarkets = market.isMultiOutcome && market.subMarkets && market.subMarkets.length > 1;
                 
                 return (
-                  <div
+                  <Collapsible
                     key={market.id || index}
-                    className="grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer group"
+                    open={isExpanded}
+                    onOpenChange={() => hasSubMarkets && toggleMarket(market.id)}
                   >
-                    {/* Icon/Image */}
-                    <div className="flex items-start pt-1">
-                      {market.image ? (
-                        <img 
-                          src={market.image} 
-                          alt={market.title}
-                          className="w-10 h-10 rounded-full object-cover bg-card"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                          }}
-                        />
-                      ) : null}
-                      <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
-                        {(market.title || market.ticker || '?')[0].toUpperCase()}
+                    <CollapsibleTrigger asChild>
+                      <div className="relative">
+                        {hasSubMarkets && (
+                          <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        )}
+                        {renderMarketRow(market, index, false)}
                       </div>
-                    </div>
-
-                    {/* Market Info */}
-                    <div className="flex flex-col gap-1 min-w-0">
-                      <div className="flex items-start gap-2">
-                        <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
-                          {market.title || market.ticker}
-                        </h3>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (!user) {
-                              toast({
-                                title: "Account Required",
-                                description: "Please sign in to add markets to your watchlist",
-                                action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
-                              });
-                            } else {
-                              toast({
-                                title: "Added to Watchlist",
-                                description: `${market.title} has been added to your watchlist`,
-                              });
-                            }
-                          }}
-                        >
-                          <Star className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {market.description}
-                      </p>
-                    </div>
-
-                    {/* Prices with Bar */}
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-emerald-400 font-medium">{yesLabel}</span>
-                        <span className="text-muted-foreground">/</span>
-                        <span className="text-red-400 font-medium">{noLabel}</span>
-                      </div>
-                      <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
-                        <div 
-                          className="bg-gradient-to-r from-emerald-500 to-emerald-400"
-                          style={{ width: `${typeof y === 'number' ? y : 0}%` }}
-                        />
-                        <div 
-                          className="bg-gradient-to-r from-red-400 to-red-500"
-                          style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Outcome Badge */}
-                    <div className="flex items-center">
-                      <Badge 
-                        variant="outline" 
-                        className={`${outcome.color} border text-xs px-3 py-1`}
-                      >
-                        {outcome.label}
-                      </Badge>
-                    </div>
-
-                    {/* Volume */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium text-foreground">{market.volume}</span>
-                      <div className="flex items-center gap-1 text-xs text-emerald-400">
-                        <TrendingUp className="h-3 w-3" />
-                        <span>{Math.floor(Math.random() * 30 + 10)}%</span>
-                      </div>
-                    </div>
-
-                    {/* Liquidity */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-sm font-medium text-foreground">{market.liquidity}</span>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <span className="opacity-60">∅ {(Math.random() * 2 + 0.5).toFixed(1)} comp</span>
-                      </div>
-                    </div>
-
-                    {/* End Date */}
-                    <div className="flex items-center">
-                      <span className="text-sm text-muted-foreground">{market.endDate}</span>
-                    </div>
-                  </div>
+                    </CollapsibleTrigger>
+                    
+                    {hasSubMarkets && (
+                      <CollapsibleContent>
+                        {market.subMarkets.map((subMarket: any, subIndex: number) => (
+                          <div key={`${market.id}-sub-${subIndex}`}>
+                            {renderMarketRow(subMarket, subIndex, true)}
+                          </div>
+                        ))}
+                      </CollapsibleContent>
+                    )}
+                  </Collapsible>
                 );
               })
             )}

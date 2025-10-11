@@ -101,21 +101,11 @@ serve(async (req) => {
 
     console.log(`Grouped ${markets.length} markets into ${marketGroups.size} unique markets`);
 
-    // Format markets to match our UI structure (enriched with BBO where available)
-    const formattedMarkets = Array.from(marketGroups.values())
-      .map((marketGroup: any[]) => {
-        // For multi-outcome markets, use the highest volume market in the group
-        const market = marketGroup.reduce((highest, current) => {
-          const highestVol = toNumber(highest.volume_usd || highest.volume || 0) || 0;
-          const currentVol = toNumber(current.volume_usd || current.volume || 0) || 0;
-          return currentVol > highestVol ? current : highest;
-        }, marketGroup[0]);
-        const cid = market.conditionId || market.condition_id;
-        const simp = cid ? byConditionId.get(cid) : undefined;
-
-        const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
-        
-        const extractMid = (t: any): number | undefined => {
+    // Helper to format a single market
+    const formatMarket = (market: any, simp: any) => {
+      const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
+      
+      const extractMid = (t: any): number | undefined => {
           if (!t) return undefined;
           const bid = toNumber(t.best_bid ?? t.bbo?.BUY ?? t.prices?.BUY ?? t.buy);
           const ask = toNumber(t.best_ask ?? t.bbo?.SELL ?? t.prices?.SELL ?? t.sell);
@@ -169,12 +159,13 @@ serve(async (req) => {
           finalNo = 50;
         }
 
-        const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
-        const vol = toNumber(market.volume_usd || market.volume) ?? 0;
-        const end = market.end_date_iso || market.end_date || market.endDate;
+      const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
+      const vol = toNumber(market.volume_usd || market.volume) ?? 0;
+      const end = market.end_date_iso || market.end_date || market.endDate;
+      const cid = market.conditionId || market.condition_id;
 
-        return {
-          id: cid || market.id || market.slug || crypto.randomUUID(),
+      return {
+        id: cid || market.id || market.slug || crypto.randomUUID(),
           title: market.question || market.title || "Unknown Market",
           description: market.description || "",
           image: market.image || market.icon || market.imageUrl || "",
@@ -186,8 +177,35 @@ serve(async (req) => {
           status: (market.closed || market.is_resolved) ? "Closed" : ((market.active || market.is_active || simp?.active) ? "Active" : "Inactive"),
           category: market.category || market.tags?.[0] || market.topic || "Other",
           provider: "polymarket",
-          volumeRaw: vol,
-          liquidityRaw: liq,
+        volumeRaw: vol,
+        liquidityRaw: liq,
+      };
+    };
+
+    // Format markets with grouping
+    const formattedMarkets = Array.from(marketGroups.values())
+      .map((marketGroup: any[]) => {
+        // For multi-outcome markets, use the highest volume market as the main display
+        const mainMarket = marketGroup.reduce((highest, current) => {
+          const highestVol = toNumber(highest.volume_usd || highest.volume || 0) || 0;
+          const currentVol = toNumber(current.volume_usd || current.volume || 0) || 0;
+          return currentVol > highestVol ? current : highest;
+        }, marketGroup[0]);
+
+        const cid = mainMarket.conditionId || mainMarket.condition_id;
+        const simp = cid ? byConditionId.get(cid) : undefined;
+
+        const formattedMain = formatMarket(mainMarket, simp);
+        
+        // If this is a multi-outcome market, format all sub-markets
+        const subMarkets = marketGroup.length > 1 
+          ? marketGroup.map(m => formatMarket(m, simp))
+          : [];
+
+        return {
+          ...formattedMain,
+          subMarkets,
+          isMultiOutcome: marketGroup.length > 1,
         };
       });
 
