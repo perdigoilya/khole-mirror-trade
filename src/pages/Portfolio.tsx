@@ -56,7 +56,7 @@ const Portfolio = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
-      <main className="flex-1 pt-10 pb-20">
+      <main className="flex-1 pt-10 pb-24">
         {!isKalshiConnected ? (
           <ConnectionRequired />
         ) : (
