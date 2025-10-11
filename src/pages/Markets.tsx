@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 
 const Markets = () => {
-  const { isKalshiConnected, kalshiCredentials, user } = useTrading();
+  const { isKalshiConnected, kalshiCredentials, user, activeProvider } = useTrading();
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -28,44 +28,68 @@ const Markets = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    if (isKalshiConnected && kalshiCredentials) {
-      const searchTerm = searchParams.get("search");
-      fetchMarkets(searchTerm);
+    // Fetch markets on mount and when search params change
+    // Polymarket works without credentials (public API)
+    // Kalshi requires connected credentials
+    const searchTerm = searchParams.get("search");
+    
+    if (activeProvider === 'kalshi' && isKalshiConnected && kalshiCredentials) {
+      fetchMarkets(searchTerm, 'kalshi');
+    } else {
+      // Default to Polymarket (public API, no credentials needed)
+      fetchMarkets(searchTerm, 'polymarket');
     }
-  }, [isKalshiConnected, kalshiCredentials, searchParams]);
+  }, [isKalshiConnected, kalshiCredentials, searchParams, activeProvider]);
 
-  const fetchMarkets = async (searchTerm?: string | null) => {
+  const fetchMarkets = async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket') => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-markets`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(kalshiCredentials),
-        }
-      );
+      let response;
+      
+      if (provider === 'kalshi' && kalshiCredentials) {
+        // Fetch from Kalshi (requires credentials)
+        response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-markets`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(kalshiCredentials),
+          }
+        );
+      } else {
+        // Fetch from Polymarket (public API)
+        response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-markets`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ searchTerm }),
+          }
+        );
+      }
 
       const data = await response.json();
       
       if (response.ok && data.markets) {
         let filteredMarkets = data.markets;
         
-        // Filter by search term if provided
-        if (searchTerm) {
+        // Additional client-side filtering for Kalshi (Polymarket already filters server-side)
+        if (provider === 'kalshi' && searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
             market.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             market.ticker?.toLowerCase().includes(searchTerm.toLowerCase())
           );
         }
         
-        setMarkets(filteredMarkets.slice(0, 10));
+        setMarkets(filteredMarkets.slice(0, 50));
       } else {
         toast({
           title: "Error",
-          description: "Failed to fetch markets",
+          description: data.error || "Failed to fetch markets",
           variant: "destructive",
         });
       }
@@ -89,7 +113,8 @@ const Markets = () => {
               <div className="mb-6">
                 <h1 className="text-4xl font-bold mb-2">Markets</h1>
                 <p className="text-muted-foreground">
-                  Real-time prediction markets. Lightning-fast execution.
+                  Real-time prediction markets from {activeProvider === 'kalshi' ? 'Kalshi' : 'Polymarket'}
+                  {activeProvider === 'polymarket' && ' • Public API - No login required'}
                 </p>
               </div>
 
@@ -139,18 +164,18 @@ const Markets = () => {
               </div>
 
               <div className="space-y-4">
-                {!user && (
+                {!user && activeProvider === 'kalshi' && (
                   <div className="p-4 mb-4 rounded-lg border border-primary/30 bg-primary/5">
                     <p className="text-sm text-muted-foreground text-center">
-                      <a href="/auth" className="text-primary font-semibold hover:underline">Log in</a> to connect your Kalshi account and view live markets
+                      <a href="/auth" className="text-primary font-semibold hover:underline">Log in</a> to connect your Kalshi account and view Kalshi markets
                     </p>
                   </div>
                 )}
                 {loading ? (
                   <p className="text-muted-foreground text-center py-8">Loading markets...</p>
-                ) : !isKalshiConnected && user ? (
+                ) : !isKalshiConnected && user && activeProvider === 'kalshi' ? (
                   <div className="text-center py-12">
-                    <p className="text-muted-foreground mb-4">Connect your Kalshi account to view markets</p>
+                    <p className="text-muted-foreground mb-4">Connect your Kalshi account to view Kalshi markets</p>
                     <ConnectionRequired />
                   </div>
                 ) : markets.length === 0 ? (
