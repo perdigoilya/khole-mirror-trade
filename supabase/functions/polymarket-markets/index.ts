@@ -52,32 +52,124 @@ serve(async (req) => {
       });
     }
 
-    // Format markets to match our UI structure
+    // Fetch simplified markets from CLOB to enrich with best bid/ask prices
+    const simplifiedRes = await fetch("https://clob.polymarket.com/simplified-markets", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
+      },
+    });
+    let simplified: any[] = [];
+    if (simplifiedRes.ok) {
+      const simpPayload = await simplifiedRes.json();
+      simplified = Array.isArray(simpPayload)
+        ? simpPayload
+        : (simpPayload?.data || simpPayload?.markets || []);
+      console.log("Fetched simplified markets count:", simplified.length);
+    } else {
+      console.warn("Simplified markets fetch failed with status:", simplifiedRes.status);
+    }
+
+    const byConditionId = new Map<string, any>();
+    for (const m of simplified) {
+      const cid = m.condition_id || m.conditionId;
+      if (cid) byConditionId.set(cid, m);
+    }
+
+    const toNumber = (v: any): number | undefined => {
+      if (v === null || v === undefined) return undefined;
+      const n = typeof v === 'string' ? parseFloat(v) : v;
+      return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+    };
+
+    const toCents = (v: any): number => {
+      const n = toNumber(v);
+      if (n === undefined) return 50;
+      return n <= 1 ? Math.round(n * 100) : Math.round(n);
+    };
+
+    // Format markets to match our UI structure (enriched with BBO where available)
     const formattedMarkets = (markets as any[])
       .slice(0, 50)
       .map((market: any) => {
+        const cid = market.conditionId || market.condition_id;
+        const simp = cid ? byConditionId.get(cid) : undefined;
+
+        // Try to extract YES/NO prices from simplified tokens
+        let yesPriceCents: number | undefined;
+        let noPriceCents: number | undefined;
+
+        const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
+        const findToken = (predicate: (t: any) => boolean) => tokens.find((t: any) => {
+          try {
+            return predicate(t);
+          } catch { return false; }
+        });
+
+        const isYes = (t: any) => {
+          const s = (t?.symbol || t?.outcome || t?.name || '').toString().toLowerCase();
+          return s === 'yes' || s === 'up' || s === 'true';
+        };
+        const isNo = (t: any) => {
+          const s = (t?.symbol || t?.outcome || t?.name || '').toString().toLowerCase();
+          return s === 'no' || s === 'down' || s === 'false';
+        };
+
+        const yesToken = findToken(isYes) || tokens[0];
+        const noToken = findToken(isNo) || tokens[1];
+
+        const extractMid = (t: any): number | undefined => {
+          if (!t) return undefined;
+          const bid = toNumber(t.best_bid ?? t.bbo?.BUY ?? t.prices?.BUY ?? t.buy);
+          const ask = toNumber(t.best_ask ?? t.bbo?.SELL ?? t.prices?.SELL ?? t.sell);
+          if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
+          if (ask !== undefined) return ask; // buy at ask
+          if (bid !== undefined) return bid; // approx
+          const p = toNumber(t.price ?? t.last_price ?? t.last);
+          return p;
+        };
+
+        const y = extractMid(yesToken);
+        const n = extractMid(noToken);
+        if (y !== undefined) yesPriceCents = toCents(y);
+        if (n !== undefined) noPriceCents = toCents(n);
+        if (yesPriceCents !== undefined && noPriceCents === undefined) {
+          noPriceCents = 100 - yesPriceCents;
+        } else if (noPriceCents !== undefined && yesPriceCents === undefined) {
+          yesPriceCents = 100 - noPriceCents;
+        }
+
+        // Fallbacks to original payload if simplified not available
         const outcomesArr = Array.isArray(market.outcomes) ? market.outcomes : undefined;
         const yesOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'yes');
         const noOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'no');
 
-        const rawYes = yesOutcome?.price ?? market.yesPrice ?? market.best_buy_yes_cost ?? market.best_bid_yes ?? market.best_bid?.yes;
-        const rawNo  = noOutcome?.price  ?? market.noPrice  ?? market.best_buy_no_cost  ?? market.best_bid_no  ?? market.best_bid?.no;
-        const toCents = (v: any) => typeof v === 'number' ? (v <= 1 ? Math.round(v * 100) : Math.round(v)) : 50;
+        const rawYes = yesOutcome?.price ?? market.yesPrice ?? market.best_buy_yes_cost ?? market.best_bid_yes ?? market.best_bid?.yes ?? market.best_bid?.YES;
+        const rawNo  = noOutcome?.price  ?? market.noPrice  ?? market.best_buy_no_cost  ?? market.best_bid_no  ?? market.best_bid?.no  ?? market.best_bid?.NO;
+
+        const finalYes = yesPriceCents ?? toCents(rawYes);
+        const finalNo  = noPriceCents  ?? toCents(rawNo);
+
+        const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
+        const vol = toNumber(market.volume_usd || market.volume) ?? 0;
+        const end = market.end_date_iso || market.end_date || market.endDate;
 
         return {
-          id: market.condition_id || market.id || market.slug || crypto.randomUUID(),
+          id: cid || market.id || market.slug || crypto.randomUUID(),
           title: market.question || market.title || "Unknown Market",
           description: market.description || "",
-          yesPrice: toCents(rawYes),
-          noPrice: toCents(rawNo),
-          volume: market.volume ? `$${(market.volume / 1_000_000).toFixed(1)}M` : market.volume_usd ? `$${(market.volume_usd / 1_000_000).toFixed(1)}M` : "$0",
-          liquidity: market.liquidity ? `$${(market.liquidity / 1_000).toFixed(0)}K` : market.liquidity_usd ? `$${(market.liquidity_usd / 1_000).toFixed(0)}K` : "$0",
-          endDate: market.end_date_iso ? new Date(market.end_date_iso).toLocaleDateString() : market.end_date ? new Date(market.end_date).toLocaleDateString() : "TBD",
-          status: (market.closed || market.is_resolved) ? "Closed" : ((market.active || market.is_active) ? "Active" : "Inactive"),
+          yesPrice: finalYes,
+          noPrice: finalNo,
+          volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
+          liquidity: liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
+          endDate: end ? new Date(end).toLocaleDateString() : "TBD",
+          status: (market.closed || market.is_resolved) ? "Closed" : ((market.active || market.is_active || simp?.active) ? "Active" : "Inactive"),
           category: market.category || market.tags?.[0] || market.topic || "Other",
           provider: "polymarket",
         };
       });
+
 
     console.log(`Returning ${formattedMarkets.length} Polymarket markets`);
 
