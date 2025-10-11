@@ -89,9 +89,27 @@ serve(async (req) => {
       return n <= 1 ? Math.round(n * 100) : Math.round(n);
     };
 
+    // Group markets by condition ID to consolidate multi-outcome markets
+    const marketGroups = new Map<string, any[]>();
+    for (const market of markets) {
+      const cid = market.conditionId || market.condition_id || market.id;
+      if (!marketGroups.has(cid)) {
+        marketGroups.set(cid, []);
+      }
+      marketGroups.get(cid)!.push(market);
+    }
+
+    console.log(`Grouped ${markets.length} markets into ${marketGroups.size} unique markets`);
+
     // Format markets to match our UI structure (enriched with BBO where available)
-    const formattedMarkets = (markets as any[])
-      .map((market: any) => {
+    const formattedMarkets = Array.from(marketGroups.values())
+      .map((marketGroup: any[]) => {
+        // For multi-outcome markets, use the highest volume market in the group
+        const market = marketGroup.reduce((highest, current) => {
+          const highestVol = toNumber(highest.volume_usd || highest.volume || 0) || 0;
+          const currentVol = toNumber(current.volume_usd || current.volume || 0) || 0;
+          return currentVol > highestVol ? current : highest;
+        }, marketGroup[0]);
         const cid = market.conditionId || market.condition_id;
         const simp = cid ? byConditionId.get(cid) : undefined;
 
