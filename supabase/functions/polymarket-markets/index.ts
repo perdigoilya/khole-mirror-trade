@@ -53,14 +53,6 @@ serve(async (req) => {
 
     // Format markets to match our UI structure
     const formattedMarkets = (markets as any[])
-      .filter((market: any) => {
-        // Keep markets that appear open/active
-        const endIso = market.end_date_iso || market.endDate || market.end_date || market.expires_at;
-        const endTs = endIso ? Date.parse(endIso) : Number.POSITIVE_INFINITY;
-        const isClosedFlag = market.closed === true || market.is_resolved === true || market.resolved === true || market.status === 'closed' || market.state === 'closed';
-        const isActiveFlag = market.active === true || market.is_active === true || market.status === 'open' || market.state === 'active' || (!isClosedFlag && endTs > Date.now());
-        return isActiveFlag && !isClosedFlag;
-      })
       .slice(0, 50)
       .map((market: any) => {
         const yesOutcome = market.outcomes?.find((o: any) => (o.name || o.ticker)?.toLowerCase() === "yes");
