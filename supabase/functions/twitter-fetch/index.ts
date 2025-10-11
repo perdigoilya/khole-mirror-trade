@@ -35,6 +35,9 @@ function generateOAuthSignature(
 }
 
 function generateOAuthHeader(method: string, url: string): string {
+  const parsed = new URL(url);
+  const baseUrl = `${parsed.origin}${parsed.pathname}`;
+
   const oauthParams = {
     oauth_consumer_key: API_KEY!,
     oauth_nonce: Math.random().toString(36).substring(2),
@@ -44,10 +47,18 @@ function generateOAuthHeader(method: string, url: string): string {
     oauth_version: "1.0",
   };
 
+  // Include query parameters in the signature params for OAuth 1.0a
+  const queryParams: Record<string, string> = {};
+  for (const [k, v] of parsed.searchParams.entries()) {
+    queryParams[k] = v;
+  }
+
+  const signatureParams = { ...oauthParams, ...queryParams } as Record<string, string>;
+
   const signature = generateOAuthSignature(
     method,
-    url,
-    oauthParams,
+    baseUrl,
+    signatureParams,
     API_SECRET!,
     ACCESS_TOKEN_SECRET!
   );
