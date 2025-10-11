@@ -53,6 +53,8 @@ const Feed = () => {
   const [isLoadingMarkets, setIsLoadingMarkets] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [categories, setCategories] = useState<string[]>([]);
+  const [feedStatus, setFeedStatus] = useState<'live' | 'idle' | 'error'>('idle');
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -138,27 +140,36 @@ const Feed = () => {
     navigate(`/market/${marketId}`);
   };
 
-  const refreshTwitterFeed = async () => {
-    setIsRefreshing(true);
+  const refreshTwitterFeed = async (silent = false) => {
+    if (!silent) setIsRefreshing(true);
+    
     try {
+      setFeedStatus('live');
       const { data, error } = await supabase.functions.invoke('twitter-fetch');
       
       if (error) throw error;
       
-      toast({
-        title: "Feed refreshed",
-        description: data?.message || "Successfully fetched latest tweets",
-      });
+      if (!silent) {
+        toast({
+          title: "Feed refreshed",
+          description: data?.message || "Successfully fetched latest tweets",
+        });
+      }
       
       await fetchTweets();
+      setLastUpdate(new Date());
+      setFeedStatus('idle');
     } catch (error: any) {
-      toast({
-        title: "Refresh failed",
-        description: error.message || "Failed to fetch tweets",
-        variant: "destructive",
-      });
+      setFeedStatus('error');
+      if (!silent) {
+        toast({
+          title: "Refresh failed",
+          description: error.message || "Failed to fetch tweets",
+          variant: "destructive",
+        });
+      }
     } finally {
-      setIsRefreshing(false);
+      if (!silent) setIsRefreshing(false);
     }
   };
 
@@ -177,12 +188,19 @@ const Feed = () => {
         },
         () => {
           fetchTweets();
+          setLastUpdate(new Date());
         }
       )
       .subscribe();
 
+    // Auto-refresh every 30 seconds (silently fetch new tweets in background)
+    const autoRefreshInterval = setInterval(() => {
+      refreshTwitterFeed(true);
+    }, 30000); // 30 seconds
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(autoRefreshInterval);
     };
   }, [filterCategory]);
 
@@ -194,6 +212,32 @@ const Feed = () => {
             {/* Header with Filters */}
             <div className="mb-6 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
+                {/* Live Status Indicator */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border">
+                  <div className="relative">
+                    <div 
+                      className={`w-2 h-2 rounded-full ${
+                        feedStatus === 'live' 
+                          ? 'bg-green-500 animate-pulse' 
+                          : feedStatus === 'error' 
+                          ? 'bg-red-500' 
+                          : 'bg-yellow-500'
+                      }`}
+                    />
+                    {feedStatus === 'live' && (
+                      <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
+                    )}
+                  </div>
+                  <span className="text-xs font-medium">
+                    {feedStatus === 'live' ? 'Live' : feedStatus === 'error' ? 'Down' : 'Idle'}
+                  </span>
+                  {lastUpdate && (
+                    <span className="text-xs text-muted-foreground">
+                      · {formatTimestamp(lastUpdate.toISOString())}
+                    </span>
+                  )}
+                </div>
+                
                 <Select value={filterCategory} onValueChange={setFilterCategory}>
                   <SelectTrigger className="w-[180px]">
                     <Filter className="h-4 w-4 mr-2" />
@@ -208,7 +252,7 @@ const Feed = () => {
                 </Select>
               </div>
               <Button 
-                onClick={refreshTwitterFeed} 
+                onClick={() => refreshTwitterFeed(false)} 
                 disabled={isRefreshing}
                 variant="outline"
                 size="sm"
@@ -226,7 +270,7 @@ const Feed = () => {
                     <p className="text-muted-foreground mb-4">
                       No tweets yet. Refresh to fetch latest tweets.
                     </p>
-                    <Button onClick={refreshTwitterFeed} disabled={isRefreshing}>
+                    <Button onClick={() => refreshTwitterFeed(false)} disabled={isRefreshing}>
                       <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                       Fetch Tweets
                     </Button>
