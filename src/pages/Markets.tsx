@@ -3,6 +3,7 @@ import Footer from "@/components/Footer";
 import { Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
   SelectContent,
@@ -44,37 +45,23 @@ const Markets = () => {
   const fetchMarkets = async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket') => {
     setLoading(true);
     try {
-      let response;
+      let result;
       
       if (provider === 'kalshi' && kalshiCredentials) {
         // Fetch from Kalshi (requires credentials)
-        response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-markets`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(kalshiCredentials),
-          }
-        );
+        result = await supabase.functions.invoke('kalshi-markets', {
+          body: kalshiCredentials
+        });
       } else {
         // Fetch from Polymarket (public API)
-        response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-markets`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ searchTerm }),
-          }
-        );
+        result = await supabase.functions.invoke('polymarket-markets', {
+          body: { searchTerm }
+        });
       }
 
-      const data = await response.json();
+      const { data, error } = result;
       
-      if (response.ok && data.markets) {
+      if (!error && data?.markets) {
         let filteredMarkets = data.markets;
         
         // Additional client-side filtering for Kalshi (Polymarket already filters server-side)
@@ -89,7 +76,7 @@ const Markets = () => {
       } else {
         toast({
           title: "Error",
-          description: data.error || "Failed to fetch markets",
+          description: error?.message || data?.error || "Failed to fetch markets",
           variant: "destructive",
         });
       }
