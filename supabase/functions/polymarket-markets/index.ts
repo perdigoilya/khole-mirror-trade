@@ -11,12 +11,12 @@ serve(async (req) => {
   }
 
   try {
-    const { searchTerm } = await req.json().catch(() => ({}));
+    const { searchTerm, offset = 0 } = await req.json().catch(() => ({}));
 
-    console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "");
+    console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "", `Offset: ${offset}`);
 
     // Fetch active markets from Polymarket Gamma API - sorted by volume for trending markets
-    const response = await fetch("https://gamma-api.polymarket.com/markets?closed=false&limit=200&offset=0&order=volume24hr&ascending=false", {
+    const response = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=${offset}&order=volume24hr&ascending=false`, {
       method: "GET",
       headers: {
         "Accept": "application/json",
@@ -91,7 +91,6 @@ serve(async (req) => {
 
     // Format markets to match our UI structure (enriched with BBO where available)
     const formattedMarkets = (markets as any[])
-      .slice(0, 100)
       .map((market: any) => {
         const cid = market.conditionId || market.condition_id;
         const simp = cid ? byConditionId.get(cid) : undefined;
@@ -145,11 +144,22 @@ serve(async (req) => {
         const yesOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'yes');
         const noOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'no');
 
-        const rawYes = yesOutcome?.price ?? market.yesPrice ?? market.best_buy_yes_cost ?? market.best_bid_yes ?? market.best_bid?.yes ?? market.best_bid?.YES;
+        // Try to get prices from various sources in the market data
+        const rawYes = yesOutcome?.price ?? market.yesPrice ?? market.lastTradePrice ?? market.price ?? market.best_buy_yes_cost ?? market.best_bid_yes ?? market.best_bid?.yes ?? market.best_bid?.YES;
         const rawNo  = noOutcome?.price  ?? market.noPrice  ?? market.best_buy_no_cost  ?? market.best_bid_no  ?? market.best_bid?.no  ?? market.best_bid?.NO;
 
-        const finalYes = yesPriceCents ?? toCents(rawYes);
-        const finalNo  = noPriceCents  ?? toCents(rawNo);
+        // Use the prices from simplified markets if available, otherwise from gamma API
+        let finalYes = yesPriceCents ?? toCents(rawYes);
+        let finalNo  = noPriceCents  ?? toCents(rawNo);
+        
+        // If we still don't have good prices, try to extract from the market outcomes
+        if (finalYes === 50 && finalNo === 50 && market.outcomePrices) {
+          const prices = market.outcomePrices;
+          if (Array.isArray(prices) && prices.length >= 2) {
+            finalYes = toCents(prices[0]);
+            finalNo = toCents(prices[1]);
+          }
+        }
 
         const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
         const vol = toNumber(market.volume_usd || market.volume) ?? 0;

@@ -21,6 +21,8 @@ const Markets = () => {
   const { isKalshiConnected, kalshiCredentials, user, activeProvider } = useTrading();
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   
@@ -40,21 +42,27 @@ const Markets = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   useEffect(() => {
-    // Fetch markets on mount and when platform/search params change
+    // Reset offset and fetch markets on mount and when platform/search params change
+    setOffset(0);
     const searchTerm = searchParams.get("search");
     
     if (platform === 'kalshi') {
       if (isKalshiConnected && kalshiCredentials) {
-        fetchMarkets(searchTerm, 'kalshi');
+        fetchMarkets(searchTerm, 'kalshi', 0, false);
       }
     } else {
       // Polymarket (public API, no credentials needed)
-      fetchMarkets(searchTerm, 'polymarket');
+      fetchMarkets(searchTerm, 'polymarket', 0, false);
     }
   }, [platform, isKalshiConnected, kalshiCredentials, searchParams]);
 
-  const fetchMarkets = async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket') => {
-    setLoading(true);
+  const fetchMarkets = async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
       let result;
       
@@ -66,7 +74,7 @@ const Markets = () => {
       } else {
         // Fetch from Polymarket (public API)
         result = await supabase.functions.invoke('polymarket-markets', {
-          body: { searchTerm }
+          body: { searchTerm, offset: loadOffset }
         });
       }
 
@@ -83,7 +91,11 @@ const Markets = () => {
           );
         }
         
-        setMarkets(filteredMarkets);
+        if (append) {
+          setMarkets(prev => [...prev, ...filteredMarkets]);
+        } else {
+          setMarkets(filteredMarkets);
+        }
       } else {
         toast({
           title: "Error",
@@ -98,8 +110,19 @@ const Markets = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
+  };
+  
+  const loadMoreMarkets = () => {
+    const searchTerm = searchParams.get("search");
+    const newOffset = offset + 100;
+    setOffset(newOffset);
+    fetchMarkets(searchTerm, platform as 'kalshi' | 'polymarket', newOffset, true);
   };
 
   // Apply all filters and sorting
@@ -509,6 +532,20 @@ const Markets = () => {
                   </div>
                 );
               })
+            )}
+            
+            {/* Load More Button */}
+            {!loading && filteredAndSortedMarkets.length > 0 && platform === 'polymarket' && (
+              <div className="p-6 text-center border-t border-border">
+                <Button
+                  onClick={loadMoreMarkets}
+                  disabled={loadingMore}
+                  variant="outline"
+                  className="min-w-[200px]"
+                >
+                  {loadingMore ? "Loading..." : "Load More Markets"}
+                </Button>
+              </div>
             )}
           </div>
         </div>
