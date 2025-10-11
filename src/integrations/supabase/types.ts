@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       followed_twitter_accounts: {
         Row: {
+          account_category: string | null
           created_at: string | null
           display_name: string | null
           id: string
@@ -23,6 +24,7 @@ export type Database = {
           twitter_username: string
         }
         Insert: {
+          account_category?: string | null
           created_at?: string | null
           display_name?: string | null
           id?: string
@@ -30,6 +32,7 @@ export type Database = {
           twitter_username: string
         }
         Update: {
+          account_category?: string | null
           created_at?: string | null
           display_name?: string | null
           id?: string
@@ -67,9 +70,13 @@ export type Database = {
           created_at: string
           fetched_at: string | null
           id: string
+          likes_count: number | null
+          profile_image_url: string | null
           relevant: boolean | null
+          retweets_count: number | null
           text: string
           tweet_id: string
+          views_count: number | null
         }
         Insert: {
           author_name?: string | null
@@ -78,9 +85,13 @@ export type Database = {
           created_at: string
           fetched_at?: string | null
           id?: string
+          likes_count?: number | null
+          profile_image_url?: string | null
           relevant?: boolean | null
+          retweets_count?: number | null
           text: string
           tweet_id: string
+          views_count?: number | null
         }
         Update: {
           author_name?: string | null
@@ -89,9 +100,13 @@ export type Database = {
           created_at?: string
           fetched_at?: string | null
           id?: string
+          likes_count?: number | null
+          profile_image_url?: string | null
           relevant?: boolean | null
+          retweets_count?: number | null
           text?: string
           tweet_id?: string
+          views_count?: number | null
         }
         Relationships: []
       }
@@ -126,6 +141,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_polymarket_credentials: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       watchlist: {
         Row: {

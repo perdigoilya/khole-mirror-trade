@@ -85,6 +85,7 @@ interface TwitterUser {
   id: string;
   name: string;
   username: string;
+  profile_image_url?: string;
 }
 
 interface TwitterTweet {
@@ -92,6 +93,11 @@ interface TwitterTweet {
   text: string;
   created_at: string;
   author_id: string;
+  public_metrics?: {
+    like_count?: number;
+    retweet_count?: number;
+    impression_count?: number;
+  };
 }
 
 interface TwitterResponse {
@@ -130,7 +136,7 @@ async function fetchUserTimeline(username: string, userId?: string): Promise<Twi
     userId = await getUserByUsername(username);
   }
 
-  const url = `https://api.x.com/2/users/${userId}/tweets?max_results=10&tweet.fields=created_at,author_id&expansions=author_id&user.fields=name,username`;
+  const url = `https://api.x.com/2/users/${userId}/tweets?max_results=10&tweet.fields=created_at,author_id,public_metrics&expansions=author_id&user.fields=name,username,profile_image_url`;
 
   console.log(`Fetching tweets for @${username} (ID: ${userId})`);
 
@@ -201,6 +207,7 @@ Deno.serve(async (req) => {
         // Insert tweets into database
         for (const tweet of tweets) {
           const author = userMap.get(tweet.author_id);
+          const metrics = tweet.public_metrics || {};
           
           const { error: insertError } = await supabase
             .from('twitter_feed')
@@ -211,6 +218,10 @@ Deno.serve(async (req) => {
               text: tweet.text,
               created_at: tweet.created_at,
               category: 'Market News',
+              likes_count: metrics.like_count || 0,
+              retweets_count: metrics.retweet_count || 0,
+              views_count: metrics.impression_count || 0,
+              profile_image_url: author?.profile_image_url,
             }, {
               onConflict: 'tweet_id',
               ignoreDuplicates: true
