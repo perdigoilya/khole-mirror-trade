@@ -197,6 +197,45 @@ const Markets = () => {
     return result;
   }, [markets, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
   
+  // Group related markets into topics (e.g., Super Bowl 2026)
+  const groupedMarkets = React.useMemo(() => {
+    const groups = new Map<string, any[]>();
+
+    const extractTopic = (title: string): string | null => {
+      if (!title) return null;
+      // Common pattern: "Will <entity> win <Topic>?"
+      const m = title.match(/win\s+(?:the\s+)?(.+?)\?/i);
+      if (m) return m[1].trim();
+      // Fallbacks for popular events
+      const sb = title.match(/(Super\s+Bowl\s+\d{4})/i);
+      if (sb) return sb[1].trim();
+      const ws = title.match(/(World\s+Series\s+\d{4})/i);
+      if (ws) return ws[1].trim();
+      return null;
+    };
+
+    for (const mkt of filteredAndSortedMarkets) {
+      const topic = extractTopic(mkt.title || '') || mkt.category || 'Other';
+      const key = topic.toLowerCase();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(mkt);
+    }
+
+    const result: any[] = [];
+    for (const [, mkts] of groups) {
+      if (mkts.length <= 1) {
+        result.push(mkts[0]);
+      } else {
+        const main = mkts.reduce((a: any, b: any) => ((b.volumeRaw || 0) > (a.volumeRaw || 0) ? b : a), mkts[0]);
+        const sub = mkts.filter((m: any) => m !== main);
+        result.push({ ...main, isMultiOutcome: true, subMarkets: sub });
+      }
+    }
+
+    // Preserve overall sorting (already volume-sorted in filteredAndSortedMarkets)
+    return result;
+  }, [filteredAndSortedMarkets]);
+  
   // Get unique categories from markets
   const categories = React.useMemo(() => {
     const cats = new Set(markets.map((m: any) => m.category).filter(Boolean));
@@ -518,7 +557,7 @@ const Markets = () => {
             {/* Table Header */}
             <div className="grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-3 bg-card/50 border-b border-border text-sm text-muted-foreground font-medium">
               <div></div>
-              <div>MARKET ({filteredAndSortedMarkets.length})</div>
+              <div>MARKET ({groupedMarkets.length})</div>
               <div>PRICES</div>
               <div>OUTCOME</div>
               <div>VOLUME</div>
@@ -557,7 +596,7 @@ const Markets = () => {
                 </Button>
               </div>
             ) : (
-              filteredAndSortedMarkets.map((market, index) => {
+              groupedMarkets.map((market, index) => {
                 const isExpanded = expandedMarkets.has(market.id);
                 const hasSubMarkets = market.isMultiOutcome && market.subMarkets && market.subMarkets.length > 1;
                 
