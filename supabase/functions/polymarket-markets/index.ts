@@ -15,8 +15,8 @@ serve(async (req) => {
 
     console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "");
 
-    // Fetch markets from Polymarket Gamma API (public, no auth required)
-    const response = await fetch("https://gamma-api.polymarket.com/markets", {
+    // Fetch active markets from Polymarket Gamma API (public, no auth required)
+    const response = await fetch("https://gamma-api.polymarket.com/getMarkets?page=1&per_page=50", {
       method: "GET",
       headers: {
         "Accept": "application/json",
@@ -36,7 +36,9 @@ serve(async (req) => {
     }
 
     const payload = await response.json();
-    let markets = Array.isArray(payload) ? payload : (payload?.markets || payload?.data || []);
+    let markets: any[] = Array.isArray(payload)
+      ? payload
+      : (payload?.markets || payload?.data || []);
     console.log("Fetched markets count:", Array.isArray(markets) ? markets.length : 0);
 
     // Filter by search term if provided
@@ -52,9 +54,12 @@ serve(async (req) => {
     // Format markets to match our UI structure
     const formattedMarkets = (markets as any[])
       .filter((market: any) => {
-        // Only filter out explicitly closed markets
-        const isClosed = market.closed === true || market.end_date_iso < new Date().toISOString();
-        return !isClosed;
+        // Keep markets that appear open/active
+        const endIso = market.end_date_iso || market.endDate || market.end_date || market.expires_at;
+        const endTs = endIso ? Date.parse(endIso) : Number.POSITIVE_INFINITY;
+        const isClosedFlag = market.closed === true || market.is_resolved === true || market.resolved === true || market.status === 'closed' || market.state === 'closed';
+        const isActiveFlag = market.active === true || market.is_active === true || market.status === 'open' || market.state === 'active' || (!isClosedFlag && endTs > Date.now());
+        return isActiveFlag && !isClosedFlag;
       })
       .slice(0, 50)
       .map((market: any) => {
