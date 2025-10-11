@@ -23,24 +23,24 @@ const Markets = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   
-  const [platform, setPlatform] = useState("kalshi");
+  const [platform, setPlatform] = useState("polymarket");
   const [sortBy, setSortBy] = useState("trending");
   const [timeFilter, setTimeFilter] = useState("all-time");
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    // Fetch markets on mount and when search params change
-    // Polymarket works without credentials (public API)
-    // Kalshi requires connected credentials
+    // Fetch markets on mount and when platform/search params change
     const searchTerm = searchParams.get("search");
     
-    if (activeProvider === 'kalshi' && isKalshiConnected && kalshiCredentials) {
-      fetchMarkets(searchTerm, 'kalshi');
+    if (platform === 'kalshi') {
+      if (isKalshiConnected && kalshiCredentials) {
+        fetchMarkets(searchTerm, 'kalshi');
+      }
     } else {
-      // Default to Polymarket (public API, no credentials needed)
+      // Polymarket (public API, no credentials needed)
       fetchMarkets(searchTerm, 'polymarket');
     }
-  }, [isKalshiConnected, kalshiCredentials, searchParams, activeProvider]);
+  }, [platform, isKalshiConnected, kalshiCredentials, searchParams]);
 
   const fetchMarkets = async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket') => {
     setLoading(true);
@@ -72,7 +72,16 @@ const Markets = () => {
           );
         }
         
-        setMarkets(filteredMarkets.slice(0, 50));
+        // Apply sorting
+        if (sortBy === 'trending' || sortBy === 'top') {
+          filteredMarkets = [...filteredMarkets].sort((a: any, b: any) => 
+            (b.volumeRaw || 0) - (a.volumeRaw || 0)
+          );
+        } else if (sortBy === 'new') {
+          filteredMarkets = [...filteredMarkets].reverse();
+        }
+        
+        setMarkets(filteredMarkets);
       } else {
         toast({
           title: "Error",
@@ -105,7 +114,16 @@ const Markets = () => {
         <div className="container mx-auto px-4 max-w-[1600px]">
           {/* Filter Bar */}
           <div className="flex items-center gap-3 mb-6">
-            <Select value={platform} onValueChange={setPlatform}>
+            <Select value={platform} onValueChange={(value) => {
+              if (value === 'kalshi' && !isKalshiConnected) {
+                toast({
+                  title: "Kalshi Connection Required",
+                  description: "Please connect your Kalshi account to view Kalshi markets",
+                });
+              } else {
+                setPlatform(value);
+              }
+            }}>
               <SelectTrigger className="w-[180px] bg-card/50 border-border">
                 <SelectValue />
               </SelectTrigger>
@@ -162,22 +180,22 @@ const Markets = () => {
             </div>
 
             {/* Table Body */}
-            {!user && activeProvider === 'kalshi' && (
-              <div className="p-6 text-center border-b border-border">
-                <p className="text-sm text-muted-foreground">
-                  <a href="/auth" className="text-primary font-semibold hover:underline">Log in</a> to connect your Kalshi account and view Kalshi markets
-                </p>
-              </div>
-            )}
-            
             {loading ? (
               <div className="p-12 text-center">
                 <p className="text-muted-foreground">Loading markets...</p>
               </div>
-            ) : !isKalshiConnected && user && activeProvider === 'kalshi' ? (
+            ) : platform === 'kalshi' && !isKalshiConnected ? (
               <div className="p-12 text-center">
-                <p className="text-muted-foreground mb-4">Connect your Kalshi account to view Kalshi markets</p>
-                <ConnectionRequired />
+                <p className="text-muted-foreground mb-4">
+                  {!user ? (
+                    <>
+                      <a href="/auth" className="text-primary font-semibold hover:underline">Log in</a> to connect your Kalshi account and view Kalshi markets
+                    </>
+                  ) : (
+                    <>Connect your Kalshi account to view Kalshi markets</>
+                  )}
+                </p>
+                {user && <ConnectionRequired />}
               </div>
             ) : markets.length === 0 ? (
               <div className="p-12 text-center">
@@ -198,7 +216,18 @@ const Markets = () => {
                   >
                     {/* Icon/Image */}
                     <div className="flex items-start pt-1">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                      {market.image ? (
+                        <img 
+                          src={market.image} 
+                          alt={market.title}
+                          className="w-10 h-10 rounded-full object-cover bg-card"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
                         {(market.title || market.ticker || '?')[0].toUpperCase()}
                       </div>
                     </div>
@@ -206,13 +235,28 @@ const Markets = () => {
                     {/* Market Info */}
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-start gap-2">
-                        <h3 className="text-sm font-medium text-foreground line-clamp-1 flex-1">
+                        <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
                           {market.title || market.ticker}
                         </h3>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!user) {
+                              toast({
+                                title: "Account Required",
+                                description: "Please sign in to add markets to your watchlist",
+                                action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
+                              });
+                            } else {
+                              toast({
+                                title: "Added to Watchlist",
+                                description: `${market.title} has been added to your watchlist`,
+                              });
+                            }
+                          }}
                         >
                           <Star className="h-4 w-4" />
                         </Button>

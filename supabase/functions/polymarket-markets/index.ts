@@ -15,8 +15,8 @@ serve(async (req) => {
 
     console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "");
 
-    // Fetch active markets from Polymarket Gamma API (public, no auth required)
-    const response = await fetch("https://gamma-api.polymarket.com/markets?closed=false&limit=50&offset=0&order=id&ascending=false", {
+    // Fetch active markets from Polymarket Gamma API - sorted by volume for trending markets
+    const response = await fetch("https://gamma-api.polymarket.com/markets?closed=false&limit=200&offset=0&order=volume24hr&ascending=false", {
       method: "GET",
       headers: {
         "Accept": "application/json",
@@ -91,7 +91,7 @@ serve(async (req) => {
 
     // Format markets to match our UI structure (enriched with BBO where available)
     const formattedMarkets = (markets as any[])
-      .slice(0, 50)
+      .slice(0, 100)
       .map((market: any) => {
         const cid = market.conditionId || market.condition_id;
         const simp = cid ? byConditionId.get(cid) : undefined;
@@ -159,6 +159,7 @@ serve(async (req) => {
           id: cid || market.id || market.slug || crypto.randomUUID(),
           title: market.question || market.title || "Unknown Market",
           description: market.description || "",
+          image: market.image || market.icon || market.imageUrl || "",
           yesPrice: finalYes,
           noPrice: finalNo,
           volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
@@ -167,6 +168,8 @@ serve(async (req) => {
           status: (market.closed || market.is_resolved) ? "Closed" : ((market.active || market.is_active || simp?.active) ? "Active" : "Inactive"),
           category: market.category || market.tags?.[0] || market.topic || "Other",
           provider: "polymarket",
+          volumeRaw: vol,
+          liquidityRaw: liq,
         };
       });
 
