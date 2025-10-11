@@ -15,34 +15,14 @@ serve(async (req) => {
 
     console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "");
 
-    // Fetch markets from Polymarket public API with sensible headers and fallback
-    let response: Response | undefined;
-    let primaryError: unknown = null;
-    try {
-      response = await fetch("https://clob.polymarket.com/markets?limit=200", {
-        method: "GET",
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
-        },
-      });
-    } catch (e) {
-      primaryError = e;
-      console.error("Primary Polymarket endpoint failed:", e);
-    }
-
-    if (!response || !response.ok) {
-      const status = response?.status;
-      const details = response ? await response.text().catch(() => "") : String(primaryError);
-      console.warn("Falling back to gamma-api.polymarket.com. Prior status:", status, details?.slice(0, 300));
-      response = await fetch("https://gamma-api.polymarket.com/markets?limit=200&is_active=true", {
-        method: "GET",
-        headers: {
-          "Accept": "application/json",
-          "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
-        },
-      });
-    }
+    // Fetch markets from Polymarket Gamma API (public, no auth required)
+    const response = await fetch("https://gamma-api.polymarket.com/markets", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
+      },
+    });
 
     console.log("Polymarket API response status:", response.status);
 
@@ -72,9 +52,9 @@ serve(async (req) => {
     // Format markets to match our UI structure
     const formattedMarkets = (markets as any[])
       .filter((market: any) => {
-        const isActive = (market.active ?? market.is_active ?? true) === true;
-        const isClosed = (market.closed ?? market.is_resolved ?? false) === true;
-        return isActive && !isClosed;
+        // Only filter out explicitly closed markets
+        const isClosed = market.closed === true || market.end_date_iso < new Date().toISOString();
+        return !isClosed;
       })
       .slice(0, 50)
       .map((market: any) => {
