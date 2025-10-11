@@ -95,123 +95,60 @@ serve(async (req) => {
         const cid = market.conditionId || market.condition_id;
         const simp = cid ? byConditionId.get(cid) : undefined;
 
-        // Try to extract YES/NO prices from simplified tokens
-        let yesPriceCents: number | undefined;
-        let noPriceCents: number | undefined;
-
         const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
-        const findToken = (predicate: (t: any) => boolean) => tokens.find((t: any) => {
-          try {
-            return predicate(t);
-          } catch { return false; }
-        });
-
-        const isYes = (t: any) => {
-          const s = (t?.symbol || t?.outcome || t?.name || '').toString().toLowerCase();
-          return s === 'yes' || s === 'up' || s === 'true';
-        };
-        const isNo = (t: any) => {
-          const s = (t?.symbol || t?.outcome || t?.name || '').toString().toLowerCase();
-          return s === 'no' || s === 'down' || s === 'false';
-        };
-
-        const yesTokenNamed = findToken(isYes);
-        const noTokenNamed = findToken(isNo);
-        const yesToken = yesTokenNamed || tokens[0];
-        const noToken = noTokenNamed || tokens[1];
-
+        
         const extractMid = (t: any): number | undefined => {
           if (!t) return undefined;
           const bid = toNumber(t.best_bid ?? t.bbo?.BUY ?? t.prices?.BUY ?? t.buy);
           const ask = toNumber(t.best_ask ?? t.bbo?.SELL ?? t.prices?.SELL ?? t.sell);
           if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
-          if (ask !== undefined) return ask; // buy at ask
-          if (bid !== undefined) return bid; // approx
+          if (ask !== undefined) return ask;
+          if (bid !== undefined) return bid;
           const p = toNumber(t.price ?? t.last_price ?? t.last);
           return p;
         };
 
-        const midYes = extractMid(yesToken);
-        const midNo = extractMid(noToken);
+        // For multi-outcome markets (>2 tokens), find the highest volume token
+        let topToken = tokens[0];
+        if (tokens.length > 2) {
+          topToken = tokens.reduce((max: any, token: any) => {
+            const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
+            const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
+            return tokenVol > maxVol ? token : max;
+          }, tokens[0]);
+        }
 
-        // If explicit YES/NO tokens were found, trust them
-        if (yesTokenNamed || noTokenNamed) {
-          if (midYes !== undefined) yesPriceCents = toCents(midYes);
-          if (midNo !== undefined) noPriceCents = toCents(midNo);
-        } else {
-          // Heuristic for binary markets with two tokens but no explicit YES/NO labels
-          const mid0 = extractMid(tokens[0]);
-          const mid1 = extractMid(tokens[1]);
-          if (mid0 !== undefined && mid1 !== undefined) {
-            if (Math.abs((mid0 + mid1) - 1) < 0.2) {
-              const c0 = toCents(mid0);
-              const c1 = toCents(mid1);
-              if (typeof c0 === 'number') yesPriceCents = c0;
-              if (typeof c1 === 'number') noPriceCents = c1;
-            } else {
-              const chosen = mid0 >= mid1 ? mid0 : mid1;
-              const chosenC = toCents(chosen);
-              if (typeof chosenC === 'number') {
-                yesPriceCents = chosenC;
-                noPriceCents = 100 - chosenC;
-              }
-            }
-          } else if (mid0 !== undefined) {
-            const c0 = toCents(mid0);
-            if (typeof c0 === 'number') {
-              yesPriceCents = c0;
-              noPriceCents = 100 - c0;
-            }
-          } else if (mid1 !== undefined) {
-            const c1 = toCents(mid1);
-            if (typeof c1 === 'number') {
-              noPriceCents = c1;
-              yesPriceCents = 100 - c1;
-            }
+        // Extract price for the top outcome
+        const topPrice = extractMid(topToken);
+        let finalYes = toCents(topPrice);
+        let finalNo: number | undefined;
+
+        // For binary markets, try to get complementary NO price
+        if (tokens.length === 2) {
+          const otherToken = tokens[0] === topToken ? tokens[1] : tokens[0];
+          const otherPrice = extractMid(otherToken);
+          finalNo = toCents(otherPrice);
+        }
+
+        // Fallback to market-level data
+        if (finalYes === undefined) {
+          const rawPrice = market.lastTradePrice ?? market.price ?? market.outcomePrices?.[0];
+          finalYes = toCents(rawPrice);
+        }
+
+        // Ensure complement for binary markets
+        if (tokens.length <= 2) {
+          if (typeof finalYes === 'number' && finalNo === undefined) {
+            finalNo = 100 - finalYes;
+          } else if (typeof finalNo === 'number' && finalYes === undefined) {
+            finalYes = 100 - finalNo;
           }
         }
 
-        if (typeof yesPriceCents === 'number' && typeof noPriceCents !== 'number') {
-          noPriceCents = 100 - yesPriceCents;
-        } else if (typeof noPriceCents === 'number' && typeof yesPriceCents !== 'number') {
-          yesPriceCents = 100 - noPriceCents;
-        }
-
-        // Fallbacks to original payload if simplified not available
-        const outcomesArr = Array.isArray(market.outcomes) ? market.outcomes : undefined;
-        const yesOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'yes');
-        const noOutcome = outcomesArr?.find((o: any) => (typeof o === 'string' ? o : (o.name || o.ticker || '')).toString().toLowerCase() === 'no');
-
-        // Try to get prices from various sources in the market data
-        const rawYes = yesOutcome?.price ?? market.yesPrice ?? market.lastTradePrice ?? market.price ?? market.best_buy_yes_cost ?? market.best_bid_yes ?? market.best_bid?.yes ?? market.best_bid?.YES;
-        const rawNo  = noOutcome?.price  ?? market.noPrice  ?? market.best_buy_no_cost  ?? market.best_bid_no  ?? market.best_bid?.no  ?? market.best_bid?.NO;
-
-        // Use the prices from simplified markets if available, otherwise from gamma API
-        let finalYes = yesPriceCents ?? toCents(rawYes);
-        let finalNo  = noPriceCents  ?? toCents(rawNo);
-        
-        // If we still don't have good prices, try to extract from the market outcomes
-        if (finalYes === undefined && finalNo === undefined && market.outcomePrices) {
-          const prices = market.outcomePrices;
-          if (Array.isArray(prices) && prices.length >= 2) {
-            const y = toCents(prices[0]);
-            const n2 = toCents(prices[1]);
-            if (typeof y === 'number') finalYes = y;
-            if (typeof n2 === 'number') finalNo = n2;
-          }
-        }
-
-        // Normalize/complement
-        if (typeof finalYes === 'number' && typeof finalNo !== 'number') {
-          finalNo = 100 - finalYes;
-        } else if (typeof finalNo === 'number' && typeof finalYes !== 'number') {
-          finalYes = 100 - finalNo;
-        }
-        if (finalYes === undefined && finalNo === undefined) {
+        // Default to 50/50 if no data
+        if (finalYes === undefined) {
           finalYes = 50;
           finalNo = 50;
-        } else if (typeof finalYes === 'number' && typeof finalNo === 'number' && Math.abs((finalYes + finalNo) - 100) > 1) {
-          finalNo = 100 - finalYes;
         }
 
         const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
