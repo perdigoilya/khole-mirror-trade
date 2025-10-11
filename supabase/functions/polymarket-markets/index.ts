@@ -89,75 +89,99 @@ serve(async (req) => {
       return n <= 1 ? Math.round(n * 100) : Math.round(n);
     };
 
-    // Group markets by condition ID to consolidate multi-outcome markets
+    // Group markets using provider grouping metadata (collection/event) with robust fallbacks
     const marketGroups = new Map<string, any[]>();
-    for (const market of markets) {
-      const cid = market.conditionId || market.condition_id || market.id;
-      if (!marketGroups.has(cid)) {
-        marketGroups.set(cid, []);
+    const groupTitles = new Map<string, string>();
+
+    const extractTopic = (title: string): string | undefined => {
+      if (!title) return undefined;
+      const m = title.match(/win\s+(?:the\s+)?(.+?)\?/i);
+      if (m) return m[1].trim();
+      const sb = title.match(/(Super\s+Bowl\s+\d{4})/i);
+      if (sb) return sb[1].trim();
+      const ws = title.match(/(World\s+Series\s+\d{4})/i);
+      if (ws) return ws[1].trim();
+      return undefined;
+    };
+
+    const getGroupKey = (m: any): { key: string; title?: string } => {
+      const cid = m.conditionId || m.condition_id;
+      const simp = cid ? byConditionId.get(cid) : undefined;
+      const fromMarket = m.groupItemTitle || m.groupTitle || m.group || m.collection_title || m.collectionTitle || m.collection || m.eventName || m.event_title || m.event || m.series || m.topic_group || m.parentMarketSlug || m.parent_market_slug;
+      const fromSimp = simp?.collection_title || simp?.collectionTitle || simp?.event_name || simp?.eventTitle || simp?.group_title;
+      const topic = extractTopic(m.question || m.title || '');
+      const keyRaw = (fromMarket || fromSimp || topic || cid || m.id || m.slug || crypto.randomUUID()).toString();
+      const title = (fromMarket || fromSimp || topic) as string | undefined;
+      return { key: keyRaw.toLowerCase(), title };
+    };
+
+    for (const m of markets as any[]) {
+      const { key, title } = getGroupKey(m);
+      if (!marketGroups.has(key)) {
+        marketGroups.set(key, []);
+        if (title) groupTitles.set(key, title);
       }
-      marketGroups.get(cid)!.push(market);
+      marketGroups.get(key)!.push(m);
     }
 
-    console.log(`Grouped ${markets.length} markets into ${marketGroups.size} unique markets`);
-
-    // Helper to format a single market
+    console.log(`Grouped ${markets.length} markets into ${marketGroups.size} unique groups`);
+    // Helper to format a single market into our UI structure
     const formatMarket = (market: any, simp: any) => {
       const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
       
       const extractMid = (t: any): number | undefined => {
-          if (!t) return undefined;
-          const bid = toNumber(t.best_bid ?? t.bbo?.BUY ?? t.prices?.BUY ?? t.buy);
-          const ask = toNumber(t.best_ask ?? t.bbo?.SELL ?? t.prices?.SELL ?? t.sell);
-          if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
-          if (ask !== undefined) return ask;
-          if (bid !== undefined) return bid;
-          const p = toNumber(t.price ?? t.last_price ?? t.last);
-          return p;
-        };
+        if (!t) return undefined;
+        const bid = toNumber(t.best_bid ?? t.bbo?.BUY ?? t.prices?.BUY ?? t.buy);
+        const ask = toNumber(t.best_ask ?? t.bbo?.SELL ?? t.prices?.SELL ?? t.sell);
+        if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
+        if (ask !== undefined) return ask;
+        if (bid !== undefined) return bid;
+        const p = toNumber(t.price ?? t.last_price ?? t.last);
+        return p;
+      };
 
-        // For multi-outcome markets (>2 tokens), find the highest volume token
-        let topToken = tokens[0];
-        if (tokens.length > 2) {
-          topToken = tokens.reduce((max: any, token: any) => {
-            const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
-            const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
-            return tokenVol > maxVol ? token : max;
-          }, tokens[0]);
+      // For multi-outcome markets (>2 tokens), find the highest volume token
+      let topToken = tokens[0];
+      if (tokens.length > 2) {
+        topToken = tokens.reduce((max: any, token: any) => {
+          const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
+          const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
+          return tokenVol > maxVol ? token : max;
+        }, tokens[0]);
+      }
+
+      // Extract price for the top outcome
+      const topPrice = extractMid(topToken);
+      let finalYes = toCents(topPrice);
+      let finalNo: number | undefined;
+
+      // For binary markets, try to get complementary NO price
+      if (tokens.length === 2) {
+        const otherToken = tokens[0] === topToken ? tokens[1] : tokens[0];
+        const otherPrice = extractMid(otherToken);
+        finalNo = toCents(otherPrice);
+      }
+
+      // Fallback to market-level data
+      if (finalYes === undefined) {
+        const rawPrice = market.lastTradePrice ?? market.price ?? market.outcomePrices?.[0];
+        finalYes = toCents(rawPrice);
+      }
+
+      // Ensure complement for binary markets
+      if (tokens.length <= 2) {
+        if (typeof finalYes === 'number' && finalNo === undefined) {
+          finalNo = 100 - finalYes;
+        } else if (typeof finalNo === 'number' && finalYes === undefined) {
+          finalYes = 100 - finalNo;
         }
+      }
 
-        // Extract price for the top outcome
-        const topPrice = extractMid(topToken);
-        let finalYes = toCents(topPrice);
-        let finalNo: number | undefined;
-
-        // For binary markets, try to get complementary NO price
-        if (tokens.length === 2) {
-          const otherToken = tokens[0] === topToken ? tokens[1] : tokens[0];
-          const otherPrice = extractMid(otherToken);
-          finalNo = toCents(otherPrice);
-        }
-
-        // Fallback to market-level data
-        if (finalYes === undefined) {
-          const rawPrice = market.lastTradePrice ?? market.price ?? market.outcomePrices?.[0];
-          finalYes = toCents(rawPrice);
-        }
-
-        // Ensure complement for binary markets
-        if (tokens.length <= 2) {
-          if (typeof finalYes === 'number' && finalNo === undefined) {
-            finalNo = 100 - finalYes;
-          } else if (typeof finalNo === 'number' && finalYes === undefined) {
-            finalYes = 100 - finalNo;
-          }
-        }
-
-        // Default to 50/50 if no data
-        if (finalYes === undefined) {
-          finalYes = 50;
-          finalNo = 50;
-        }
+      // Default to 50/50 if no data
+      if (finalYes === undefined) {
+        finalYes = 50;
+        finalNo = 50;
+      }
 
       const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
       const vol = toNumber(market.volume_usd || market.volume) ?? 0;
@@ -166,22 +190,21 @@ serve(async (req) => {
 
       return {
         id: cid || market.id || market.slug || crypto.randomUUID(),
-          title: market.question || market.title || "Unknown Market",
-          description: market.description || "",
-          image: market.image || market.icon || market.imageUrl || "",
-          yesPrice: finalYes,
-          noPrice: finalNo,
-          volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
-          liquidity: liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
-          endDate: end ? new Date(end).toLocaleDateString() : "TBD",
-          status: (market.closed || market.is_resolved) ? "Closed" : ((market.active || market.is_active || simp?.active) ? "Active" : "Inactive"),
-          category: market.category || market.tags?.[0] || market.topic || "Other",
-          provider: "polymarket",
+        title: market.question || market.title || "Unknown Market",
+        description: market.description || "",
+        image: market.image || market.icon || market.imageUrl || "",
+        yesPrice: finalYes,
+        noPrice: finalNo,
+        volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
+        liquidity: liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
+        endDate: end ? new Date(end).toLocaleDateString() : "TBD",
+        status: (market.closed || market.is_resolved) ? "Closed" : ((market.active || market.is_active || simp?.active) ? "Active" : "Inactive"),
+        category: market.category || market.tags?.[0] || market.topic || "Other",
+        provider: "polymarket",
         volumeRaw: vol,
         liquidityRaw: liq,
       };
     };
-
     // Format markets with grouping
     const formattedMarkets = Array.from(marketGroups.values())
       .map((marketGroup: any[]) => {

@@ -557,7 +557,7 @@ const Markets = () => {
             {/* Table Header */}
             <div className="grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-3 bg-card/50 border-b border-border text-sm text-muted-foreground font-medium">
               <div></div>
-              <div>MARKET ({groupedMarkets.length})</div>
+              <div>MARKET ({filteredAndSortedMarkets.length})</div>
               <div>PRICES</div>
               <div>OUTCOME</div>
               <div>VOLUME</div>
@@ -596,7 +596,7 @@ const Markets = () => {
                 </Button>
               </div>
             ) : (
-              groupedMarkets.map((market, index) => {
+              filteredAndSortedMarkets.map((market, index) => {
                 const isExpanded = expandedMarkets.has(market.id);
                 const hasSubMarkets = market.isMultiOutcome && market.subMarkets && market.subMarkets.length > 1;
                 
