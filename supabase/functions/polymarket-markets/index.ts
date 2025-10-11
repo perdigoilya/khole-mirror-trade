@@ -16,7 +16,7 @@ serve(async (req) => {
     console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "");
 
     // Fetch active markets from Polymarket Gamma API (public, no auth required)
-    const response = await fetch("https://gamma-api.polymarket.com/getMarkets?page=1&per_page=50", {
+    const response = await fetch("https://gamma-api.polymarket.com/markets?closed=false&limit=50&offset=0&order=id&ascending=false", {
       method: "GET",
       headers: {
         "Accept": "application/json",
