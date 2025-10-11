@@ -416,11 +416,11 @@ const Markets = () => {
               </div>
             ) : (
               filteredAndSortedMarkets.map((market, index) => {
-                const yesPrice = typeof market.yesPrice === 'number' ? market.yesPrice : 50;
-                const noPrice = typeof market.noPrice === 'number' ? market.noPrice : 50;
-                const yesDecimal = (yesPrice / 100).toFixed(3);
-                const noDecimal = (noPrice / 100).toFixed(3);
-                const outcome = getOutcomeBadge(yesPrice);
+                const yesCents = typeof market.yesPrice === 'number' ? market.yesPrice : (typeof market.noPrice === 'number' ? 100 - market.noPrice : undefined);
+                const noCents = typeof market.noPrice === 'number' ? market.noPrice : (typeof yesCents === 'number' ? 100 - yesCents : undefined);
+                const outcome = getOutcomeBadge(typeof yesCents === 'number' ? yesCents : 50);
+                const yesLabel = typeof yesCents === 'number' ? `${yesCents}¢` : '—';
+                const noLabel = typeof noCents === 'number' ? `${noCents}¢` : '—';
                 
                 return (
                   <div
@@ -482,18 +482,18 @@ const Markets = () => {
                     {/* Prices with Bar */}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="text-emerald-400 font-medium">{yesDecimal}</span>
+                        <span className="text-emerald-400 font-medium">{yesLabel}</span>
                         <span className="text-muted-foreground">/</span>
-                        <span className="text-red-400 font-medium">{noDecimal}</span>
+                        <span className="text-red-400 font-medium">{noLabel}</span>
                       </div>
                       <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
                         <div 
                           className="bg-gradient-to-r from-emerald-500 to-emerald-400"
-                          style={{ width: `${yesPrice}%` }}
+                          style={{ width: `${typeof yesCents === 'number' ? yesCents : (typeof noCents === 'number' ? 100 - noCents : 0)}%` }}
                         />
                         <div 
                           className="bg-gradient-to-r from-red-400 to-red-500"
-                          style={{ width: `${noPrice}%` }}
+                          style={{ width: `${typeof noCents === 'number' ? noCents : (typeof yesCents === 'number' ? 100 - yesCents : 0)}%` }}
                         />
                       </div>
                     </div>

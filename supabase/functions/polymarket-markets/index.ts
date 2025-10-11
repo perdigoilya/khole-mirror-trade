@@ -115,8 +115,10 @@ serve(async (req) => {
           return s === 'no' || s === 'down' || s === 'false';
         };
 
-        const yesToken = findToken(isYes) || tokens[0];
-        const noToken = findToken(isNo) || tokens[1];
+        const yesTokenNamed = findToken(isYes);
+        const noTokenNamed = findToken(isNo);
+        const yesToken = yesTokenNamed || tokens[0];
+        const noToken = noTokenNamed || tokens[1];
 
         const extractMid = (t: any): number | undefined => {
           if (!t) return undefined;
@@ -129,10 +131,37 @@ serve(async (req) => {
           return p;
         };
 
-        const y = extractMid(yesToken);
-        const n = extractMid(noToken);
-        if (y !== undefined) yesPriceCents = toCents(y);
-        if (n !== undefined) noPriceCents = toCents(n);
+        const midYes = extractMid(yesToken);
+        const midNo = extractMid(noToken);
+
+        // If explicit YES/NO tokens were found, trust them
+        if (yesTokenNamed || noTokenNamed) {
+          if (midYes !== undefined) yesPriceCents = toCents(midYes);
+          if (midNo !== undefined) noPriceCents = toCents(midNo);
+        } else {
+          // Heuristic for binary markets with two tokens but no explicit YES/NO labels
+          const mid0 = extractMid(tokens[0]);
+          const mid1 = extractMid(tokens[1]);
+          if (mid0 !== undefined && mid1 !== undefined) {
+            if (Math.abs((mid0 + mid1) - 1) < 0.2) {
+              // Looks like complementary probabilities
+              yesPriceCents = toCents(mid0);
+              noPriceCents = toCents(mid1);
+            } else {
+              // Choose the higher-priced token as YES and infer NO
+              const chosen = mid0 >= mid1 ? mid0 : mid1;
+              yesPriceCents = toCents(chosen);
+              noPriceCents = 100 - yesPriceCents;
+            }
+          } else if (mid0 !== undefined) {
+            yesPriceCents = toCents(mid0);
+            noPriceCents = 100 - yesPriceCents;
+          } else if (mid1 !== undefined) {
+            yesPriceCents = 100 - toCents(mid1);
+            noPriceCents = 100 - yesPriceCents;
+          }
+        }
+
         if (yesPriceCents !== undefined && noPriceCents === undefined) {
           noPriceCents = 100 - yesPriceCents;
         } else if (noPriceCents !== undefined && yesPriceCents === undefined) {
