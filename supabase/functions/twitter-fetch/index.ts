@@ -10,6 +10,7 @@ const API_KEY = Deno.env.get("TWITTER_API_KEY")?.trim();
 const API_SECRET = Deno.env.get("TWITTER_API_KEY_SECRET")?.trim();
 const ACCESS_TOKEN = Deno.env.get("TWITTER_ACCESS_TOKEN")?.trim();
 const ACCESS_TOKEN_SECRET = Deno.env.get("TWITTER_ACCESS_TOKEN_SECRET")?.trim();
+const BEARER_TOKEN = Deno.env.get("TWITTER_BEARER_TOKEN")?.trim();
 
 function generateOAuthSignature(
   method: string,
@@ -103,16 +104,19 @@ interface TwitterResponse {
 async function fetchUserTimeline(username: string): Promise<TwitterResponse> {
   const url = `https://api.x.com/2/tweets/search/recent?query=from:${username}&max_results=10&tweet.fields=created_at,author_id&expansions=author_id&user.fields=name,username`;
   const method = "GET";
-  const oauthHeader = generateOAuthHeader(method, url);
 
   console.log(`Fetching tweets for @${username}`);
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (BEARER_TOKEN) {
+    headers["Authorization"] = `Bearer ${BEARER_TOKEN}`;
+  } else {
+    headers["Authorization"] = generateOAuthHeader(method, url);
+  }
+
   const response = await fetch(url, {
-    method: method,
-    headers: {
-      Authorization: oauthHeader,
-      "Content-Type": "application/json",
-    },
+    method,
+    headers,
   });
 
   if (!response.ok) {
