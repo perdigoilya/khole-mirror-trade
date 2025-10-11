@@ -23,15 +23,19 @@ serve(async (req) => {
       },
     });
 
+    console.log("Polymarket API response status:", response.status);
+
     if (!response.ok) {
-      console.error("Polymarket API error:", response.status);
+      const errorText = await response.text();
+      console.error("Polymarket API error:", response.status, errorText);
       return new Response(
-        JSON.stringify({ error: "Failed to fetch markets from Polymarket" }),
-        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Failed to fetch markets from Polymarket", details: errorText }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     let markets = await response.json();
+    console.log("Fetched markets count:", markets.length);
 
     // Filter by search term if provided
     if (searchTerm && searchTerm.trim()) {
