@@ -416,11 +416,18 @@ const Markets = () => {
               </div>
             ) : (
               filteredAndSortedMarkets.map((market, index) => {
-                const yesCents = typeof market.yesPrice === 'number' ? market.yesPrice : (typeof market.noPrice === 'number' ? 100 - market.noPrice : undefined);
-                const noCents = typeof market.noPrice === 'number' ? market.noPrice : (typeof yesCents === 'number' ? 100 - yesCents : undefined);
-                const outcome = getOutcomeBadge(typeof yesCents === 'number' ? yesCents : 50);
-                const yesLabel = typeof yesCents === 'number' ? `${yesCents}¢` : '—';
-                const noLabel = typeof noCents === 'number' ? `${noCents}¢` : '—';
+                let y = typeof market.yesPrice === 'number' ? market.yesPrice : (typeof market.noPrice === 'number' ? 100 - market.noPrice : undefined);
+                let n = typeof market.noPrice === 'number' ? market.noPrice : (typeof y === 'number' ? 100 - y : undefined);
+                if (typeof y === 'number' && typeof n === 'number') {
+                  if (Math.abs((y + n) - 100) > 1) n = 100 - y;
+                } else if (typeof y === 'number') {
+                  n = 100 - y;
+                } else if (typeof n === 'number') {
+                  y = 100 - n;
+                }
+                const outcome = getOutcomeBadge(typeof y === 'number' ? y : 50);
+                const yesLabel = typeof y === 'number' ? `${y}¢` : '—';
+                const noLabel = typeof n === 'number' ? `${n}¢` : '—';
                 
                 return (
                   <div
@@ -489,11 +496,11 @@ const Markets = () => {
                       <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
                         <div 
                           className="bg-gradient-to-r from-emerald-500 to-emerald-400"
-                          style={{ width: `${typeof yesCents === 'number' ? yesCents : (typeof noCents === 'number' ? 100 - noCents : 0)}%` }}
+                          style={{ width: `${typeof y === 'number' ? y : 0}%` }}
                         />
                         <div 
                           className="bg-gradient-to-r from-red-400 to-red-500"
-                          style={{ width: `${typeof noCents === 'number' ? noCents : (typeof yesCents === 'number' ? 100 - yesCents : 0)}%` }}
+                          style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
                         />
                       </div>
                     </div>

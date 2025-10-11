@@ -83,9 +83,9 @@ serve(async (req) => {
       return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
     };
 
-    const toCents = (v: any): number => {
+    const toCents = (v: any): number | undefined => {
       const n = toNumber(v);
-      if (n === undefined) return 50;
+      if (n === undefined) return undefined;
       return n <= 1 ? Math.round(n * 100) : Math.round(n);
     };
 
@@ -144,27 +144,36 @@ serve(async (req) => {
           const mid1 = extractMid(tokens[1]);
           if (mid0 !== undefined && mid1 !== undefined) {
             if (Math.abs((mid0 + mid1) - 1) < 0.2) {
-              // Looks like complementary probabilities
-              yesPriceCents = toCents(mid0);
-              noPriceCents = toCents(mid1);
+              const c0 = toCents(mid0);
+              const c1 = toCents(mid1);
+              if (typeof c0 === 'number') yesPriceCents = c0;
+              if (typeof c1 === 'number') noPriceCents = c1;
             } else {
-              // Choose the higher-priced token as YES and infer NO
               const chosen = mid0 >= mid1 ? mid0 : mid1;
-              yesPriceCents = toCents(chosen);
-              noPriceCents = 100 - yesPriceCents;
+              const chosenC = toCents(chosen);
+              if (typeof chosenC === 'number') {
+                yesPriceCents = chosenC;
+                noPriceCents = 100 - chosenC;
+              }
             }
           } else if (mid0 !== undefined) {
-            yesPriceCents = toCents(mid0);
-            noPriceCents = 100 - yesPriceCents;
+            const c0 = toCents(mid0);
+            if (typeof c0 === 'number') {
+              yesPriceCents = c0;
+              noPriceCents = 100 - c0;
+            }
           } else if (mid1 !== undefined) {
-            yesPriceCents = 100 - toCents(mid1);
-            noPriceCents = 100 - yesPriceCents;
+            const c1 = toCents(mid1);
+            if (typeof c1 === 'number') {
+              noPriceCents = c1;
+              yesPriceCents = 100 - c1;
+            }
           }
         }
 
-        if (yesPriceCents !== undefined && noPriceCents === undefined) {
+        if (typeof yesPriceCents === 'number' && typeof noPriceCents !== 'number') {
           noPriceCents = 100 - yesPriceCents;
-        } else if (noPriceCents !== undefined && yesPriceCents === undefined) {
+        } else if (typeof noPriceCents === 'number' && typeof yesPriceCents !== 'number') {
           yesPriceCents = 100 - noPriceCents;
         }
 
@@ -182,12 +191,27 @@ serve(async (req) => {
         let finalNo  = noPriceCents  ?? toCents(rawNo);
         
         // If we still don't have good prices, try to extract from the market outcomes
-        if (finalYes === 50 && finalNo === 50 && market.outcomePrices) {
+        if (finalYes === undefined && finalNo === undefined && market.outcomePrices) {
           const prices = market.outcomePrices;
           if (Array.isArray(prices) && prices.length >= 2) {
-            finalYes = toCents(prices[0]);
-            finalNo = toCents(prices[1]);
+            const y = toCents(prices[0]);
+            const n2 = toCents(prices[1]);
+            if (typeof y === 'number') finalYes = y;
+            if (typeof n2 === 'number') finalNo = n2;
           }
+        }
+
+        // Normalize/complement
+        if (typeof finalYes === 'number' && typeof finalNo !== 'number') {
+          finalNo = 100 - finalYes;
+        } else if (typeof finalNo === 'number' && typeof finalYes !== 'number') {
+          finalYes = 100 - finalNo;
+        }
+        if (finalYes === undefined && finalNo === undefined) {
+          finalYes = 50;
+          finalNo = 50;
+        } else if (typeof finalYes === 'number' && typeof finalNo === 'number' && Math.abs((finalYes + finalNo) - 100) > 1) {
+          finalNo = 100 - finalYes;
         }
 
         const liq = toNumber(market.liquidity || market.liquidity_usd) ?? 0;
