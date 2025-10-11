@@ -40,6 +40,7 @@ serve(async (req) => {
       ? payload
       : (payload?.markets || payload?.data || []);
     console.log("Fetched markets count:", Array.isArray(markets) ? markets.length : 0);
+    console.log("Sample market data:", JSON.stringify(markets[0], null, 2).slice(0, 1000));
 
     // Filter by search term if provided
     if (searchTerm && searchTerm.trim()) {
