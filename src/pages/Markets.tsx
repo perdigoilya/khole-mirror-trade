@@ -10,13 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useKalshi } from "@/contexts/KalshiContext";
+import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 
 const Markets = () => {
-  const { isConnected, credentials, user } = useKalshi();
+  const { isKalshiConnected, kalshiCredentials, user } = useTrading();
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -28,11 +28,11 @@ const Markets = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    if (isConnected && credentials) {
+    if (isKalshiConnected && kalshiCredentials) {
       const searchTerm = searchParams.get("search");
       fetchMarkets(searchTerm);
     }
-  }, [isConnected, credentials, searchParams]);
+  }, [isKalshiConnected, kalshiCredentials, searchParams]);
 
   const fetchMarkets = async (searchTerm?: string | null) => {
     setLoading(true);
@@ -44,7 +44,7 @@ const Markets = () => {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(credentials),
+          body: JSON.stringify(kalshiCredentials),
         }
       );
 
@@ -148,7 +148,7 @@ const Markets = () => {
                 )}
                 {loading ? (
                   <p className="text-muted-foreground text-center py-8">Loading markets...</p>
-                ) : !isConnected && user ? (
+                ) : !isKalshiConnected && user ? (
                   <div className="text-center py-12">
                     <p className="text-muted-foreground mb-4">Connect your Kalshi account to view markets</p>
                     <ConnectionRequired />

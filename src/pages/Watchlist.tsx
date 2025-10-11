@@ -1,10 +1,10 @@
 import Footer from "@/components/Footer";
 import { Star, TrendingUp } from "lucide-react";
-import { useKalshi } from "@/contexts/KalshiContext";
+import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 
 const Watchlist = () => {
-  const { isConnected } = useKalshi();
+  const { isKalshiConnected } = useTrading();
   const watchedMarkets = [
     {
       id: 1,
@@ -30,7 +30,7 @@ const Watchlist = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
       <main className="flex-1 pt-10 pb-20">
-        {!isConnected ? (
+        {!isKalshiConnected ? (
           <ConnectionRequired />
         ) : (
           <div className="container mx-auto px-4">

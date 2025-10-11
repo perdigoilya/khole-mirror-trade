@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
-import { useKalshi } from "@/contexts/KalshiContext";
+import { useTrading } from "@/contexts/TradingContext";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isConnected, user, credentials } = useKalshi();
+  const { isKalshiConnected, user, kalshiCredentials } = useTrading();
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { toast } = useToast();
@@ -33,7 +33,7 @@ const Navigation = () => {
     
     if (!searchTerm.trim()) return;
     
-    if (!isConnected || !credentials) {
+    if (!isKalshiConnected || !kalshiCredentials) {
       toast({
         title: "Connect Kalshi",
         description: "Please connect your Kalshi account to search markets",
@@ -102,10 +102,10 @@ const Navigation = () => {
               <>
                 <Button 
                   onClick={() => setShowConnectDialog(true)}
-                  variant={isConnected ? "outline" : "default"}
+                  variant={isKalshiConnected ? "outline" : "default"}
                   className="font-medium text-sm"
                 >
-                  {isConnected ? "Connected" : "Connect Kalshi"}
+                  {isKalshiConnected ? "Connected" : "Connect Kalshi"}
                 </Button>
                 <Button 
                   onClick={async () => {

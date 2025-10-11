@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
 import Footer from "@/components/Footer";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { useKalshi } from "@/contexts/KalshiContext";
+import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
 
 const Portfolio = () => {
-  const { isConnected, credentials } = useKalshi();
+  const { isKalshiConnected, kalshiCredentials } = useTrading();
   const [positions, setPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (isConnected && credentials) {
+    if (isKalshiConnected && kalshiCredentials) {
       fetchPortfolio();
     }
-  }, [isConnected, credentials]);
+  }, [isKalshiConnected, kalshiCredentials]);
 
   const fetchPortfolio = async () => {
     setLoading(true);
@@ -27,7 +27,7 @@ const Portfolio = () => {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(credentials),
+          body: JSON.stringify(kalshiCredentials),
         }
       );
 
@@ -57,7 +57,7 @@ const Portfolio = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
       <main className="flex-1 pt-10 pb-20">
-        {!isConnected ? (
+        {!isKalshiConnected ? (
           <ConnectionRequired />
         ) : (
           <div className="container mx-auto px-4">

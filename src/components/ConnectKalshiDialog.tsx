@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Key, X } from "lucide-react";
-import { useKalshi } from "@/contexts/KalshiContext";
+import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 
 interface ConnectKalshiDialogProps {
@@ -16,7 +16,7 @@ interface ConnectKalshiDialogProps {
 export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogProps) => {
   const [apiKeyId, setApiKeyId] = useState("");
   const [privateKey, setPrivateKey] = useState("");
-  const { connect } = useKalshi();
+  const { connectKalshi } = useTrading();
   const { toast } = useToast();
 
   const handleClear = () => {
@@ -59,7 +59,7 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
       const data = await response.json();
 
       if (data.valid) {
-        connect({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim() });
+        connectKalshi({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim() });
         toast({
           title: "Connected to Kalshi",
           description: "Your credentials have been validated successfully",
