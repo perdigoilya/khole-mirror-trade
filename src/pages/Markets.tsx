@@ -183,21 +183,27 @@ const Markets = () => {
                             <div>
                               <p className="text-sm text-muted-foreground mb-1">YES Price</p>
                               <p className="text-2xl font-bold text-primary">
-                                {market.yes_bid ? `$${(market.yes_bid / 100).toFixed(2)}` : 'N/A'}
+                                {typeof market.yesPrice === 'number'
+                                  ? `$${(market.yesPrice / 100).toFixed(2)}`
+                                  : (market.yes_bid ? `$${(market.yes_bid / 100).toFixed(2)}` : 'N/A')}
                               </p>
                             </div>
                             
                             <div>
                               <p className="text-sm text-muted-foreground mb-1">NO Price</p>
                               <p className="text-lg font-semibold text-destructive">
-                                {market.no_bid ? `$${(market.no_bid / 100).toFixed(2)}` : 'N/A'}
+                                {typeof market.noPrice === 'number'
+                                  ? `$${(market.noPrice / 100).toFixed(2)}`
+                                  : (market.no_bid ? `$${(market.no_bid / 100).toFixed(2)}` : 'N/A')}
                               </p>
                             </div>
                             
                             <div>
                               <p className="text-sm text-muted-foreground mb-1">Volume</p>
                               <p className="text-lg font-semibold text-foreground">
-                                {market.volume ? `$${(market.volume / 100).toLocaleString()}` : 'N/A'}
+                                {typeof market.volume === 'string'
+                                  ? market.volume
+                                  : (market.volume ? `$${(market.volume / 100).toLocaleString()}` : 'N/A')}
                               </p>
                             </div>
                           </div>
