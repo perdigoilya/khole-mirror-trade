@@ -101,31 +101,60 @@ interface TwitterResponse {
   };
 }
 
-async function fetchUserTimeline(username: string): Promise<TwitterResponse> {
-  const url = `https://api.x.com/2/tweets/search/recent?query=from:${username}&max_results=10&tweet.fields=created_at,author_id&expansions=author_id&user.fields=name,username`;
-  const method = "GET";
+async function getUserByUsername(username: string): Promise<string> {
+  const cleanUsername = username.replace('@', '');
+  const url = `https://api.x.com/2/users/by/username/${cleanUsername}`;
+  
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (BEARER_TOKEN) {
+    headers["Authorization"] = `Bearer ${BEARER_TOKEN}`;
+  } else {
+    headers["Authorization"] = generateOAuthHeader("GET", url);
+  }
 
-  console.log(`Fetching tweets for @${username}`);
+  const response = await fetch(url, { method: "GET", headers });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`Error fetching user ID for @${username}: ${response.status} ${errorText}`);
+    throw new Error(`Twitter API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.data.id;
+}
+
+async function fetchUserTimeline(username: string, userId?: string): Promise<TwitterResponse> {
+  // Get user ID if not provided
+  if (!userId) {
+    userId = await getUserByUsername(username);
+  }
+
+  const url = `https://api.x.com/2/users/${userId}/tweets?max_results=10&tweet.fields=created_at,author_id&expansions=author_id&user.fields=name,username`;
+
+  console.log(`Fetching tweets for @${username} (ID: ${userId})`);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (BEARER_TOKEN) {
     headers["Authorization"] = `Bearer ${BEARER_TOKEN}`;
   } else {
-    headers["Authorization"] = generateOAuthHeader(method, url);
+    headers["Authorization"] = generateOAuthHeader("GET", url);
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-  });
+  const response = await fetch(url, { method: "GET", headers });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`Twitter API error for @${username}:`, response.status, errorText);
+    console.error(`Twitter API error for @${username}: ${response.status} ${errorText}`);
     throw new Error(`Twitter API error: ${response.status}`);
   }
 
   return await response.json();
+}
+
+// Helper to add delay between requests
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 Deno.serve(async (req) => {
@@ -152,10 +181,13 @@ Deno.serve(async (req) => {
 
     let totalTweetsFetched = 0;
 
-    // Fetch tweets from each account
+    // Fetch tweets from each account with rate limiting
     for (const account of accounts || []) {
       try {
-        const twitterData = await fetchUserTimeline(account.twitter_username);
+        const twitterData = await fetchUserTimeline(
+          account.twitter_username,
+          account.twitter_user_id || undefined
+        );
         
         if (!twitterData.data) {
           console.log(`No tweets found for @${account.twitter_username}`);
@@ -178,7 +210,7 @@ Deno.serve(async (req) => {
               author_name: author?.name || account.display_name,
               text: tweet.text,
               created_at: tweet.created_at,
-              category: 'Market News', // You can customize this logic
+              category: 'Market News',
             }, {
               onConflict: 'tweet_id',
               ignoreDuplicates: true
@@ -190,9 +222,13 @@ Deno.serve(async (req) => {
         }
 
         console.log(`Fetched ${tweets.length} tweets from @${account.twitter_username}`);
+        
+        // Add 1 second delay between accounts to respect rate limits
+        await delay(1000);
       } catch (error) {
         console.error(`Error fetching tweets for @${account.twitter_username}:`, error);
-        // Continue with next account even if one fails
+        // Add delay even on error to avoid hammering the API
+        await delay(1000);
       }
     }
 
