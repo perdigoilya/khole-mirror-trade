@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Footer from "@/components/Footer";
-import { Wallet, TrendingUp, BarChart3, DollarSign, Key } from "lucide-react";
+import { Wallet, TrendingUp, BarChart3, DollarSign, Key, RefreshCw } from "lucide-react";
 import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
@@ -8,15 +8,84 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
+import { supabase } from "@/integrations/supabase/client";
+
+interface Position {
+  title: string;
+  outcome: string;
+  size: number;
+  avgPrice: number;
+  currentValue: number;
+  cashPnl: number;
+  percentPnl: number;
+  curPrice: number;
+  slug: string;
+  icon?: string;
+}
+
+interface PortfolioSummary {
+  totalValue: number;
+  totalPnl: number;
+  totalRealizedPnl: number;
+  activePositions: number;
+  totalInvested: number;
+}
 
 const Portfolio = () => {
-  const { user, isKalshiConnected, isPolymarketConnected } = useTrading();
+  const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'history'>('overview');
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
+
+  const fetchPortfolio = async () => {
+    if (!user || !isPolymarketConnected) return;
+
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-portfolio`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch portfolio");
+      }
+
+      const data = await response.json();
+      setPositions(data.positions || []);
+      setSummary(data.summary || null);
+    } catch (error: any) {
+      console.error("Error fetching portfolio:", error);
+      toast({
+        title: "Error loading portfolio",
+        description: error.message || "Failed to load portfolio data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user && isPolymarketConnected) {
+      fetchPortfolio();
+    }
+  }, [user, isPolymarketConnected]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
@@ -122,53 +191,123 @@ const Portfolio = () => {
                 </div>
               </div>
             ) : (
-              // Has connections - show empty portfolio ready for integration
+              // Has connections - show portfolio data
               <div className="space-y-6">
-                {/* Portfolio Summary Cards - Empty State */}
+                {/* Refresh Button */}
+                <div className="flex justify-end">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={fetchPortfolio}
+                    disabled={loading}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+
+                {/* Portfolio Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">Total Value</p>
-                      <Badge variant="outline" className="text-xs">Connected</Badge>
+                      <Badge variant="outline" className="text-xs">Live</Badge>
                     </div>
-                    <p className="text-2xl font-bold text-foreground mb-1">—</p>
-                    <p className="text-xs text-muted-foreground">Awaiting position data</p>
+                    <p className="text-2xl font-bold text-foreground mb-1">
+                      ${summary?.totalValue?.toFixed(2) || '0.00'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Initial: ${summary?.totalInvested?.toFixed(2) || '0.00'}
+                    </p>
                   </Card>
                   
                   <Card className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">Total P&L</p>
-                      <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      <TrendingUp className={`h-4 w-4 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} />
                     </div>
-                    <p className="text-2xl font-bold text-foreground mb-1">—</p>
-                    <p className="text-xs text-muted-foreground">Awaiting position data</p>
+                    <p className={`text-2xl font-bold mb-1 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      {(summary?.totalPnl || 0) >= 0 ? '+' : ''}${summary?.totalPnl?.toFixed(2) || '0.00'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Realized: ${summary?.totalRealizedPnl?.toFixed(2) || '0.00'}
+                    </p>
                   </Card>
                   
                   <Card className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">Active Positions</p>
-                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                      <BarChart3 className="h-4 w-4 text-primary" />
                     </div>
-                    <p className="text-2xl font-bold text-foreground mb-1">0</p>
-                    <p className="text-xs text-muted-foreground">No positions yet</p>
+                    <p className="text-2xl font-bold text-foreground mb-1">
+                      {summary?.activePositions || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Open markets
+                    </p>
                   </Card>
                 </div>
 
-                {/* Positions Section - Empty State */}
-                <Card className="p-10 text-center">
-                  <div className="max-w-md mx-auto">
-                    <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                    <h3 className="text-lg font-semibold mb-2">
-                      No positions found
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Your portfolio positions will appear here once you start trading. Integration with {isKalshiConnected ? 'Kalshi' : ''}{isKalshiConnected && isPolymarketConnected ? ' and ' : ''}{isPolymarketConnected ? 'Polymarket' : ''} is ready.
-                    </p>
-                    <Button onClick={() => window.location.href = '/markets'}>
-                      Browse Markets
-                    </Button>
-                  </div>
-                </Card>
+                {/* Positions List */}
+                {positions.length === 0 ? (
+                  <Card className="p-10 text-center">
+                    <div className="max-w-md mx-auto">
+                      <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                      <h3 className="text-lg font-semibold mb-2">
+                        No positions yet
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Start trading on Polymarket to see your positions here
+                      </p>
+                      <Button onClick={() => window.location.href = '/markets'}>
+                        Browse Markets
+                      </Button>
+                    </div>
+                  </Card>
+                ) : (
+                  <Card>
+                    <div className="p-6 border-b">
+                      <h3 className="text-lg font-semibold">Open Positions</h3>
+                      <p className="text-sm text-muted-foreground">Your active market positions</p>
+                    </div>
+                    <div className="divide-y">
+                      {positions.map((position, index) => (
+                        <div key={index} className="p-6 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                {position.icon && (
+                                  <img src={position.icon} alt="" className="h-5 w-5 rounded" />
+                                )}
+                                <h4 className="font-semibold text-sm truncate">{position.title}</h4>
+                              </div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  {position.outcome}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {position.size.toFixed(2)} shares @ ${position.avgPrice.toFixed(3)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span>Current: ${position.curPrice.toFixed(3)}</span>
+                                <span>Value: ${position.currentValue.toFixed(2)}</span>
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className={`text-lg font-bold ${position.cashPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                {position.cashPnl >= 0 ? '+' : ''}${position.cashPnl.toFixed(2)}
+                              </div>
+                              <div className={`text-xs ${position.percentPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                {position.percentPnl >= 0 ? '+' : ''}{position.percentPnl.toFixed(2)}%
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
               </div>
             )}
           </div>
