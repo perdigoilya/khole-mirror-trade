@@ -161,10 +161,17 @@ const Feed = () => {
       setFeedStatus('idle');
     } catch (error: any) {
       setFeedStatus('error');
+      console.error("Twitter fetch error:", error);
+      
+      // Check if it's a rate limit error
+      const isRateLimit = error.message?.includes('429') || error.message?.includes('rate limit');
+      
       if (!silent) {
         toast({
-          title: "Refresh failed",
-          description: error.message || "Failed to fetch tweets",
+          title: isRateLimit ? "Rate limit reached" : "Refresh failed",
+          description: isRateLimit 
+            ? "Twitter API rate limit reached. Try again in a few minutes."
+            : error.message || "Failed to fetch tweets",
           variant: "destructive",
         });
       }
@@ -193,10 +200,10 @@ const Feed = () => {
       )
       .subscribe();
 
-    // Auto-refresh every 30 seconds (silently fetch new tweets in background)
+    // Auto-refresh every 10 minutes to avoid Twitter rate limits (15 requests per 15-min window)
     const autoRefreshInterval = setInterval(() => {
       refreshTwitterFeed(true);
-    }, 30000); // 30 seconds
+    }, 600000); // 10 minutes
 
     return () => {
       supabase.removeChannel(channel);

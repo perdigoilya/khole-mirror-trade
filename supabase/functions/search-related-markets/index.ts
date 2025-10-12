@@ -75,11 +75,15 @@ function extractKeywords(text: string): string[] {
 
 async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
   try {
-    // Use Polymarket's public API
-    const response = await fetch("https://clob.polymarket.com/markets", {
+    // Use Polymarket's Gamma API (events endpoint) with search
+    const searchQuery = keywords.join(' ');
+    console.log("Searching Polymarket with query:", searchQuery);
+    
+    const response = await fetch(`https://gamma-api.polymarket.com/events?closed=false&limit=50`, {
       method: "GET",
       headers: {
-        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
       },
     });
 
@@ -88,25 +92,74 @@ async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
       return [];
     }
 
-    const allMarkets = await response.json();
+    const events = await response.json();
+    console.log(`Fetched ${Array.isArray(events) ? events.length : 0} events from Polymarket`);
     
-    // Filter markets based on keywords
-    const relevantMarkets = allMarkets
-      .filter((market: any) => {
-        const marketText = `${market.question} ${market.description}`.toLowerCase();
-        return keywords.some(keyword => marketText.includes(keyword));
-      })
-      .slice(0, 10) // Limit to 10 results
-      .map((market: any) => ({
-        id: market.condition_id,
-        title: market.question,
-        description: market.description,
-        yesPrice: market.outcomes?.[0]?.price ? Math.round(market.outcomes[0].price * 100) : 50,
-        noPrice: market.outcomes?.[1]?.price ? Math.round(market.outcomes[1].price * 100) : 50,
-        volume: market.volume ? `$${(market.volume / 1000000).toFixed(1)}M` : "$0",
-        provider: 'polymarket',
-      }));
+    // Also fetch simplified markets for pricing data
+    const simplifiedRes = await fetch("https://clob.polymarket.com/simplified-markets", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
+      },
+    });
+    
+    const simplified = simplifiedRes.ok ? await simplifiedRes.json() : [];
+    const byConditionId = new Map();
+    for (const m of simplified) {
+      const cid = m.condition_id || m.conditionId;
+      if (cid) byConditionId.set(cid, m);
+    }
 
+    // Filter events/markets based on keywords
+    const relevantMarkets: any[] = [];
+    
+    for (const event of events) {
+      const eventText = `${event.title} ${event.description}`.toLowerCase();
+      const hasMatch = keywords.some(keyword => eventText.includes(keyword));
+      
+      if (hasMatch) {
+        const markets = event.markets || [];
+        const mainMarket = markets[0];
+        
+        if (mainMarket) {
+          const cid = mainMarket.conditionId || mainMarket.condition_id;
+          const simp = cid ? byConditionId.get(cid) : undefined;
+          const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
+          
+          // Extract pricing
+          let yesPrice = 50;
+          let noPrice = 50;
+          
+          if (tokens.length >= 1) {
+            const token = tokens[0];
+            const bid = token.best_bid ?? token.bbo?.BUY ?? token.prices?.BUY;
+            const ask = token.best_ask ?? token.bbo?.SELL ?? token.prices?.SELL;
+            if (bid !== undefined && ask !== undefined) {
+              const mid = (parseFloat(bid) + parseFloat(ask)) / 2;
+              yesPrice = Math.round(mid <= 1 ? mid * 100 : mid);
+              noPrice = 100 - yesPrice;
+            }
+          }
+          
+          const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
+          
+          relevantMarkets.push({
+            id: cid || event.id || mainMarket.id,
+            title: event.title || mainMarket.question || mainMarket.title,
+            description: event.description || mainMarket.description || '',
+            yesPrice,
+            noPrice,
+            volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
+            provider: 'polymarket',
+          });
+        }
+      }
+      
+      if (relevantMarkets.length >= 10) break;
+    }
+
+    console.log(`Found ${relevantMarkets.length} relevant markets`);
     return relevantMarkets;
   } catch (error) {
     console.error("Error fetching from Polymarket:", error);
