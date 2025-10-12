@@ -1,7 +1,7 @@
 import { createWeb3Modal } from '@web3modal/wagmi/react';
 import { defaultWagmiConfig } from '@web3modal/wagmi/react/config';
 import { WagmiProvider } from 'wagmi';
-import { polygon } from 'wagmi/chains';
+import { mainnet, polygon, base, arbitrum, optimism } from 'wagmi/chains';
 import { ReactNode } from 'react';
 
 // WalletConnect project ID - this is a public identifier
@@ -14,8 +14,8 @@ const metadata = {
   icons: ['/logo.png']
 };
 
-// Polymarket uses Polygon network
-const chains = [polygon] as const;
+// Support multiple chains for portfolio balances
+const chains = [polygon, mainnet, base, arbitrum, optimism] as const;
 
 const config = defaultWagmiConfig({
   chains,

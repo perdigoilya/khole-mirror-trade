@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
 import { supabase } from "@/integrations/supabase/client";
+import { useAccount, useBalance } from "wagmi";
+import { mainnet, polygon, base, arbitrum, optimism } from "wagmi/chains";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Position {
   title: string;
@@ -31,17 +34,33 @@ interface PortfolioSummary {
   totalInvested: number;
 }
 
+const SUPPORTED_CHAINS = [
+  { id: polygon.id, name: 'Polygon', chain: polygon, symbol: 'MATIC' },
+  { id: mainnet.id, name: 'Ethereum', chain: mainnet, symbol: 'ETH' },
+  { id: base.id, name: 'Base', chain: base, symbol: 'ETH' },
+  { id: arbitrum.id, name: 'Arbitrum', chain: arbitrum, symbol: 'ETH' },
+  { id: optimism.id, name: 'Optimism', chain: optimism, symbol: 'ETH' },
+];
+
 const Portfolio = () => {
   const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials } = useTrading();
   const { toast } = useToast();
+  const { address, isConnected } = useAccount();
   const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'history'>('overview');
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
   const [positions, setPositions] = useState<Position[]>([]);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
+
+  // Get balance for selected chain
+  const { data: balance, refetch: refetchBalance } = useBalance({
+    address: address,
+    chainId: selectedChain,
+  });
 
   const fetchPortfolio = async () => {
     if (!user || !isPolymarketConnected) return;
@@ -193,18 +212,50 @@ const Portfolio = () => {
             ) : (
               // Has connections - show portfolio data
               <div className="space-y-6">
-                {/* Refresh Button */}
-                <div className="flex justify-end">
+                {/* Chain Selector and Refresh */}
+                <div className="flex justify-between items-center gap-4">
+                  <Tabs value={selectedChain.toString()} onValueChange={(v) => setSelectedChain(Number(v))} className="flex-1">
+                    <TabsList className="grid w-full grid-cols-5">
+                      {SUPPORTED_CHAINS.map((chain) => (
+                        <TabsTrigger key={chain.id} value={chain.id.toString()}>
+                          {chain.name}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={fetchPortfolio}
+                    onClick={() => {
+                      fetchPortfolio();
+                      refetchBalance();
+                    }}
                     disabled={loading}
                   >
                     <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                     Refresh
                   </Button>
                 </div>
+
+                {/* Chain Balance Card */}
+                {isConnected && balance && (
+                  <Card className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-muted-foreground">
+                        {SUPPORTED_CHAINS.find(c => c.id === selectedChain)?.name} Balance
+                      </p>
+                      <Badge variant="outline" className="text-xs">
+                        {SUPPORTED_CHAINS.find(c => c.id === selectedChain)?.symbol}
+                      </Badge>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground">
+                      {Number(balance.formatted).toFixed(4)} {balance.symbol}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Wallet: {address?.slice(0, 6)}...{address?.slice(-4)}
+                    </p>
+                  </Card>
+                )}
 
                 {/* Portfolio Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
