@@ -220,112 +220,138 @@ const MarketDetail = () => {
             </div>
 
             <div className="grid lg:grid-cols-[1fr,380px] gap-6">
-              {/* Left Column - Chart and Outcomes */}
+              {/* Left Column - Charts and Outcomes */}
               <div className="space-y-6">
-                {/* Chart */}
-                <Card className="p-0 overflow-hidden">
-                  <div className="p-4 border-b border-border flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <LineChart className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-semibold">Polymarket</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
-                        <Button
-                          key={range}
-                          variant={timeRange === range ? 'secondary' : 'ghost'}
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setTimeRange(range)}
-                        >
-                          {range}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="h-[400px] bg-card p-4">
-                    <MarketChart 
-                      marketId={market.isMultiOutcome && market.subMarkets?.[0]?.id ? market.subMarkets[0].id : market.id} 
-                      timeRange={timeRange}
-                    />
-                  </div>
-                </Card>
-
-                {/* Outcomes List */}
+                {/* Outcomes with Individual Charts */}
                 <div className="space-y-3">
                   <h2 className="text-lg font-semibold mb-3">
-                    {market.isMultiOutcome ? 'OUTCOME' : 'TRADE'}
+                    {market.isMultiOutcome ? 'OUTCOMES' : 'MARKET'}
                   </h2>
                   
                   {market.isMultiOutcome && market.subMarkets ? (
-                    // Multi-outcome market - show all outcomes
+                    // Multi-outcome market - show each outcome with its own chart
                     market.subMarkets.map((outcome, idx) => (
-                      <Card key={outcome.id} className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div 
-                              className="w-10 h-10 rounded flex items-center justify-center font-bold text-white text-sm"
-                              style={{ 
-                                backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b'][idx % 4]
-                              }}
-                            >
-                              {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
+                      <Card key={outcome.id} className="overflow-hidden">
+                        {/* Outcome Header */}
+                        <div className="p-4 border-b border-border">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              <div 
+                                className="w-10 h-10 rounded flex items-center justify-center font-bold text-white text-sm"
+                                style={{ 
+                                  backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b'][idx % 4]
+                                }}
+                              >
+                                {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-sm mb-1">{outcome.title}</h3>
+                                <p className="text-xs text-muted-foreground">{outcome.volume} Vol.</p>
+                              </div>
                             </div>
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-sm mb-1">{outcome.title}</h3>
-                              <p className="text-xs text-muted-foreground">{outcome.volume} Vol.</p>
+                            
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <div className="text-2xl font-bold">{outcome.yesPrice || 50}%</div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button 
+                                  size="sm"
+                                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                  onClick={() => handleTrade(outcome.title, 'yes')}
+                                >
+                                  Buy {outcome.yesPrice}¢
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                          
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <div className="text-2xl font-bold">{outcome.yesPrice || 50}%</div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button 
-                                className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                onClick={() => handleTrade(outcome.title, 'yes')}
-                              >
-                                Buy Yes {outcome.yesPrice}¢
-                              </Button>
-                              <Button 
-                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                                onClick={() => handleTrade(outcome.title, 'no')}
-                              >
-                                Buy No {outcome.noPrice}¢
-                              </Button>
-                            </div>
+                        </div>
+                        
+                        {/* Individual Chart */}
+                        <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+                          <div className="flex items-center gap-2">
+                            <LineChart className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm font-medium">Price History</span>
                           </div>
+                          <div className="flex items-center gap-1">
+                            {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
+                              <Button
+                                key={range}
+                                variant={timeRange === range ? 'secondary' : 'ghost'}
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setTimeRange(range)}
+                              >
+                                {range}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="h-[300px] bg-card p-4">
+                          <MarketChart 
+                            marketId={outcome.id} 
+                            timeRange={timeRange}
+                          />
                         </div>
                       </Card>
                     ))
                   ) : (
-                    // Binary market - show Yes/No
-                    <Card className="p-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-3">
-                          <div className="text-sm text-muted-foreground">YES</div>
-                          <div className="text-4xl font-bold text-emerald-400">{market.yesPrice}¢</div>
-                          <Button 
-                            className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                            onClick={() => handleTrade(market.title, 'yes')}
-                          >
-                            Buy Yes
-                          </Button>
+                    // Binary market - show single chart and Yes/No buttons
+                    <>
+                      <Card className="p-0 overflow-hidden">
+                        <div className="p-4 border-b border-border flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <LineChart className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-semibold">Polymarket</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
+                              <Button
+                                key={range}
+                                variant={timeRange === range ? 'secondary' : 'ghost'}
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setTimeRange(range)}
+                              >
+                                {range}
+                              </Button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-3">
-                          <div className="text-sm text-muted-foreground">NO</div>
-                          <div className="text-4xl font-bold text-red-400">{market.noPrice}¢</div>
-                          <Button 
-                            className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                            onClick={() => handleTrade(market.title, 'no')}
-                          >
-                            Buy No
-                          </Button>
+                        
+                        <div className="h-[400px] bg-card p-4">
+                          <MarketChart 
+                            marketId={market.id} 
+                            timeRange={timeRange}
+                          />
                         </div>
-                      </div>
-                    </Card>
+                      </Card>
+                      
+                      <Card className="p-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-3">
+                            <div className="text-sm text-muted-foreground">YES</div>
+                            <div className="text-4xl font-bold text-emerald-400">{market.yesPrice}¢</div>
+                            <Button 
+                              className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              onClick={() => handleTrade(market.title, 'yes')}
+                            >
+                              Buy Yes
+                            </Button>
+                          </div>
+                          <div className="space-y-3">
+                            <div className="text-sm text-muted-foreground">NO</div>
+                            <div className="text-4xl font-bold text-red-400">{market.noPrice}¢</div>
+                            <Button 
+                              className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+                              onClick={() => handleTrade(market.title, 'no')}
+                            >
+                              Buy No
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    </>
                   )}
                 </div>
 
