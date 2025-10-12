@@ -256,10 +256,17 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update last fetched timestamp
+        // Get profile image URL from the first tweet's author
+        const firstAuthor = tweets.length > 0 ? userMap.get(tweets[0].author_id) : null;
+        const profileImageUrl = firstAuthor?.profile_image_url;
+
+        // Update last fetched timestamp and profile image
         await supabase
           .from('followed_twitter_accounts')
-          .update({ last_fetched_at: new Date().toISOString() })
+          .update({ 
+            last_fetched_at: new Date().toISOString(),
+            ...(profileImageUrl && { profile_image_url: profileImageUrl })
+          })
           .eq('id', account.id);
 
         console.log(`✓ Fetched ${tweets.length} tweets from @${account.twitter_username}`);

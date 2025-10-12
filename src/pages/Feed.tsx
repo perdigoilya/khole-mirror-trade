@@ -448,6 +448,12 @@ const Feed = () => {
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
                                     <Avatar className="h-8 w-8">
+                                      {account.profile_image_url && (
+                                        <AvatarImage 
+                                          src={account.profile_image_url} 
+                                          alt={account.twitter_username}
+                                        />
+                                      )}
                                       <AvatarFallback>
                                         {account.twitter_username[0].toUpperCase()}
                                       </AvatarFallback>

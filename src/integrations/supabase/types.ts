@@ -21,6 +21,7 @@ export type Database = {
           display_name: string | null
           id: string
           last_fetched_at: string | null
+          profile_image_url: string | null
           twitter_user_id: string | null
           twitter_username: string
         }
@@ -30,6 +31,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           last_fetched_at?: string | null
+          profile_image_url?: string | null
           twitter_user_id?: string | null
           twitter_username: string
         }
@@ -39,6 +41,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           last_fetched_at?: string | null
+          profile_image_url?: string | null
           twitter_user_id?: string | null
           twitter_username?: string
         }
