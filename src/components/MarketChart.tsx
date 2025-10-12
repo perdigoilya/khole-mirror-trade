@@ -150,7 +150,7 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
           backgroundSize: '120px',
-          opacity: 0.1
+          opacity: 1
         }}
       />
       
