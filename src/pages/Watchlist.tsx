@@ -63,7 +63,7 @@ const Watchlist = () => {
         .from('watchlist')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('added_at', { ascending: false });
 
       if (error) throw error;
 
