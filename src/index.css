@@ -51,6 +51,10 @@ All colors MUST be HSL.
     --chart-green: 142 76% 36%;
     --chart-red: 0 84% 60%;
     
+    /* Platform brand colors */
+    --kalshi-blue: 217 91% 60%;
+    --polymarket-purple: 280 70% 60%;
+    
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(var(--terminal-green)), hsl(var(--terminal-green-bright)));
     --gradient-glow: 0 0 40px hsl(var(--terminal-green) / 0.3);

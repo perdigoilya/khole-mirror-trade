@@ -44,77 +44,79 @@ const Portfolio = () => {
               </Card>
             ) : !hasAnyConnection ? (
               // Logged in but no connections
-              <div className="space-y-6">
-                <Card className="p-8 text-center border-2 border-primary/20">
-                  <div className="max-w-2xl mx-auto">
-                    <div className="p-4 rounded-full bg-primary/10 w-20 h-20 mx-auto mb-6 flex items-center justify-center">
-                      <Key className="h-10 w-10 text-primary" />
+              <div className="space-y-8">
+                <Card className="p-10 text-center">
+                  <div className="max-w-xl mx-auto">
+                    <div className="p-3 rounded-full bg-muted w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                      <Key className="h-8 w-8 text-primary" />
                     </div>
-                    <h2 className="text-3xl font-bold mb-3">
-                      Connect Your Trading Accounts
+                    <h2 className="text-2xl font-semibold mb-2">
+                      Connect Trading Account
                     </h2>
-                    <p className="text-muted-foreground mb-8 text-lg">
-                      Link your Kalshi or Polymarket accounts to start viewing your portfolio and placing trades
+                    <p className="text-muted-foreground mb-8">
+                      Link your Kalshi or Polymarket account to view positions and trade
                     </p>
-                    <div className="flex gap-4 justify-center flex-col sm:flex-row max-w-lg mx-auto">
+                    <div className="flex gap-3 justify-center flex-col sm:flex-row max-w-sm mx-auto">
                       <Button 
                         size="lg"
-                        className="h-16 text-lg font-semibold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 flex-1"
+                        variant="outline"
+                        className="h-12 border-[hsl(var(--kalshi-blue))] text-[hsl(var(--kalshi-blue))] hover:bg-[hsl(var(--kalshi-blue))]/10 flex-1"
                         onClick={() => setShowKalshiDialog(true)}
                       >
-                        <Key className="h-5 w-5 mr-2" />
-                        Connect Kalshi
+                        <Key className="h-4 w-4 mr-2" />
+                        Kalshi
                       </Button>
                       <Button 
                         size="lg"
-                        className="h-16 text-lg font-semibold bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white border-0 flex-1"
+                        variant="outline"
+                        className="h-12 border-[hsl(var(--polymarket-purple))] text-[hsl(var(--polymarket-purple))] hover:bg-[hsl(var(--polymarket-purple))]/10 flex-1"
                         onClick={() => setShowPolymarketDialog(true)}
                       >
-                        <Key className="h-5 w-5 mr-2" />
-                        Connect Polymarket
+                        <Key className="h-4 w-4 mr-2" />
+                        Polymarket
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground mt-6">
-                      Your credentials are stored securely in your browser and never shared
+                      Credentials stored securely in your browser
                     </p>
                   </div>
                 </Card>
 
                 {/* Feature Preview */}
                 <div className="grid md:grid-cols-3 gap-4">
-                  <Card className="p-6 bg-card/50">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
+                  <Card className="p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 rounded-lg bg-muted">
                         <TrendingUp className="h-5 w-5 text-primary" />
                       </div>
-                      <h3 className="font-semibold">Live Performance</h3>
+                      <h3 className="font-semibold text-sm">Live Performance</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Track your P&L and position values in real-time
+                      Track P&L and positions in real-time
                     </p>
                   </Card>
 
-                  <Card className="p-6 bg-card/50">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
+                  <Card className="p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 rounded-lg bg-muted">
                         <BarChart3 className="h-5 w-5 text-primary" />
                       </div>
-                      <h3 className="font-semibold">Multi-Platform</h3>
+                      <h3 className="font-semibold text-sm">Multi-Platform</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      View positions from Kalshi and Polymarket in one place
+                      View positions from both platforms
                     </p>
                   </Card>
 
-                  <Card className="p-6 bg-card/50">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded-lg bg-primary/10">
+                  <Card className="p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="p-2 rounded-lg bg-muted">
                         <DollarSign className="h-5 w-5 text-primary" />
                       </div>
-                      <h3 className="font-semibold">Smart Analytics</h3>
+                      <h3 className="font-semibold text-sm">Smart Analytics</h3>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Get insights on your trading performance and strategy
+                      Insights on trading performance
                     </p>
                   </Card>
                 </div>
@@ -123,47 +125,47 @@ const Portfolio = () => {
               // Has connections - show empty portfolio ready for integration
               <div className="space-y-6">
                 {/* Portfolio Summary Cards - Empty State */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card className="p-6">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">Total Value</p>
                       <Badge variant="outline" className="text-xs">Connected</Badge>
                     </div>
-                    <p className="text-3xl font-bold text-foreground mb-1">—</p>
+                    <p className="text-2xl font-bold text-foreground mb-1">—</p>
                     <p className="text-xs text-muted-foreground">Awaiting position data</p>
                   </Card>
                   
                   <Card className="p-6">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">Total P&L</p>
                       <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <p className="text-3xl font-bold text-foreground mb-1">—</p>
+                    <p className="text-2xl font-bold text-foreground mb-1">—</p>
                     <p className="text-xs text-muted-foreground">Awaiting position data</p>
                   </Card>
                   
                   <Card className="p-6">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">Active Positions</p>
                       <BarChart3 className="h-4 w-4 text-muted-foreground" />
                     </div>
-                    <p className="text-3xl font-bold text-foreground mb-1">0</p>
+                    <p className="text-2xl font-bold text-foreground mb-1">0</p>
                     <p className="text-xs text-muted-foreground">No positions yet</p>
                   </Card>
                 </div>
 
                 {/* Positions Section - Empty State */}
-                <Card className="p-12 text-center">
+                <Card className="p-10 text-center">
                   <div className="max-w-md mx-auto">
-                    <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold mb-2">
+                    <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <h3 className="text-lg font-semibold mb-2">
                       No positions found
                     </h3>
-                    <p className="text-sm text-muted-foreground mb-6">
+                    <p className="text-sm text-muted-foreground mb-4">
                       Your portfolio positions will appear here once you start trading. Integration with {isKalshiConnected ? 'Kalshi' : ''}{isKalshiConnected && isPolymarketConnected ? ' and ' : ''}{isPolymarketConnected ? 'Polymarket' : ''} is ready.
                     </p>
                     <Button onClick={() => window.location.href = '/markets'}>
-                      Browse Markets to Trade
+                      Browse Markets
                     </Button>
                   </div>
                 </Card>
