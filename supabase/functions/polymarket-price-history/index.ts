@@ -53,32 +53,51 @@ serve(async (req) => {
     };
 
     let tokenId = normalizeTokenId(marketId);
-    // If a condition id (0x...) was provided, resolve to a token id via simplified-markets
+    // If a condition id (0x...) was provided, resolve to a token id via paginated simplified-markets
     if (!tokenId && typeof marketId === 'string' && /^0x[0-9a-fA-F]+$/.test(marketId)) {
       try {
-        const simpRes = await fetch('https://clob.polymarket.com/simplified-markets', {
-          method: 'GET',
-          headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
-        });
-        if (simpRes.ok) {
+        const target = String(marketId).toLowerCase();
+        let nextCursor = '';
+        let page = 0;
+        const MAX_PAGES = 20; // safety cap
+        const toNumber = (v: any) => {
+          if (v === null || v === undefined) return 0;
+          const n = typeof v === 'string' ? parseFloat(v) : v;
+          return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
+        };
+
+        while (!tokenId && page < MAX_PAGES) {
+          const url = `https://clob.polymarket.com/simplified-markets${nextCursor ? `?next_cursor=${encodeURIComponent(nextCursor)}` : ''}`;
+          const simpRes = await fetch(url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
+          });
+          if (!simpRes.ok) {
+            console.warn('simplified-markets fetch failed with status', simpRes.status);
+            break;
+          }
           const simpPayload = await simpRes.json();
           const simpList: any[] = Array.isArray(simpPayload) ? simpPayload : (simpPayload?.data || simpPayload?.markets || []);
-          const target = String(marketId).toLowerCase();
+
           const match = simpList.find((m: any) => String(m.condition_id || m.conditionId || '').toLowerCase() === target);
           if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
             // Pick token with highest volume if available
-            const toNumber = (v: any) => {
-              if (v === null || v === undefined) return 0;
-              const n = typeof v === 'string' ? parseFloat(v) : v;
-              return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
-            };
             const best = match.tokens.reduce((max: any, t: any) => {
               const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0);
               const tVol = toNumber(t?.volume ?? t?.volume_24hr ?? 0);
               return tVol > maxVol ? t : max;
             }, match.tokens[0]);
             tokenId = String(best?.token_id ?? best?.tokenId ?? best?.id ?? '');
+            console.log('Resolved token id from simplified-markets:', tokenId);
+            break;
           }
+
+          // advance pagination
+          nextCursor = (simpPayload?.next_cursor ?? simpPayload?.nextCursor ?? '') as string;
+          if (!nextCursor || nextCursor === 'LTE=' || nextCursor === '-1') {
+            break;
+          }
+          page += 1;
         }
       } catch (e) {
         console.warn('Failed to resolve token id from condition id:', e);
