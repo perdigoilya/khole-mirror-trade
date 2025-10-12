@@ -229,9 +229,6 @@ const MarketDetail = () => {
               <div className="space-y-6">
                 {/* Outcomes with Individual Charts */}
                 <div className="space-y-3">
-                  <h2 className="text-lg font-semibold mb-3">
-                    {market.isMultiOutcome ? 'OUTCOMES' : 'MARKET'}
-                  </h2>
                   
                   {market.isMultiOutcome && market.subMarkets ? (
                     // Multi-outcome market - show each outcome with its own chart
