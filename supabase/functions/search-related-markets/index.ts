@@ -130,19 +130,48 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
           const simp = cid ? byConditionId.get(cid) : undefined;
           const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
           
-          // Extract pricing
+          // Extract pricing - identify YES/NO tokens explicitly
           let yesPrice = 50;
           let noPrice = 50;
           
+          const toNumber = (v: any) => {
+            if (v === null || v === undefined) return undefined;
+            const n = typeof v === 'string' ? parseFloat(v) : v;
+            return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+          };
+          
+          const extractMid = (t: any) => {
+            if (!t) return undefined;
+            const bid = toNumber(t.bid ?? t.best_bid ?? t.bestBid ?? t.bbo?.BUY ?? t.bbo?.buy ?? t.prices?.buy ?? t.prices?.BUY ?? t.buy);
+            const ask = toNumber(t.ask ?? t.best_ask ?? t.bestAsk ?? t.bbo?.SELL ?? t.bbo?.sell ?? t.prices?.sell ?? t.prices?.SELL ?? t.sell);
+            if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
+            if (ask !== undefined) return ask;
+            if (bid !== undefined) return bid;
+            const p = toNumber(t.price ?? t.last_price ?? t.lastPrice ?? t.last_trade_price ?? t.lastTradePrice ?? t.last);
+            return p;
+          };
+          
+          const toCents = (v: any) => {
+            const n = toNumber(v);
+            if (n === undefined) return undefined;
+            return n <= 1 ? Math.round(n * 100) : Math.round(n);
+          };
+          
           if (tokens.length >= 1) {
-            const token = tokens[0];
-            const bid = token.best_bid ?? token.bbo?.BUY ?? token.prices?.BUY;
-            const ask = token.best_ask ?? token.bbo?.SELL ?? token.prices?.SELL;
-            if (bid !== undefined && ask !== undefined) {
-              const bidNum = typeof bid === 'string' ? parseFloat(bid) : bid;
-              const askNum = typeof ask === 'string' ? parseFloat(ask) : ask;
-              const mid = (bidNum + askNum) / 2;
-              yesPrice = Math.round(mid <= 1 ? mid * 100 : mid);
+            // Try to identify YES/NO tokens explicitly
+            const toLower = (v: any) => String(v ?? '').toLowerCase();
+            const labelOf = (t: any) => toLower(t?.outcome ?? t?.label ?? t?.name ?? t?.ticker ?? t?.symbol ?? '');
+            
+            const yesToken = tokens.find((t: any) => labelOf(t) === 'yes' || labelOf(t).includes('yes'));
+            const noToken = tokens.find((t: any) => labelOf(t) === 'no' || labelOf(t).includes('no')) || (tokens.length === 2 ? tokens.find((t: any) => t !== yesToken) : undefined);
+            
+            const yesPrice_raw = toCents(extractMid(yesToken || tokens[0]));
+            const noPrice_raw = toCents(extractMid(noToken));
+            
+            if (yesPrice_raw !== undefined) yesPrice = yesPrice_raw;
+            if (noPrice_raw !== undefined) {
+              noPrice = noPrice_raw;
+            } else if (tokens.length <= 2 && yesPrice !== undefined) {
               noPrice = 100 - yesPrice;
             }
           }
