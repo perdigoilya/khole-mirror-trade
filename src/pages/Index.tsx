@@ -31,7 +31,7 @@ const Index = () => {
         {/* Hero Section */}
         <section className="container mx-auto text-center">
           <div className="max-w-5xl mx-auto space-y-8">
-            <div className="flex items-center justify-center space-x-4">
+            <div className="flex items-center justify-center space-x-4 animate-fade-in opacity-0 [animation-delay:100ms] [animation-fill-mode:forwards]">
               <img src={nameLogo} alt="FOMO APP" className="h-28 md:h-40 w-auto" />
               <Badge 
                 variant="outline" 
@@ -41,7 +41,7 @@ const Index = () => {
               </Badge>
             </div>
 
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+            <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-fade-in opacity-0 [animation-delay:300ms] [animation-fill-mode:forwards]">
               Match breaking news with prediction markets in real-time. Snipe opportunities before resolution. The alpha terminal for serious traders.
             </p>
 
@@ -49,13 +49,13 @@ const Index = () => {
               href="https://four.meme/" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer"
+              className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer animate-fade-in opacity-0 [animation-delay:500ms] [animation-fill-mode:forwards]"
             >
               <span className="text-base text-foreground font-medium">$FOMO now live on Four.meme</span>
               <ExternalLink className="h-5 w-5 text-primary" />
             </a>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 animate-fade-in opacity-0 [animation-delay:700ms] [animation-fill-mode:forwards]">
               <Button 
                 asChild
                 size="lg"
@@ -84,7 +84,11 @@ const Index = () => {
               {features.map((feature, index) => (
                 <div 
                   key={index}
-                  className="group p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300"
+                  className="group p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300 animate-fade-in opacity-0"
+                  style={{ 
+                    animationDelay: `${900 + index * 150}ms`,
+                    animationFillMode: 'forwards'
+                  }}
                 >
                   <div className="flex flex-col items-center text-center space-y-3">
                     <div className="p-3 rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
