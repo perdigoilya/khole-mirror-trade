@@ -564,25 +564,6 @@ const Markets = () => {
       </>
     );
   };
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span className="opacity-60">∅ {(Math.random() * 2 + 0.5).toFixed(1)} comp</span>
-          </div>
-        </div>
-
-        {/* End Date */}
-        <div className="flex items-center">
-          <span className="text-sm text-muted-foreground">
-            {(() => {
-              if (!market.endDate || market.endDate === 'TBD') return 'TBD';
-              const endDate = new Date(market.endDate);
-              const now = new Date();
-              return endDate < now ? 'Ended' : market.endDate;
-            })()}
-          </span>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
