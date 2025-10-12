@@ -20,10 +20,11 @@ import {
 import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 const Markets = () => {
   const { isKalshiConnected, kalshiCredentials, user, activeProvider } = useTrading();
+  const navigate = useNavigate();
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -294,6 +295,18 @@ const Markets = () => {
     return (
       <div
         className={`grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer group ${isSubMarket ? 'bg-card/20 pl-16' : ''}`}
+        onClick={() => {
+          const marketToNavigate = {
+            ...market,
+            yesPrice: y,
+            noPrice: n,
+            volumeRaw: market.volumeRaw || 0,
+            liquidityRaw: market.liquidityRaw || 0,
+            category: market.category || 'Other',
+            status: market.status || 'Active'
+          };
+          navigate(`/market/${market.id}`, { state: { market: marketToNavigate }});
+        }}
       >
         {/* Icon/Image */}
         <div className="flex items-start pt-1">
