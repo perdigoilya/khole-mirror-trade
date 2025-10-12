@@ -122,7 +122,7 @@ serve(async (req) => {
     }
 
     console.log("Fetched events count:", Array.isArray(events) ? events.length : 0);
-    console.log("Sample event data:", JSON.stringify(events[0], null, 2).slice(0, 1000));
+    console.log("Sample event data:", String(JSON.stringify(events?.[0], null, 2) || '').slice(0, 1000));
 
     // Filter by search term if provided
     if (searchTerm && searchTerm.trim()) {
@@ -378,6 +378,43 @@ serve(async (req) => {
         isMultiOutcome: eventMarkets.length > 1,
       };
     });
+
+    // If no events matched but a marketId was provided, try simplified fallback
+    if (marketId && formattedMarkets.length === 0) {
+      const target = String(marketId);
+      let simp = byConditionId.get(target) as any | undefined;
+      if (!simp) {
+        const tLower = target.toLowerCase();
+        simp = simplified.find((m: any) =>
+          String(m.condition_id || m.conditionId || '').toLowerCase() === tLower
+        );
+      }
+      if (simp) {
+        const fakeMarket = {
+          conditionId: String(marketId),
+          question: simp.title || simp.question || 'Market',
+          description: simp.description || '',
+          image: simp.image || '',
+          liquidity_usd: 0,
+          volume_usd: 0,
+          end_date: undefined,
+          active: simp.active ?? true,
+          closed: false,
+          is_resolved: false,
+        };
+        const formattedOne = formatMarket(fakeMarket, simp);
+        const eventLike = {
+          ...formattedOne,
+          subMarkets: [],
+          isMultiOutcome: Array.isArray(simp.tokens) && simp.tokens.length > 2,
+        };
+        console.log('Returning 1 Polymarket event via simplified fallback');
+        return new Response(
+          JSON.stringify({ markets: [eventLike] }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     console.log(`Returning ${formattedMarkets.length} Polymarket events`);
 
