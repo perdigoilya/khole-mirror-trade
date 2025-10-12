@@ -212,10 +212,10 @@ const Feed = () => {
       )
       .subscribe();
 
-    // Auto-refresh every hour (since cron job runs hourly)
+    // Auto-refresh every 15 minutes (since cron job runs every 15 minutes)
     const autoRefreshInterval = setInterval(() => {
       fetchTweets();
-    }, 3600000); // 1 hour
+    }, 900000); // 15 minutes
 
     // Update relative timestamps every minute
     const timestampInterval = setInterval(() => {
@@ -255,7 +255,7 @@ const Feed = () => {
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1">
                     <span className="text-xs font-medium">
-                      {feedStatus === 'live' ? 'Updating...' : feedStatus === 'error' ? 'Down' : 'Auto-updating hourly'}
+                      {feedStatus === 'live' ? 'Updating...' : feedStatus === 'error' ? 'Down' : 'Auto-updating every 15 min'}
                     </span>
                     {lastUpdate && (
                       <span className="hidden sm:inline text-xs text-muted-foreground">
@@ -296,7 +296,7 @@ const Feed = () => {
                 {mainFeed.length === 0 ? (
                   <Card className="p-8 text-center">
                     <p className="text-muted-foreground mb-4">
-                      No tweets available. The feed auto-updates every hour, or you can refresh manually.
+                      No tweets available. The feed auto-updates every 15 minutes, or you can refresh manually.
                     </p>
                     <Button onClick={() => refreshTwitterFeed(false)} disabled={isRefreshing}>
                       <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
