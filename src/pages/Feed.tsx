@@ -55,7 +55,7 @@ const Feed = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [feedStatus, setFeedStatus] = useState<'live' | 'idle' | 'error'>('idle');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-
+  const [attemptedAutoRefresh, setAttemptedAutoRefresh] = useState(false);
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -100,10 +100,27 @@ const Feed = () => {
         }));
 
         setMainFeed(formattedTweets);
-        
+
         // Extract unique categories
         const uniqueCategories = [...new Set(data.map(t => t.category).filter(Boolean))];
         setCategories(uniqueCategories as string[]);
+
+        // Track last update from DB and auto-fetch if stale
+        const latestFetchedAt = data
+          .map((t: any) => t.fetched_at ? new Date(t.fetched_at as string) : null)
+          .filter(Boolean)
+          .sort((a: any, b: any) => b.getTime() - a.getTime())[0] as Date | undefined;
+
+        if (latestFetchedAt) {
+          setLastUpdate(latestFetchedAt);
+          const ageMs = Date.now() - latestFetchedAt.getTime();
+          const fifteenMin = 15 * 60 * 1000;
+          if (ageMs > fifteenMin && !attemptedAutoRefresh) {
+            setAttemptedAutoRefresh(true);
+            // Try to fetch new tweets silently once
+            refreshTwitterFeed(true).catch(() => {});
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching tweets:', error);
@@ -214,7 +231,7 @@ const Feed = () => {
 
     // Auto-refresh every 15 minutes (since cron job runs every 15 minutes)
     const autoRefreshInterval = setInterval(() => {
-      fetchTweets();
+      refreshTwitterFeed(true);
     }, 900000); // 15 minutes
 
     // Update relative timestamps every minute
