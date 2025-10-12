@@ -13,10 +13,14 @@ serve(async (req) => {
   try {
     const { searchTerm, offset = 0, marketId } = await req.json().catch(() => ({}));
 
-    console.log("Fetching Polymarket events...", searchTerm ? `Searching for: ${searchTerm}` : "", `Offset: ${offset}`);
+    console.log("Fetching Polymarket events...", searchTerm ? `Searching for: ${searchTerm}` : "", marketId ? `Market ID: ${marketId}` : "", `Offset: ${offset}`);
 
+    // When fetching a specific market, remove the closed filter and increase limit
+    const closedFilter = marketId ? '' : 'closed=false&';
+    const limitParam = marketId ? 1000 : 100;
+    
     // Fetch active events from Polymarket Gamma API - events contain grouped markets
-    const response = await fetch(`https://gamma-api.polymarket.com/events?closed=false&limit=100&offset=${offset}&order=volume24hr&ascending=false`, {
+    const response = await fetch(`https://gamma-api.polymarket.com/events?${closedFilter}limit=${limitParam}&offset=${offset}&order=volume24hr&ascending=false`, {
       method: "GET",
       headers: {
         "Accept": "application/json",
