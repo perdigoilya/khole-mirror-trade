@@ -20,7 +20,7 @@ const Watchlist = () => {
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
   
-  const watchedMarkets = [
+  const [watchedMarkets, setWatchedMarkets] = useState([
     {
       id: 1,
       title: "Will S&P 500 reach 6000 by June 2025?",
@@ -60,7 +60,7 @@ const Watchlist = () => {
       provider: "kalshi",
       trend: "up",
     },
-  ];
+  ]);
 
   const handleBuy = (market: any, side: 'yes' | 'no') => {
     if (!user) {
@@ -78,6 +78,7 @@ const Watchlist = () => {
   };
 
   const removeFromWatchlist = (marketId: number) => {
+    setWatchedMarkets(prev => prev.filter(market => market.id !== marketId));
     toast({
       title: "Removed from Watchlist",
       description: "Market removed from your watchlist",
