@@ -180,7 +180,7 @@ const Footer = () => {
             className="h-8 w-8 p-0"
           >
             <a
-              href="https://twitter.com"
+              href="https://x.com/tryFOMOapp"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Twitter"

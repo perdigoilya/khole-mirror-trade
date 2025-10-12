@@ -74,7 +74,7 @@ const FAQ = () => {
                 Reach out to us on Twitter or check our documentation
               </p>
               <a
-                href="https://twitter.com"
+                href="https://x.com/tryFOMOapp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline font-semibold"
