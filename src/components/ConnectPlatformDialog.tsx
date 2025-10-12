@@ -1,7 +1,8 @@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ConnectPlatformDialogProps {
   open: boolean;
@@ -24,89 +25,95 @@ export function ConnectPlatformDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Connect Trading Platform</DialogTitle>
+          <DialogTitle className="text-xl">Connect Platform</DialogTitle>
           <DialogDescription>
-            Choose which platform you'd like to connect to view your portfolio and trade
+            Choose a trading platform to connect
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-3 mt-4">
+        <div className="space-y-3 mt-6">
           {/* Kalshi Option */}
-          <Button
+          <button
             onClick={() => {
               if (!isKalshiConnected) {
                 onSelectKalshi();
-                onOpenChange(false);
               }
             }}
-            variant={isKalshiConnected ? "outline" : "default"}
             disabled={isKalshiConnected}
-            className={`w-full h-auto py-4 justify-start ${
-              isKalshiConnected 
-                ? "opacity-50 cursor-not-allowed border-[hsl(var(--kalshi-teal))]/30" 
-                : "border-[hsl(var(--kalshi-teal))] hover:bg-[hsl(var(--kalshi-teal))]/10"
-            }`}
+            className={cn(
+              "w-full p-5 rounded-lg border-2 transition-all text-left group",
+              isKalshiConnected
+                ? "border-[hsl(var(--kalshi-teal))]/30 bg-[hsl(var(--kalshi-teal))]/5 cursor-not-allowed"
+                : "border-[hsl(var(--kalshi-teal))]/40 hover:border-[hsl(var(--kalshi-teal))] hover:bg-[hsl(var(--kalshi-teal))]/10 cursor-pointer"
+            )}
           >
-            <div className="flex items-center justify-between w-full">
-              <div className="flex flex-col items-start gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-base">Kalshi</span>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="font-bold text-lg text-[hsl(var(--kalshi-teal))]">Kalshi</span>
                   {isKalshiConnected && (
-                    <Badge variant="secondary" className="text-xs bg-[hsl(var(--kalshi-teal))]/20 text-[hsl(var(--kalshi-teal))]">
+                    <Badge className="bg-[hsl(var(--kalshi-teal))]/20 text-[hsl(var(--kalshi-teal))] border-[hsl(var(--kalshi-teal))]/30">
                       <Check className="h-3 w-3 mr-1" />
                       Connected
                     </Badge>
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground text-left">
+                <p className="text-sm text-muted-foreground">
                   {isKalshiConnected 
-                    ? "Your Kalshi account is connected" 
-                    : "Connect with API credentials"}
-                </span>
+                    ? "Account connected with API credentials" 
+                    : "Connect with your API key"}
+                </p>
               </div>
+              {!isKalshiConnected && (
+                <ArrowRight className="h-5 w-5 text-[hsl(var(--kalshi-teal))] opacity-0 group-hover:opacity-100 transition-opacity" />
+              )}
             </div>
-          </Button>
+          </button>
 
           {/* Polymarket Option */}
-          <Button
+          <button
             onClick={() => {
               if (!isPolymarketConnected) {
                 onSelectPolymarket();
-                onOpenChange(false);
               }
             }}
-            variant={isPolymarketConnected ? "outline" : "default"}
             disabled={isPolymarketConnected}
-            className={`w-full h-auto py-4 justify-start ${
-              isPolymarketConnected 
-                ? "opacity-50 cursor-not-allowed border-[hsl(var(--polymarket-blue))]/30" 
-                : "border-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/10"
-            }`}
+            className={cn(
+              "w-full p-5 rounded-lg border-2 transition-all text-left group",
+              isPolymarketConnected
+                ? "border-[hsl(var(--polymarket-blue))]/30 bg-[hsl(var(--polymarket-blue))]/5 cursor-not-allowed"
+                : "border-[hsl(var(--polymarket-blue))]/40 hover:border-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/10 cursor-pointer"
+            )}
           >
-            <div className="flex items-center justify-between w-full">
-              <div className="flex flex-col items-start gap-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-base">Polymarket</span>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="font-bold text-lg text-[hsl(var(--polymarket-blue))]">Polymarket</span>
                   {isPolymarketConnected && (
-                    <Badge variant="secondary" className="text-xs bg-[hsl(var(--polymarket-blue))]/20 text-[hsl(var(--polymarket-blue))]">
+                    <Badge className="bg-[hsl(var(--polymarket-blue))]/20 text-[hsl(var(--polymarket-blue))] border-[hsl(var(--polymarket-blue))]/30">
                       <Check className="h-3 w-3 mr-1" />
                       Connected
                     </Badge>
                   )}
                 </div>
-                <span className="text-xs text-muted-foreground text-left">
+                <p className="text-sm text-muted-foreground">
                   {isPolymarketConnected 
-                    ? "Your wallet is connected" 
-                    : "Connect with WalletConnect"}
-                </span>
+                    ? "Wallet connected via WalletConnect" 
+                    : "Connect with your wallet"}
+                </p>
               </div>
+              {!isPolymarketConnected && (
+                <ArrowRight className="h-5 w-5 text-[hsl(var(--polymarket-blue))] opacity-0 group-hover:opacity-100 transition-opacity" />
+              )}
             </div>
-          </Button>
+          </button>
         </div>
 
-        <p className="text-xs text-muted-foreground text-center mt-4">
-          You can connect both platforms to view all your positions in one place
-        </p>
+        {!isKalshiConnected && !isPolymarketConnected && (
+          <p className="text-xs text-muted-foreground text-center mt-6 pb-2">
+            Connect one or both platforms to manage your portfolio
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
