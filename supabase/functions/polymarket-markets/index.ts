@@ -267,9 +267,16 @@ serve(async (req) => {
         console.log(`Token structure sample for market ${market.question || market.title}:`, JSON.stringify(tokens[0], null, 2).slice(0, 500));
       }
       
-      // For multi-outcome markets (>2 tokens), find the highest volume token
+      // Try to identify YES/NO tokens explicitly
+      const toLower = (v: any) => String(v ?? '').toLowerCase();
+      const labelOf = (t: any) => toLower(t?.outcome ?? t?.label ?? t?.name ?? t?.ticker ?? t?.symbol ?? '');
+
+      const yesToken = tokens.find((t: any) => labelOf(t) === 'yes' || labelOf(t).includes('yes'));
+      const noToken = tokens.find((t: any) => labelOf(t) === 'no' || labelOf(t).includes('no')) || (tokens.length === 2 ? tokens.find((t: any) => t !== yesToken) : undefined);
+
+      // If we couldn't identify explicit YES/NO and there are many outcomes, fall back to highest-volume token for display
       let topToken = tokens[0];
-      if (tokens.length > 2) {
+      if (!yesToken && tokens.length > 2) {
         topToken = tokens.reduce((max: any, token: any) => {
           const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
           const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
@@ -277,21 +284,13 @@ serve(async (req) => {
         }, tokens[0]);
       }
 
-      // Extract price for the top outcome
-      const topPrice = extractMid(topToken);
-      let finalYes = toCents(topPrice);
-      let finalNo: number | undefined;
-      
-      console.log(`Price extraction: topPrice=${topPrice}, finalYes=${finalYes}, finalNo=${finalNo}`);
+      // Prices
+      let finalYes = toCents(extractMid(yesToken || (tokens.length > 2 ? topToken : tokens[0])));
+      let finalNo: number | undefined = toCents(extractMid(noToken));
 
-      // For binary markets, try to get complementary NO price
-      if (tokens.length === 2) {
-        const otherToken = tokens[0] === topToken ? tokens[1] : tokens[0];
-        const otherPrice = extractMid(otherToken);
-        finalNo = toCents(otherPrice);
-      }
+      console.log(`Price extraction: yesTokenMid=${extractMid(yesToken)}, noTokenMid=${extractMid(noToken)}, fallbackTopMid=${extractMid(topToken)}`);
 
-      // Fallback to market-level data
+      // Fallback to market-level data if still missing
       if (finalYes === undefined) {
         const rawPrice = market.lastTradePrice ?? market.price ?? market.outcomePrices?.[0];
         finalYes = toCents(rawPrice);
@@ -321,14 +320,17 @@ serve(async (req) => {
       let topClobId = '';
       
       if (simp && Array.isArray(simp.tokens) && simp.tokens.length > 0) {
-        // Use simplified market data - prefer the token with highest volume
-        const bestToken = simp.tokens.reduce((max: any, token: any) => {
-          const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
-          const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
-          return tokenVol > maxVol ? token : max;
-        }, simp.tokens[0]);
-        
-        topClobId = String(bestToken?.token_id ?? bestToken?.tokenId ?? bestToken?.id ?? '');
+        if (yesToken) {
+          topClobId = String(yesToken?.token_id ?? yesToken?.tokenId ?? yesToken?.id ?? '');
+        } else {
+          // Prefer token with highest volume
+          const bestToken = simp.tokens.reduce((max: any, token: any) => {
+            const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
+            const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
+            return tokenVol > maxVol ? token : max;
+          }, simp.tokens[0]);
+          topClobId = String(bestToken?.token_id ?? bestToken?.tokenId ?? bestToken?.id ?? '');
+        }
       } else {
         // Fallback to Gamma data
         const clobIds: string[] = Array.isArray(market?.clobTokenIds)
@@ -341,7 +343,9 @@ serve(async (req) => {
               : []);
         
         topClobId = String(
-          topToken?.token_id ?? topToken?.tokenId ?? topToken?.id ?? clobIds[0] ?? ''
+          (yesToken?.token_id ?? yesToken?.tokenId ?? yesToken?.id) ??
+          (topToken?.token_id ?? topToken?.tokenId ?? topToken?.id) ??
+          clobIds[0] ?? ''
         );
       }
 
