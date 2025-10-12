@@ -1,87 +1,275 @@
+import { useState } from "react";
 import Footer from "@/components/Footer";
-import { Star, TrendingUp } from "lucide-react";
+import { Star, TrendingUp, TrendingDown, ShoppingCart, DollarSign, LineChart, Filter } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useTrading } from "@/contexts/TradingContext";
+import { useToast } from "@/hooks/use-toast";
 
 const Watchlist = () => {
+  const { user } = useTrading();
+  const { toast } = useToast();
+  const [sortBy, setSortBy] = useState("recent");
+  const [filterCategory, setFilterCategory] = useState("all");
+  
   const watchedMarkets = [
     {
       id: 1,
       title: "Will S&P 500 reach 6000 by June 2025?",
-      probability: 58,
-      change: "+3.2%",
+      yesPrice: 58,
+      noPrice: 42,
+      change: 3.2,
+      volume: "$2.1M",
+      liquidity: "$450K",
+      endDate: "Jun 30, 2025",
+      category: "Finance",
+      provider: "polymarket",
+      trend: "up",
     },
     {
       id: 2,
       title: "Will inflation fall below 2% in 2025?",
-      probability: 41,
-      change: "-1.8%",
+      yesPrice: 41,
+      noPrice: 59,
+      change: -1.8,
+      volume: "$1.8M",
+      liquidity: "$320K",
+      endDate: "Dec 31, 2025",
+      category: "Economics",
+      provider: "polymarket",
+      trend: "down",
     },
     {
       id: 3,
       title: "Will Tesla stock hit $400 by Q2 2025?",
-      probability: 34,
-      change: "+12.4%",
+      yesPrice: 34,
+      noPrice: 66,
+      change: 12.4,
+      volume: "$3.2M",
+      liquidity: "$580K",
+      endDate: "Jun 30, 2025",
+      category: "Stocks",
+      provider: "kalshi",
+      trend: "up",
     },
   ];
+
+  const handleBuy = (market: any, side: 'yes' | 'no') => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to trade",
+        action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
+      });
+      return;
+    }
+    toast({
+      title: "Trade Executed",
+      description: `Bought ${side.toUpperCase()} on "${market.title}"`,
+    });
+  };
+
+  const removeFromWatchlist = (marketId: number) => {
+    toast({
+      title: "Removed from Watchlist",
+      description: "Market removed from your watchlist",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
-      <main className="flex-1 pt-10 pb-24">
+      <main className="flex-1 pt-6 pb-24">
         <div className="container mx-auto px-4">
-          <div className="max-w-6xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-4xl font-bold mb-2">Watchlist</h1>
-              <p className="text-muted-foreground">
-                Monitor your favorite markets and never miss an opportunity.
-              </p>
+          <div className="max-w-7xl mx-auto">
+            {/* Header with Filters */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-3xl font-bold mb-2">Watchlist</h1>
+                  <p className="text-muted-foreground">
+                    Monitor your favorite markets and execute trades instantly
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-sm px-3 py-1">
+                  {watchedMarkets.length} Markets
+                </Badge>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[160px] bg-card/50 border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">Recently Added</SelectItem>
+                    <SelectItem value="trending">Trending</SelectItem>
+                    <SelectItem value="volume">Volume</SelectItem>
+                    <SelectItem value="ending">Ending Soon</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="w-[160px] bg-card/50 border-border">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
+                    <SelectItem value="economics">Economics</SelectItem>
+                    <SelectItem value="stocks">Stocks</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {watchedMarkets.length > 0 ? (
               <div className="space-y-4">
                 {watchedMarkets.map((market) => (
-                  <div
+                  <Card
                     key={market.id}
-                    className="p-6 rounded-lg border border-border bg-card hover:border-primary/50 transition-all duration-300 cursor-pointer"
+                    className="p-6 hover:border-primary/50 transition-all duration-300"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold mb-3 text-foreground">
-                          {market.title}
-                        </h3>
-                        
-                        <div className="flex items-center space-x-6">
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">Probability</p>
-                            <p className="text-2xl font-bold text-primary">{market.probability}%</p>
-                          </div>
-                          
-                          <div>
-                            <p className="text-sm text-muted-foreground mb-1">24h Change</p>
-                            <div className="flex items-center space-x-1">
-                              <TrendingUp className="h-4 w-4 text-primary" />
-                              <p className="text-lg font-semibold text-primary">{market.change}</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Market Info */}
+                      <div className="lg:col-span-5">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant="outline" className="text-xs">
+                                {market.provider}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {market.category}
+                              </Badge>
                             </div>
+                            <h3 className="text-lg font-semibold mb-2 line-clamp-2">
+                              {market.title}
+                            </h3>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => removeFromWatchlist(market.id)}
+                          >
+                            <Star className="h-5 w-5 text-primary fill-primary" />
+                          </Button>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="h-4 w-4" />
+                            <span>{market.volume}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <DollarSign className="h-4 w-4" />
+                            <span>{market.liquidity}</span>
+                          </div>
+                          <span>Ends: {market.endDate}</span>
+                        </div>
+                      </div>
+
+                      {/* Chart Placeholder */}
+                      <div className="lg:col-span-3">
+                        <div className="h-24 rounded-lg bg-gradient-to-r from-card to-muted/30 flex items-center justify-center border border-border/50">
+                          <div className="text-center">
+                            <LineChart className="h-8 w-8 text-muted-foreground mx-auto mb-1" />
+                            <span className="text-xs text-muted-foreground">Chart Preview</span>
                           </div>
                         </div>
                       </div>
-                      
-                      <button className="p-2 hover:bg-muted rounded-md transition-colors">
-                        <Star className="h-6 w-6 text-primary fill-primary" />
-                      </button>
+
+                      {/* Trading Section */}
+                      <div className="lg:col-span-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Yes Side */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">YES</span>
+                              <div className="flex items-center gap-1">
+                                {market.trend === 'up' ? (
+                                  <TrendingUp className="h-3 w-3 text-emerald-400" />
+                                ) : (
+                                  <TrendingDown className="h-3 w-3 text-red-400" />
+                                )}
+                                <span className={`text-xs font-medium ${
+                                  market.change >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  {market.change > 0 ? '+' : ''}{market.change}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-2xl font-bold text-emerald-400">
+                              {market.yesPrice}¢
+                            </div>
+                            <Button
+                              className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              size="sm"
+                              onClick={() => handleBuy(market, 'yes')}
+                            >
+                              <ShoppingCart className="h-3 w-3 mr-1" />
+                              Buy Yes
+                            </Button>
+                          </div>
+
+                          {/* No Side */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">NO</span>
+                              <div className="flex items-center gap-1">
+                                {market.trend === 'down' ? (
+                                  <TrendingDown className="h-3 w-3 text-red-400" />
+                                ) : (
+                                  <TrendingUp className="h-3 w-3 text-emerald-400" />
+                                )}
+                                <span className={`text-xs font-medium ${
+                                  market.change < 0 ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  {market.change < 0 ? '+' : ''}{Math.abs(market.change)}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-2xl font-bold text-red-400">
+                              {market.noPrice}¢
+                            </div>
+                            <Button
+                              className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+                              size="sm"
+                              onClick={() => handleBuy(market, 'no')}
+                            >
+                              <ShoppingCart className="h-3 w-3 mr-1" />
+                              Buy No
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-20">
+              <Card className="p-12 text-center">
                 <Star className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <h2 className="text-2xl font-semibold mb-2 text-foreground">
+                <h2 className="text-2xl font-semibold mb-2">
                   No markets in watchlist
                 </h2>
-                <p className="text-muted-foreground">
-                  Add markets to your watchlist to track them here.
+                <p className="text-muted-foreground mb-4">
+                  Add markets to your watchlist to track them here
                 </p>
-              </div>
+                <Button onClick={() => window.location.href = '/markets'}>
+                  Browse Markets
+                </Button>
+              </Card>
             )}
           </div>
         </div>
