@@ -511,6 +511,30 @@ const MarketDetail = () => {
                     <Button 
                       className="w-full h-12 bg-primary hover:bg-primary/90"
                       disabled={!selectedOutcome || parseFloat(tradeAmount) === 0}
+                      onClick={() => {
+                        if (!user) {
+                          toast({
+                            title: "Authentication Required",
+                            description: "Please sign in to trade",
+                            action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
+                          });
+                          return;
+                        }
+                        
+                        const hasCredentials = market?.provider === 'kalshi' 
+                          ? kalshiCredentials 
+                          : polymarketCredentials;
+                          
+                        if (!hasCredentials) {
+                          setConnectionDialogOpen(true);
+                          return;
+                        }
+                        
+                        toast({
+                          title: "Trade Placed",
+                          description: `Placed ${tradeSide} order for ${selectedOutcome}`,
+                        });
+                      }}
                     >
                       Buy {selectedOutcome === 'yes' ? 'Yes' : selectedOutcome === 'no' ? 'No' : ''}
                     </Button>
