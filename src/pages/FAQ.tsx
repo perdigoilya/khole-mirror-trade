@@ -9,28 +9,32 @@ import {
 const FAQ = () => {
   const faqs = [
     {
-      question: "What is khole?",
-      answer: "khole is a professional terminal for prediction market trading, designed for speed and efficiency. It provides real-time data, advanced charting, and seamless integration with Kalshi.",
+      question: "What is FOMO App?",
+      answer: "FOMO App is a comprehensive prediction markets platform that aggregates markets from Kalshi and Polymarket. Track real-time odds, manage your portfolio across multiple chains, and never miss trending prediction markets with our curated social feed.",
+    },
+    {
+      question: "How do I connect to Polymarket?",
+      answer: "Navigate to the Portfolio page and click 'Connect' under Polymarket. You'll connect your wallet using WalletConnect - simply scan the QR code with your mobile wallet or connect through your browser extension. Your wallet address is stored securely and used to fetch your positions.",
     },
     {
       question: "How do I connect to Kalshi?",
-      answer: "Click the 'Connect to Kalshi' button in the navigation bar. You'll need your Kalshi API credentials. Your keys are stored locally and never leave your device.",
+      answer: "Go to the Portfolio page and click 'Connect' under Kalshi. You'll need your Kalshi API credentials (API Key ID and Private Key) from your Kalshi account settings. Your credentials are encrypted and stored securely in our database.",
     },
     {
       question: "Is my data secure?",
-      answer: "Yes. khole uses local-only storage. All your API keys and trading data stay on your device. We never transmit or store your credentials on our servers.",
+      answer: "Yes. For Polymarket, we use WalletConnect which never exposes your private keys - you maintain full control through your wallet. Kalshi credentials are encrypted and stored securely. We never have access to execute trades without your explicit permission.",
     },
     {
-      question: "What are the system requirements?",
-      answer: "khole works on all modern browsers. For the best experience, we recommend using the latest version of Chrome, Firefox, or Safari with a stable internet connection.",
+      question: "What chains does FOMO App support?",
+      answer: "FOMO App supports multiple chains for viewing your portfolio balances: Polygon (where Polymarket operates), Ethereum mainnet, Base, Arbitrum, and Optimism. You can switch between chains to view your native token balances on each network.",
     },
     {
-      question: "How fast is the data feed?",
-      answer: "khole uses WebSocket connections for real-time data feeds with sub-second latency. You'll see market updates as fast as they happen.",
+      question: "How does the watchlist work?",
+      answer: "Add any market to your watchlist by clicking the bookmark icon. Your watchlist is saved to your account and syncs across devices. Access it anytime from the Watchlist page to track markets you're interested in.",
     },
     {
-      question: "Can I use khole on mobile?",
-      answer: "Yes! khole is fully responsive and works on mobile devices. However, for the full professional trading experience, we recommend using a desktop or laptop.",
+      question: "Can I use FOMO App on mobile?",
+      answer: "Yes! FOMO App is fully responsive and works great on mobile devices. For Polymarket connections, mobile wallet apps make it even easier to connect via WalletConnect.",
     },
   ];
 
@@ -43,7 +47,7 @@ const FAQ = () => {
             <div className="mb-12 text-center">
               <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
               <p className="text-muted-foreground text-lg">
-                Everything you need to know about khole
+                Everything you need to know about FOMO App
               </p>
             </div>
 
