@@ -293,176 +293,277 @@ const Markets = () => {
     const noLabel = typeof n === 'number' ? `${n}¢` : '—';
     
     return (
-      <div
-        className={`grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer group ${isSubMarket ? 'bg-card/20 pl-16' : ''}`}
-        onClick={() => {
-          const marketToNavigate = {
-            ...market,
-            yesPrice: y,
-            noPrice: n,
-            volumeRaw: market.volumeRaw || 0,
-            liquidityRaw: market.liquidityRaw || 0,
-            category: market.category || 'Other',
-            status: market.status || 'Active'
-          };
-          navigate(`/market/${market.id}`, { state: { market: marketToNavigate }});
-        }}
-      >
-        {/* Icon/Image */}
-        <div className="flex items-start pt-1">
-          {market.image ? (
-            <img 
-              src={market.image} 
-              alt={market.title}
-              className="w-10 h-10 rounded-full object-cover bg-card"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }}
-            />
-          ) : null}
-          <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
-            {(market.title || market.ticker || '?')[0].toUpperCase()}
+      <>
+        {/* Desktop Table Row */}
+        <div
+          className={`hidden lg:grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer group ${isSubMarket ? 'bg-card/20 pl-16' : ''}`}
+          onClick={() => {
+            const marketToNavigate = {
+              ...market,
+              yesPrice: y,
+              noPrice: n,
+              volumeRaw: market.volumeRaw || 0,
+              liquidityRaw: market.liquidityRaw || 0,
+              category: market.category || 'Other',
+              status: market.status || 'Active'
+            };
+            navigate(`/market/${market.id}`, { state: { market: marketToNavigate }});
+          }}
+        >
+          {/* Icon/Image */}
+          <div className="flex items-start pt-1">
+            {market.image ? (
+              <img 
+                src={market.image} 
+                alt={market.title}
+                className="w-10 h-10 rounded-full object-cover bg-card"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
+              {(market.title || market.ticker || '?')[0].toUpperCase()}
+            </div>
           </div>
-        </div>
 
-        {/* Market Info */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-start gap-2">
-            <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
-              {market.title || market.ticker}
-            </h3>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (!user) {
-                  toast({
-                    title: "Account Required",
-                    description: "Please sign in to add markets to your watchlist",
-                    action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
-                  });
-                } else {
-                  try {
-                    const { error } = await supabase
-                      .from('watchlist')
-                      .insert([{
-                        user_id: user.id,
-                        market_id: market.id,
-                        market_ticker: market.id,
-                        market_title: market.title,
-                        market_data: {
-                          title: market.title,
-                          yesPrice: market.yesPrice,
-                          noPrice: market.noPrice,
-                          volume: market.volume,
-                          liquidity: market.liquidity,
-                          endDate: market.endDate,
-                          category: market.category,
-                          provider: market.provider,
-                          image: market.image,
-                          description: market.description,
-                          volumeRaw: market.volumeRaw,
-                          liquidityRaw: market.liquidityRaw,
-                          trend: market.yesPrice >= 50 ? 'up' : 'down',
-                          change: Math.random() * 20 - 5
+          {/* Market Info */}
+          <div className="flex flex-col gap-1 min-w-0">
+            <div className="flex items-start gap-2">
+              <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
+                {market.title || market.ticker}
+              </h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!user) {
+                    toast({
+                      title: "Account Required",
+                      description: "Please sign in to add markets to your watchlist",
+                      action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
+                    });
+                  } else {
+                    try {
+                      const { error } = await supabase
+                        .from('watchlist')
+                        .insert([{
+                          user_id: user.id,
+                          market_id: market.id,
+                          market_ticker: market.id,
+                          market_title: market.title,
+                          market_data: {
+                            title: market.title,
+                            yesPrice: market.yesPrice,
+                            noPrice: market.noPrice,
+                            volume: market.volume,
+                            liquidity: market.liquidity,
+                            endDate: market.endDate,
+                            category: market.category,
+                            provider: market.provider,
+                            image: market.image,
+                            description: market.description,
+                            volumeRaw: market.volumeRaw,
+                            liquidityRaw: market.liquidityRaw,
+                            trend: market.yesPrice >= 50 ? 'up' : 'down',
+                            change: Math.random() * 20 - 5
+                          }
+                        }]);
+
+                      if (error) {
+                        if (error.code === '23505') {
+                          toast({
+                            title: "Already in Watchlist",
+                            description: `${market.title} is already in your watchlist`,
+                          });
+                        } else {
+                          throw error;
                         }
-                      }]);
-
-                    if (error) {
-                      if (error.code === '23505') { // Unique constraint violation
-                        toast({
-                          title: "Already in Watchlist",
-                          description: `${market.title} is already in your watchlist`,
-                        });
                       } else {
-                        throw error;
+                        toast({
+                          title: "Added to Watchlist",
+                          description: `${market.title} has been added to your watchlist`,
+                        });
                       }
-                    } else {
+                    } catch (error) {
+                      console.error('Error adding to watchlist:', error);
                       toast({
-                        title: "Added to Watchlist",
-                        description: `${market.title} has been added to your watchlist`,
+                        title: "Error",
+                        description: "Failed to add to watchlist",
+                        variant: "destructive",
                       });
                     }
-                  } catch (error) {
-                    console.error('Error adding to watchlist:', error);
-                    toast({
-                      title: "Error",
-                      description: "Failed to add to watchlist",
-                      variant: "destructive",
-                    });
                   }
-                }
-              }}
-            >
-              <Star className="h-4 w-4" />
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground line-clamp-1">
-            {market.description}
-          </p>
-        </div>
-
-        {/* Prices with Bar */}
-        <div className="flex flex-col gap-2">
-          {market.isMultiOutcome ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground/50 text-xs">Multiple outcomes</span>
+                }}
+              >
+                <Star className="h-4 w-4" />
+              </Button>
             </div>
-          ) : (
-            <>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              {market.description}
+            </p>
+          </div>
+
+          {/* Prices with Bar */}
+          <div className="flex flex-col gap-2">
+            {market.isMultiOutcome ? (
               <div className="flex items-center gap-2 text-sm">
-                <span className="text-emerald-400 font-medium">{yesLabel}</span>
-                <span className="text-muted-foreground">/</span>
-                <span className="text-red-400 font-medium">{noLabel}</span>
+                <span className="text-muted-foreground/50 text-xs">Multiple outcomes</span>
               </div>
-              <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
-                <div 
-                  className="bg-gradient-to-r from-emerald-500 to-emerald-400"
-                  style={{ width: `${typeof y === 'number' ? y : 0}%` }}
-                />
-                <div 
-                  className="bg-gradient-to-r from-red-400 to-red-500"
-                  style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
-                />
-              </div>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-emerald-400 font-medium">{yesLabel}</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-red-400 font-medium">{noLabel}</span>
+                </div>
+                <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
+                  <div 
+                    className="bg-gradient-to-r from-emerald-500 to-emerald-400"
+                    style={{ width: `${typeof y === 'number' ? y : 0}%` }}
+                  />
+                  <div 
+                    className="bg-gradient-to-r from-red-400 to-red-500"
+                    style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
 
-        {/* Outcome Badge */}
-        <div className="flex items-center">
-          {market.isMultiOutcome ? (
-            <Badge 
-              variant="outline" 
-              className="bg-muted/20 text-muted-foreground border-muted/30 text-xs px-3 py-1"
-            >
-              {market.subMarkets?.length || 0} outcomes
-            </Badge>
-          ) : (
-            <Badge 
-              variant="outline" 
-              className={`${outcome.color} border text-xs px-3 py-1`}
-            >
-              {outcome.label}
-            </Badge>
-          )}
-        </div>
+          {/* Outcome Badge */}
+          <div className="flex items-center">
+            {market.isMultiOutcome ? (
+              <Badge 
+                variant="outline" 
+                className="bg-muted/20 text-muted-foreground border-muted/30 text-xs px-3 py-1"
+              >
+                {market.subMarkets?.length || 0} outcomes
+              </Badge>
+            ) : (
+              <Badge 
+                variant="outline" 
+                className={`${outcome.color} border text-xs px-3 py-1`}
+              >
+                {outcome.label}
+              </Badge>
+            )}
+          </div>
 
-        {/* Volume */}
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-foreground">{market.volume}</span>
-          <div className="flex items-center gap-1 text-xs text-emerald-400">
-            <TrendingUp className="h-3 w-3" />
-            <span>{Math.floor(Math.random() * 30 + 10)}%</span>
+          {/* Volume */}
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-foreground">{market.volume}</span>
+            <div className="flex items-center gap-1 text-xs text-emerald-400">
+              <TrendingUp className="h-3 w-3" />
+              <span>{Math.floor(Math.random() * 30 + 10)}%</span>
+            </div>
+          </div>
+
+          {/* Liquidity */}
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-foreground">{market.liquidity}</span>
+            <span className="text-xs text-muted-foreground">Available</span>
+          </div>
+
+          {/* End Date */}
+          <div className="flex items-center">
+            <span className="text-sm text-muted-foreground">{market.endDate}</span>
           </div>
         </div>
 
-        {/* Liquidity */}
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-foreground">{market.liquidity}</span>
+        {/* Mobile Card */}
+        <div
+          className={`lg:hidden p-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer ${isSubMarket ? 'bg-card/20 ml-4' : ''}`}
+          onClick={() => {
+            const marketToNavigate = {
+              ...market,
+              yesPrice: y,
+              noPrice: n,
+              volumeRaw: market.volumeRaw || 0,
+              liquidityRaw: market.liquidityRaw || 0,
+              category: market.category || 'Other',
+              status: market.status || 'Active'
+            };
+            navigate(`/market/${market.id}`, { state: { market: marketToNavigate }});
+          }}
+        >
+          <div className="flex gap-3">
+            {/* Icon/Image */}
+            <div className="flex-shrink-0">
+              {market.image ? (
+                <img 
+                  src={market.image} 
+                  alt={market.title}
+                  className="w-12 h-12 rounded-full object-cover bg-card"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <div className={`w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold ${market.image ? 'hidden' : ''}`}>
+                {(market.title || market.ticker || '?')[0].toUpperCase()}
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0 space-y-2">
+              <h3 className="text-sm font-medium text-foreground line-clamp-2">
+                {market.title || market.ticker}
+              </h3>
+              
+              {!market.isMultiOutcome && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-medium text-sm">{yesLabel}</span>
+                    <span className="text-muted-foreground text-xs">/</span>
+                    <span className="text-red-400 font-medium text-sm">{noLabel}</span>
+                    <Badge 
+                      variant="outline" 
+                      className={`${outcome.color} border text-xs ml-auto`}
+                    >
+                      {outcome.label}
+                    </Badge>
+                  </div>
+                  <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
+                    <div 
+                      className="bg-gradient-to-r from-emerald-500 to-emerald-400"
+                      style={{ width: `${typeof y === 'number' ? y : 0}%` }}
+                    />
+                    <div 
+                      className="bg-gradient-to-r from-red-400 to-red-500"
+                      style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
+                    />
+                  </div>
+                </>
+              )}
+              
+              {market.isMultiOutcome && (
+                <Badge 
+                  variant="outline" 
+                  className="bg-muted/20 text-muted-foreground border-muted/30 text-xs"
+                >
+                  {market.subMarkets?.length || 0} outcomes
+                </Badge>
+              )}
+              
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  <span>{market.volume}</span>
+                </div>
+                <span>·</span>
+                <span>{market.endDate}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  };
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <span className="opacity-60">∅ {(Math.random() * 2 + 0.5).toFixed(1)} comp</span>
           </div>
@@ -640,8 +741,8 @@ const Markets = () => {
               </div>
             )}
           
-            {/* Table Header */}
-            <div className="grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-3 bg-card/50 border-b border-border text-sm text-muted-foreground font-medium">
+            {/* Table Header - Hidden on Mobile */}
+            <div className="hidden lg:grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-3 bg-card/50 border-b border-border text-sm text-muted-foreground font-medium">
               <div></div>
               <div>MARKET ({filteredAndSortedMarkets.length})</div>
               <div>PRICES</div>
@@ -649,6 +750,13 @@ const Markets = () => {
               <div>VOLUME</div>
               <div>LIQUIDITY</div>
               <div>END DATE</div>
+            </div>
+
+            {/* Mobile Header */}
+            <div className="lg:hidden px-4 py-3 bg-card/50 border-b border-border">
+              <div className="text-sm text-muted-foreground font-medium">
+                MARKETS ({filteredAndSortedMarkets.length})
+              </div>
             </div>
 
             {/* Table Body */}

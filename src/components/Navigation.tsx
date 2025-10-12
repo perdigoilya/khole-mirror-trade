@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const Navigation = () => {
   const location = useLocation();
@@ -16,6 +17,7 @@ const Navigation = () => {
   const { isKalshiConnected, user, kalshiCredentials } = useTrading();
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
   
   const isActive = (path: string) => location.pathname === path;
@@ -58,32 +60,31 @@ const Navigation = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4">
-        <div className="flex h-14 items-center justify-between gap-4">
-          {/* Left: Logo + Nav Links */}
-          <div className="flex items-center space-x-6">
-            <Link to="/" className="flex items-center">
-              <img src={logo} alt="khole" className="h-8 w-auto" />
-            </Link>
-            
-            <div className="hidden md:flex items-center space-x-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    isActive(item.path)
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
+        <div className="flex h-14 items-center justify-between gap-2 sm:gap-4">
+          {/* Left: Logo */}
+          <Link to="/" className="flex items-center flex-shrink-0">
+            <img src={logo} alt="FOMO App" className="h-7 sm:h-8 w-auto" />
+          </Link>
+          
+          {/* Desktop Nav Links */}
+          <div className="hidden md:flex items-center space-x-1">
+            {navItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  isActive(item.path)
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
           </div>
 
-          {/* Center: Search Bar */}
+          {/* Desktop Search Bar */}
           <div className="flex-1 max-w-md hidden lg:block">
             <form onSubmit={handleSearch} className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -96,16 +97,16 @@ const Navigation = () => {
             </form>
           </div>
 
-          {/* Right: Connect + Login */}
-          <div className="flex items-center space-x-2">
+          {/* Desktop Auth Buttons */}
+          <div className="hidden sm:flex items-center space-x-2">
             {user ? (
               <>
                 <Button 
                   onClick={() => setShowConnectDialog(true)}
                   variant={isKalshiConnected ? "outline" : "default"}
-                  className="font-medium text-sm"
+                  className="font-medium text-sm hidden lg:flex"
                 >
-                  {isKalshiConnected ? "Connected" : "Connect Kalshi"}
+                  {isKalshiConnected ? "Connected" : "Connect"}
                 </Button>
                 <Button 
                   onClick={async () => {
@@ -128,6 +129,91 @@ const Navigation = () => {
               </Button>
             )}
           </div>
+
+          {/* Mobile Menu */}
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild className="md:hidden">
+              <Button variant="ghost" size="icon" className="flex-shrink-0">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[280px] sm:w-[350px]">
+              <div className="flex flex-col gap-6 mt-6">
+                {/* Mobile Search */}
+                <form onSubmit={(e) => {
+                  handleSearch(e);
+                  setMobileMenuOpen(false);
+                }} className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Search markets..." 
+                    className="pl-10 bg-muted/50 border-border"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </form>
+
+                {/* Mobile Nav Links */}
+                <div className="flex flex-col space-y-1">
+                  {navItems.map((item) => (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        "px-4 py-3 rounded-md text-base font-medium transition-colors",
+                        isActive(item.path)
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Mobile Auth Buttons */}
+                <div className="flex flex-col space-y-2 pt-4 border-t">
+                  {user ? (
+                    <>
+                      <Button 
+                        onClick={() => {
+                          setShowConnectDialog(true);
+                          setMobileMenuOpen(false);
+                        }}
+                        variant={isKalshiConnected ? "outline" : "default"}
+                        className="w-full font-medium"
+                      >
+                        {isKalshiConnected ? "Connected to Kalshi" : "Connect Kalshi"}
+                      </Button>
+                      <Button 
+                        onClick={async () => {
+                          await supabase.auth.signOut();
+                          navigate("/auth");
+                          setMobileMenuOpen(false);
+                        }}
+                        variant="outline" 
+                        className="w-full font-medium"
+                      >
+                        Logout
+                      </Button>
+                    </>
+                  ) : (
+                    <Button 
+                      onClick={() => {
+                        navigate("/auth");
+                        setMobileMenuOpen(false);
+                      }}
+                      variant="default" 
+                      className="w-full font-medium"
+                    >
+                      Login
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
       

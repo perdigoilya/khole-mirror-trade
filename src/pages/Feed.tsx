@@ -229,7 +229,7 @@ const Feed = () => {
         <div className="container mx-auto px-4">
           <div className="max-w-7xl mx-auto">
             {/* Header with Filters */}
-            <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 {/* Live Status Indicator */}
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border">
@@ -251,14 +251,14 @@ const Feed = () => {
                     {feedStatus === 'live' ? 'Live' : feedStatus === 'error' ? 'Down' : 'Idle'}
                   </span>
                   {lastUpdate && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="hidden sm:inline text-xs text-muted-foreground">
                       · {formatTimestamp(lastUpdate.toISOString())}
                     </span>
                   )}
                 </div>
                 
                 <Select value={filterCategory} onValueChange={setFilterCategory}>
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-full sm:w-[180px]">
                     <Filter className="h-4 w-4 mr-2" />
                     <SelectValue />
                   </SelectTrigger>
@@ -275,13 +275,14 @@ const Feed = () => {
                 disabled={isRefreshing}
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-6">
+            <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
               {/* Main Feed */}
               <div className="lg:col-span-2 space-y-3">
                 {mainFeed.length === 0 ? (
