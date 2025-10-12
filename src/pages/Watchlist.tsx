@@ -215,10 +215,11 @@ const Watchlist = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0"
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 transition-colors"
                             onClick={() => removeFromWatchlist(market.id, market.dbId)}
+                            title="Remove from watchlist"
                           >
-                            <Star className="h-5 w-5 text-primary fill-primary" />
+                            <Star className="h-5 w-5 text-primary fill-primary hover:text-destructive hover:fill-destructive transition-colors" />
                           </Button>
                         </div>
                         
