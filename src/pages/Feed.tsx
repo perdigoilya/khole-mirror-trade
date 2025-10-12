@@ -59,11 +59,12 @@ const Feed = () => {
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
     
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
-    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
   const fetchTweets = async () => {
@@ -211,15 +212,20 @@ const Feed = () => {
       )
       .subscribe();
 
-    // Auto-refresh every 3 minutes - processes 5 accounts per run with 3s delays = ~15s
-    // This allows cycling through all accounts every ~15 minutes while respecting rate limits
+    // Auto-refresh every hour (since cron job runs hourly)
     const autoRefreshInterval = setInterval(() => {
-      refreshTwitterFeed(true);
-    }, 180000); // 3 minutes
+      fetchTweets();
+    }, 3600000); // 1 hour
+
+    // Update relative timestamps every minute
+    const timestampInterval = setInterval(() => {
+      setMainFeed(prev => [...prev]); // Force re-render to update timestamps
+    }, 60000); // 1 minute
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(autoRefreshInterval);
+      clearInterval(timestampInterval);
     };
   }, [filterCategory]);
 
@@ -230,7 +236,7 @@ const Feed = () => {
           <div className="max-w-7xl mx-auto">
             {/* Header with Filters */}
             <div className="mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 {/* Live Status Indicator */}
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border">
                   <div className="relative">
@@ -240,21 +246,23 @@ const Feed = () => {
                           ? 'bg-green-500 animate-pulse' 
                           : feedStatus === 'error' 
                           ? 'bg-red-500' 
-                          : 'bg-yellow-500'
+                          : 'bg-green-500'
                       }`}
                     />
-                    {feedStatus === 'live' && (
+                    {(feedStatus === 'live' || feedStatus === 'idle') && (
                       <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
                     )}
                   </div>
-                  <span className="text-xs font-medium">
-                    {feedStatus === 'live' ? 'Live' : feedStatus === 'error' ? 'Down' : 'Idle'}
-                  </span>
-                  {lastUpdate && (
-                    <span className="hidden sm:inline text-xs text-muted-foreground">
-                      · {formatTimestamp(lastUpdate.toISOString())}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1">
+                    <span className="text-xs font-medium">
+                      {feedStatus === 'live' ? 'Updating...' : feedStatus === 'error' ? 'Down' : 'Auto-updating hourly'}
                     </span>
-                  )}
+                    {lastUpdate && (
+                      <span className="hidden sm:inline text-xs text-muted-foreground">
+                        · Updated {formatTimestamp(lastUpdate.toISOString())}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 <Select value={filterCategory} onValueChange={setFilterCategory}>
@@ -278,7 +286,7 @@ const Feed = () => {
                 className="w-full sm:w-auto"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Refresh
+                Refresh Now
               </Button>
             </div>
 
@@ -288,11 +296,11 @@ const Feed = () => {
                 {mainFeed.length === 0 ? (
                   <Card className="p-8 text-center">
                     <p className="text-muted-foreground mb-4">
-                      No tweets yet. Refresh to fetch latest tweets.
+                      No tweets available. The feed auto-updates every hour, or you can refresh manually.
                     </p>
                     <Button onClick={() => refreshTwitterFeed(false)} disabled={isRefreshing}>
                       <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                      Fetch Tweets
+                      Fetch Latest Tweets
                     </Button>
                   </Card>
                 ) : (
