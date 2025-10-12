@@ -169,7 +169,7 @@ const MarketDetail = () => {
             <div className="flex items-center justify-between mb-6">
               <Button
                 variant="ghost"
-                onClick={() => navigate(-1)}
+                onClick={() => navigate('/markets')}
                 className="gap-2"
               >
                 <ArrowLeft className="h-4 w-4" />
