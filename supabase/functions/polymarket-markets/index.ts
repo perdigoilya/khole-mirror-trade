@@ -189,17 +189,20 @@ serve(async (req) => {
           })
         : [];
 
-      // For multi-outcome events, aggregate volume and liquidity across all markets
-      let totalVolume = formattedMain.volumeRaw;
-      let totalLiquidity = formattedMain.liquidityRaw;
+      // Use event-level metrics (already aggregated by Polymarket)
+      // Fall back to summing individual markets if event-level data is missing
+      let totalVolume = toNumber(event.volume || event.volume_usd) ?? 0;
+      let totalLiquidity = toNumber(event.liquidity || event.liquidity_usd) ?? 0;
       
-      if (eventMarkets.length > 1) {
-        // Sum up all market volumes and liquidities
+      // If event doesn't have aggregated data, sum from markets
+      if (totalVolume === 0 && eventMarkets.length > 0) {
         totalVolume = eventMarkets.reduce((sum: number, m: any) => {
           const vol = toNumber(m.volume_usd || m.volume) ?? 0;
           return sum + vol;
         }, 0);
-        
+      }
+      
+      if (totalLiquidity === 0 && eventMarkets.length > 0) {
         totalLiquidity = eventMarkets.reduce((sum: number, m: any) => {
           const liq = toNumber(m.liquidity || m.liquidity_usd) ?? 0;
           return sum + liq;
