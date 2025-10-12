@@ -166,19 +166,33 @@ serve(async (req) => {
       const end = market.end_date_iso || market.end_date || market.endDate;
       const cid = market.conditionId || market.condition_id;
 
-      // Extract CLOB token ids from Gamma when available
-      const clobIds: string[] = Array.isArray(market?.clobTokenIds)
-        ? market.clobTokenIds
-        : (typeof market?.clobTokenIds === 'string'
-            ? String(market.clobTokenIds)
-                .split(',')
-                .map((s: string) => s.trim())
-                .filter(Boolean)
-            : []);
-
-      const topClobId = String(
-        topToken?.token_id ?? topToken?.tokenId ?? topToken?.id ?? clobIds[0] ?? ''
-      );
+      // Extract CLOB token ids from simplified markets or fallback to Gamma
+      let topClobId = '';
+      
+      if (simp && Array.isArray(simp.tokens) && simp.tokens.length > 0) {
+        // Use simplified market data - prefer the token with highest volume
+        const bestToken = simp.tokens.reduce((max: any, token: any) => {
+          const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
+          const tokenVol = toNumber(token?.volume ?? token?.volume_24hr ?? 0) ?? 0;
+          return tokenVol > maxVol ? token : max;
+        }, simp.tokens[0]);
+        
+        topClobId = String(bestToken?.token_id ?? bestToken?.tokenId ?? bestToken?.id ?? '');
+      } else {
+        // Fallback to Gamma data
+        const clobIds: string[] = Array.isArray(market?.clobTokenIds)
+          ? market.clobTokenIds
+          : (typeof market?.clobTokenIds === 'string'
+              ? String(market.clobTokenIds)
+                  .split(',')
+                  .map((s: string) => s.trim())
+                  .filter(Boolean)
+              : []);
+        
+        topClobId = String(
+          topToken?.token_id ?? topToken?.tokenId ?? topToken?.id ?? clobIds[0] ?? ''
+        );
+      }
 
       return {
         id: cid || market.id || market.slug || crypto.randomUUID(),
@@ -196,7 +210,6 @@ serve(async (req) => {
         volumeRaw: vol,
         liquidityRaw: liq,
         clobTokenId: topClobId || undefined,
-        clobTokenIds: clobIds.length ? clobIds : undefined,
       };
     };
     // Format events - each event already contains its grouped markets
@@ -215,7 +228,15 @@ serve(async (req) => {
         ? eventMarkets.map((m: any) => {
             const mcid = m.conditionId || m.condition_id;
             const msimp = mcid ? byConditionId.get(mcid) : undefined;
-            return formatMarket(m, msimp);
+            const formatted = formatMarket(m, msimp);
+            
+            // Ensure submarket has a proper CLOB token ID
+            if (!formatted.clobTokenId && msimp && Array.isArray(msimp.tokens) && msimp.tokens.length > 0) {
+              const token = msimp.tokens[0];
+              formatted.clobTokenId = String(token?.token_id ?? token?.tokenId ?? token?.id ?? '');
+            }
+            
+            return formatted;
           })
         : [];
 

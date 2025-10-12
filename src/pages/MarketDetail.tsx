@@ -45,8 +45,9 @@ const MarketDetail = () => {
   const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
 
   useEffect(() => {
-    if (!location.state?.market) {
-      // Fetch market from API if not passed via navigation
+    const passed = (location.state as any)?.market;
+    if (!passed || !passed.clobTokenId) {
+      // Fetch full market to resolve CLOB token IDs for charts
       fetchMarket();
     }
   }, [marketId]);
