@@ -49,6 +49,16 @@ serve(async (req) => {
 
     if (!response.ok) {
       console.error("Polymarket price history API error:", response.status);
+      
+      // If 404, return empty data instead of error (market may not have price history yet)
+      if (response.status === 404) {
+        console.log("No price history available for this market");
+        return new Response(
+          JSON.stringify({ data: [], message: "No price history available" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ error: "Failed to fetch price history" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }

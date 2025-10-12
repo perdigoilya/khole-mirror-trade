@@ -246,7 +246,7 @@ const MarketDetail = () => {
                   
                   <div className="h-[400px] bg-card p-4">
                     <MarketChart 
-                      marketId={market.id} 
+                      marketId={market.isMultiOutcome && market.subMarkets?.[0]?.id ? market.subMarkets[0].id : market.id} 
                       timeRange={timeRange}
                     />
                   </div>

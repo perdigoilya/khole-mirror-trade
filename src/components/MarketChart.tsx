@@ -60,11 +60,19 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
     );
   }
 
-  if (error || data.length === 0) {
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
         <p className="text-sm text-muted-foreground">
-          {error || "No price data available"}
+          No price history available for this market yet
         </p>
       </div>
     );
