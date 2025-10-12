@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { ArrowLeft, LineChart, Star, Share2, TrendingUp, ExternalLink } from "lucide-react";
+import { ArrowLeft, LineChart, Star, Share2, TrendingUp, ExternalLink, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/contexts/TradingContext";
-import { ConnectionRequired } from "@/components/ConnectionRequired";
 import Footer from "@/components/Footer";
 import { MarketChart } from "@/components/MarketChart";
 
@@ -49,6 +48,7 @@ const MarketDetail = () => {
   const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
   const [contentTab, setContentTab] = useState<'description' | 'positions' | 'trades'>('description');
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
 
   useEffect(() => {
     const passed = (location.state as any)?.market;
@@ -99,11 +99,7 @@ const MarketDetail = () => {
       : polymarketCredentials;
       
     if (!hasCredentials) {
-      toast({
-        title: "Connection Required",
-        description: `Please connect your ${market?.provider === 'kalshi' ? 'Kalshi' : 'Polymarket'} account to trade`,
-        variant: "destructive",
-      });
+      setConnectionDialogOpen(true);
       return;
     }
     
@@ -191,20 +187,6 @@ const MarketDetail = () => {
           <h2 className="text-2xl font-bold mb-2">Market not found</h2>
           <Button onClick={() => navigate('/markets')}>Back to Markets</Button>
         </div>
-      </div>
-    );
-  }
-
-  // Check if user needs to connect their account
-  const hasCredentials = market.provider === 'kalshi' 
-    ? kalshiCredentials 
-    : polymarketCredentials;
-    
-  if (!hasCredentials) {
-    return (
-      <div className="min-h-screen bg-background pt-14">
-        <ConnectionRequired />
-        <Footer />
       </div>
     );
   }
@@ -557,6 +539,44 @@ const MarketDetail = () => {
             <div className="flex gap-2">
               <Input value={window.location.href} readOnly className="flex-1" />
               <Button onClick={handleCopyLink}>Copy</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Connection Required Dialog */}
+      <Dialog open={connectionDialogOpen} onOpenChange={setConnectionDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Trading Account</DialogTitle>
+            <DialogDescription>
+              You need to connect your trading account to place trades
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center py-6 text-center">
+            <div className="p-4 rounded-full bg-primary/10 mb-4">
+              <Key className="h-10 w-10 text-primary" />
+            </div>
+            <p className="text-muted-foreground mb-6">
+              Connect your Kalshi or Polymarket account to start trading. Your credentials are stored securely in your browser.
+            </p>
+            <div className="flex gap-2 w-full">
+              <Button
+                onClick={() => setConnectionDialogOpen(false)}
+                variant="outline"
+                className="flex-1"
+              >
+                Back
+              </Button>
+              <Button
+                onClick={() => {
+                  setConnectionDialogOpen(false);
+                  navigate('/portfolio');
+                }}
+                className="flex-1 bg-primary hover:bg-primary/90"
+              >
+                Connect Account
+              </Button>
             </div>
           </div>
         </DialogContent>
