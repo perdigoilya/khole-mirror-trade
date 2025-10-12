@@ -172,9 +172,10 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
               dataKey="timestamp" 
               tickFormatter={formatXAxis}
               stroke="hsl(var(--muted-foreground))"
-              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-              axisLine={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+              tick={false}
+              axisLine={false}
               tickLine={false}
+              height={0}
             />
             <YAxis 
               domain={[0, 100]}
@@ -189,12 +190,12 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
             <Line 
               type="monotone" 
               dataKey="price" 
-              stroke="hsl(var(--chart-orange))" 
-              strokeWidth={2.5}
+              stroke="hsl(var(--chart-green))" 
+              strokeWidth={1.5}
               dot={false}
               activeDot={{ 
-                r: 5, 
-                fill: "hsl(var(--chart-orange))",
+                r: 4, 
+                fill: "hsl(var(--chart-green))",
                 stroke: "hsl(var(--background))",
                 strokeWidth: 2
               }}

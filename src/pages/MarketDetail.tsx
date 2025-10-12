@@ -1,13 +1,16 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { ArrowLeft, LineChart, Bookmark, Share2, TrendingUp } from "lucide-react";
+import { ArrowLeft, LineChart, Star, Share2, TrendingUp, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/contexts/TradingContext";
+import { ConnectionRequired } from "@/components/ConnectionRequired";
 import Footer from "@/components/Footer";
 import { MarketChart } from "@/components/MarketChart";
 
@@ -35,14 +38,17 @@ const MarketDetail = () => {
   const { marketId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useTrading();
+  const { user, kalshiCredentials, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const [market, setMarket] = useState<Market | null>(location.state?.market || null);
   const [loading, setLoading] = useState(!location.state?.market);
   const [timeRange, setTimeRange] = useState<'1H' | '6H' | '1D' | '1W' | '1M' | 'ALL'>('ALL');
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
-  const [tradeAmount, setTradeAmount] = useState<number>(0);
+  const [selectedSubMarket, setSelectedSubMarket] = useState<Market | null>(null);
+  const [tradeAmount, setTradeAmount] = useState<string>('0');
   const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
+  const [contentTab, setContentTab] = useState<'description' | 'positions' | 'trades'>('description');
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   useEffect(() => {
     const passed = (location.state as any)?.market;
@@ -87,11 +93,40 @@ const MarketDetail = () => {
       return;
     }
     
+    // Check if connected to provider
+    const hasCredentials = market?.provider === 'kalshi' 
+      ? kalshiCredentials 
+      : polymarketCredentials;
+      
+    if (!hasCredentials) {
+      toast({
+        title: "Connection Required",
+        description: `Please connect your ${market?.provider === 'kalshi' ? 'Kalshi' : 'Polymarket'} account to trade`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     toast({
       title: "Trade Placed",
       description: `Buying ${side.toUpperCase()} on "${outcome}"`,
     });
   };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast({
+      title: "Link Copied",
+      description: "Market link copied to clipboard",
+    });
+    setShareDialogOpen(false);
+  };
+  
+  useEffect(() => {
+    if (market?.isMultiOutcome && market?.subMarkets && market.subMarkets.length > 0) {
+      setSelectedSubMarket(market.subMarkets[0]);
+    }
+  }, [market]);
 
   const handleAddToWatchlist = async () => {
     if (!user || !market) {
@@ -160,6 +195,20 @@ const MarketDetail = () => {
     );
   }
 
+  // Check if user needs to connect their account
+  const hasCredentials = market.provider === 'kalshi' 
+    ? kalshiCredentials 
+    : polymarketCredentials;
+    
+  if (!hasCredentials) {
+    return (
+      <div className="min-h-screen bg-background pt-14">
+        <ConnectionRequired />
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
       <main className="flex-1 pt-6 pb-24">
@@ -177,9 +226,9 @@ const MarketDetail = () => {
               </Button>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={handleAddToWatchlist}>
-                  <Bookmark className="h-4 w-4" />
+                  <Star className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" onClick={() => setShareDialogOpen(true)}>
                   <Share2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -206,29 +255,13 @@ const MarketDetail = () => {
                 </div>
               </div>
               
-              {/* Outcome distribution for multi-outcome markets */}
-              {market.isMultiOutcome && market.subMarkets && (
-                <div className="flex items-center gap-4 text-sm">
-                  {market.subMarkets.slice(0, 4).map((sub, idx) => (
-                    <div key={sub.id} className="flex items-center gap-2">
-                      <div 
-                        className="w-2 h-2 rounded-full" 
-                        style={{ 
-                          backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b'][idx]
-                        }}
-                      />
-                      <span>{sub.title.split(':')[0]} {sub.yesPrice}%</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            <div className="grid lg:grid-cols-[1fr,380px] gap-6">
+            <div className="grid lg:grid-cols-[1fr,380px] gap-4">
               {/* Left Column - Charts and Outcomes */}
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {/* Outcomes with Individual Charts */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   
                   {market.isMultiOutcome && market.subMarkets ? (
                     // Multi-outcome market - show each outcome with its own chart
@@ -249,7 +282,7 @@ const MarketDetail = () => {
                       return (
                       <Card key={outcome.id} className="overflow-hidden">
                         {/* Outcome Header */}
-                        <div className="p-4 border-b border-border">
+                        <div className="p-3 border-b border-border">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1">
                               {outcome.image ? (
@@ -258,7 +291,6 @@ const MarketDetail = () => {
                                   alt={outcome.title}
                                   className="w-10 h-10 rounded object-cover"
                                   onError={(e) => {
-                                    // Fallback to colored initial if image fails to load
                                     e.currentTarget.style.display = 'none';
                                     const fallback = e.currentTarget.nextElementSibling as HTMLElement;
                                     if (fallback) fallback.style.display = 'flex';
@@ -278,7 +310,7 @@ const MarketDetail = () => {
                             
                             <div className="flex items-center gap-3">
                               <div className="text-right">
-                                <div className={`text-2xl font-bold ${textColorClasses[idx % 4]}`}>
+                                <div className="text-2xl font-bold text-emerald-400">
                                   {outcome.yesPrice || 50}%
                                 </div>
                               </div>
@@ -286,9 +318,19 @@ const MarketDetail = () => {
                                 <Button 
                                   size="sm"
                                   className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                  onClick={() => handleTrade(outcome.title, 'yes')}
+                                  onClick={() => {
+                                    setSelectedSubMarket(outcome);
+                                    handleTrade(outcome.title, 'yes');
+                                  }}
                                 >
                                   Buy {outcome.yesPrice}¢
+                                </Button>
+                                <Button 
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => navigate(`/market/${outcome.id}`, { state: { market: outcome }})}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
                                 </Button>
                               </div>
                             </div>
@@ -296,10 +338,10 @@ const MarketDetail = () => {
                         </div>
                         
                         {/* Individual Chart */}
-                        <div className="p-4 border-b border-border flex items-center justify-between bg-card/30">
+                        <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
                           <div className="flex items-center gap-2">
-                            <LineChart className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">Price History</span>
+                            <LineChart className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs font-medium">Price History</span>
                           </div>
                           <div className="flex items-center gap-1">
                             {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
@@ -307,7 +349,7 @@ const MarketDetail = () => {
                                 key={range}
                                 variant={timeRange === range ? 'default' : 'ghost'}
                                 size="sm"
-                                className="h-8 px-3 text-xs font-medium"
+                                className="h-7 px-2 text-xs font-medium"
                                 onClick={() => setTimeRange(range)}
                               >
                                 {range}
@@ -315,7 +357,7 @@ const MarketDetail = () => {
                             ))}
                           </div>
                         </div>
-                        <div className="h-[300px] bg-card/50 backdrop-blur-sm p-6 rounded-b-lg">
+                        <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
                           <MarketChart 
                             marketId={outcome.clobTokenId || outcome.id} 
                             timeRange={timeRange}
@@ -328,10 +370,10 @@ const MarketDetail = () => {
                     // Binary market - show single chart and Yes/No buttons
                     <>
                       <Card className="p-0 overflow-hidden">
-                        <div className="p-4 border-b border-border flex items-center justify-between bg-card/30">
+                        <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
                           <div className="flex items-center gap-2">
-                            <LineChart className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">Price History</span>
+                            <LineChart className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs font-medium">Price History</span>
                           </div>
                           <div className="flex items-center gap-1">
                             {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
@@ -339,7 +381,7 @@ const MarketDetail = () => {
                                 key={range}
                                 variant={timeRange === range ? 'default' : 'ghost'}
                                 size="sm"
-                                className="h-8 px-3 text-xs font-medium"
+                                className="h-7 px-2 text-xs font-medium"
                                 onClick={() => setTimeRange(range)}
                               >
                                 {range}
@@ -348,7 +390,7 @@ const MarketDetail = () => {
                           </div>
                         </div>
                         
-                        <div className="h-[400px] bg-card/50 backdrop-blur-sm p-6">
+                        <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
                           <MarketChart 
                             marketId={market.clobTokenId || market.id} 
                             timeRange={timeRange}
@@ -356,11 +398,11 @@ const MarketDetail = () => {
                         </div>
                       </Card>
                       
-                      <Card className="p-6">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-3">
-                            <div className="text-sm text-muted-foreground">YES</div>
-                            <div className="text-4xl font-bold text-emerald-400">{market.yesPrice}¢</div>
+                      <Card className="p-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <div className="text-xs text-muted-foreground">YES</div>
+                            <div className="text-3xl font-bold text-emerald-400">{market.yesPrice}¢</div>
                             <Button 
                               className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                               onClick={() => handleTrade(market.title, 'yes')}
@@ -368,9 +410,9 @@ const MarketDetail = () => {
                               Buy Yes
                             </Button>
                           </div>
-                          <div className="space-y-3">
-                            <div className="text-sm text-muted-foreground">NO</div>
-                            <div className="text-4xl font-bold text-red-400">{market.noPrice}¢</div>
+                          <div className="space-y-2">
+                            <div className="text-xs text-muted-foreground">NO</div>
+                            <div className="text-3xl font-bold text-red-400">{market.noPrice}¢</div>
                             <Button 
                               className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
                               onClick={() => handleTrade(market.title, 'no')}
@@ -384,22 +426,58 @@ const MarketDetail = () => {
                   )}
                 </div>
 
-                {/* Description */}
-                <Card className="p-6">
-                  <h2 className="text-lg font-semibold mb-3">About this market</h2>
-                  <p className="text-sm text-muted-foreground">{market.description}</p>
+                {/* Content Tabs */}
+                <Card className="p-4">
+                  <Tabs value={contentTab} onValueChange={(v) => setContentTab(v as any)}>
+                    <TabsList className="w-full mb-4">
+                      <TabsTrigger value="description" className="flex-1">Description</TabsTrigger>
+                      <TabsTrigger value="positions" className="flex-1">Positions</TabsTrigger>
+                      <TabsTrigger value="trades" className="flex-1">Trades</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="description" className="mt-0">
+                      <div className="space-y-2">
+                        <h2 className="text-base font-semibold">About this market</h2>
+                        <p className="text-sm text-muted-foreground">{market.description}</p>
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="positions" className="mt-0">
+                      <div className="text-center py-8">
+                        <p className="text-sm text-muted-foreground">No positions yet</p>
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="trades" className="mt-0">
+                      <div className="text-center py-8">
+                        <p className="text-sm text-muted-foreground">No trades yet</p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </Card>
               </div>
 
-              {/* Right Column - Trading Panel & Related Markets */}
-              <div className="space-y-6">
+              {/* Right Column - Trading Panel */}
+              <div className="space-y-4">
                 {/* Trading Panel */}
-                <Card className="p-6 sticky top-20">
+                <Card className="p-4 sticky top-20">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                      <span className="font-bold text-primary">ARZ</span>
+                    {(selectedSubMarket || market).image ? (
+                      <img 
+                        src={(selectedSubMarket || market).image} 
+                        alt={(selectedSubMarket || market).title}
+                        className="w-10 h-10 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center">
+                        <span className="font-bold text-primary text-xs">
+                          {(selectedSubMarket || market).title.slice(0, 3).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-sm line-clamp-2">{(selectedSubMarket || market).title}</span>
                     </div>
-                    <span className="font-semibold">Arizona</span>
                   </div>
 
                   <Tabs value={tradeSide} onValueChange={(v) => setTradeSide(v as 'buy' | 'sell')} className="mb-4">
@@ -415,13 +493,13 @@ const MarketDetail = () => {
                         className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 h-12"
                         onClick={() => setSelectedOutcome('yes')}
                       >
-                        Yes {market.yesPrice || 50}¢
+                        Yes {(selectedSubMarket || market).yesPrice || 50}¢
                       </Button>
                       <Button 
                         className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 h-12"
                         onClick={() => setSelectedOutcome('no')}
                       >
-                        No {market.noPrice || 50}¢
+                        No {(selectedSubMarket || market).noPrice || 50}¢
                       </Button>
                     </div>
 
@@ -430,22 +508,18 @@ const MarketDetail = () => {
                         <span className="text-sm text-muted-foreground">Amount</span>
                         <span className="text-sm text-muted-foreground">Balance $3.00</span>
                       </div>
-                      <div className="text-4xl font-bold mb-3">${tradeAmount}</div>
+                      <Input 
+                        type="number"
+                        value={tradeAmount}
+                        onChange={(e) => setTradeAmount(e.target.value)}
+                        placeholder="0"
+                        className="text-2xl font-bold h-14 mb-2"
+                      />
                       <div className="flex gap-2">
-                        {[1, 20, 100].map((amount) => (
-                          <Button
-                            key={amount}
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setTradeAmount(tradeAmount + amount)}
-                          >
-                            +${amount}
-                          </Button>
-                        ))}
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setTradeAmount(3)}
+                          onClick={() => setTradeAmount('3')}
                         >
                           Max
                         </Button>
@@ -454,7 +528,7 @@ const MarketDetail = () => {
 
                     <Button 
                       className="w-full h-12 bg-primary hover:bg-primary/90"
-                      disabled={!selectedOutcome || tradeAmount === 0}
+                      disabled={!selectedOutcome || parseFloat(tradeAmount) === 0}
                     >
                       Buy {selectedOutcome === 'yes' ? 'Yes' : selectedOutcome === 'no' ? 'No' : ''}
                     </Button>
@@ -464,32 +538,30 @@ const MarketDetail = () => {
                     </p>
                   </div>
                 </Card>
-
-                {/* Related Markets (if any) */}
-                {market.subMarkets && market.subMarkets.length > 0 && (
-                  <Card className="p-6">
-                    <h3 className="font-semibold mb-4">Related Markets</h3>
-                    <div className="space-y-3">
-                      {market.subMarkets.slice(0, 5).map((related) => (
-                        <button
-                          key={related.id}
-                          className="w-full text-left p-3 rounded-lg hover:bg-muted/50 transition-colors"
-                          onClick={() => navigate(`/market/${related.id}`, { state: { market: related }})}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium line-clamp-2 flex-1">{related.title}</span>
-                            <span className="text-sm font-bold ml-2">{related.yesPrice || 50}%</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </Card>
-                )}
               </div>
             </div>
           </div>
         </div>
       </main>
+      
+      {/* Share Dialog */}
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Share Market</DialogTitle>
+            <DialogDescription>
+              Share this market with others
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Input value={window.location.href} readOnly className="flex-1" />
+              <Button onClick={handleCopyLink}>Copy</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <Footer />
     </div>
   );
