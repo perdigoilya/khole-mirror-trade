@@ -34,7 +34,9 @@ serve(async (req) => {
     // Normalize token id (handle cases like "123", ["123", "456"], or strings containing brackets)
     const normalizeTokenId = (input: any): string | null => {
       if (input === null || input === undefined) return null;
-      let s = String(input);
+      let s = String(input).trim();
+      // If it's a hex condition id like 0x..., do NOT try to extract digits
+      if (/^0x[0-9a-fA-F]+$/.test(s)) return null;
       // Already numeric
       if (/^[0-9]+$/.test(s)) return s;
       // Try JSON parsing
@@ -51,8 +53,40 @@ serve(async (req) => {
     };
 
     let tokenId = normalizeTokenId(marketId);
+    // If a condition id (0x...) was provided, resolve to a token id via simplified-markets
+    if (!tokenId && typeof marketId === 'string' && /^0x[0-9a-fA-F]+$/.test(marketId)) {
+      try {
+        const simpRes = await fetch('https://clob.polymarket.com/simplified-markets', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
+        });
+        if (simpRes.ok) {
+          const simpPayload = await simpRes.json();
+          const simpList: any[] = Array.isArray(simpPayload) ? simpPayload : (simpPayload?.data || simpPayload?.markets || []);
+          const target = String(marketId).toLowerCase();
+          const match = simpList.find((m: any) => String(m.condition_id || m.conditionId || '').toLowerCase() === target);
+          if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
+            // Pick token with highest volume if available
+            const toNumber = (v: any) => {
+              if (v === null || v === undefined) return 0;
+              const n = typeof v === 'string' ? parseFloat(v) : v;
+              return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
+            };
+            const best = match.tokens.reduce((max: any, t: any) => {
+              const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0);
+              const tVol = toNumber(t?.volume ?? t?.volume_24hr ?? 0);
+              return tVol > maxVol ? t : max;
+            }, match.tokens[0]);
+            tokenId = String(best?.token_id ?? best?.tokenId ?? best?.id ?? '');
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to resolve token id from condition id:', e);
+      }
+    }
+
     if (!tokenId) {
-      console.warn('polymarket-price-history: non-numeric id provided; expected CLOB token id. Returning empty history. id=', marketId);
+      console.warn('polymarket-price-history: could not resolve a valid token id. Returning empty history. id=', marketId);
       return new Response(
         JSON.stringify({ data: [], message: 'No price history available' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
