@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 
@@ -120,10 +120,15 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
-          <p className="text-sm font-semibold">{payload[0].value}¢</p>
+        <div className="bg-card/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-xl">
+          <p className="text-base font-bold text-foreground">{payload[0].value}¢</p>
           <p className="text-xs text-muted-foreground mt-1">
-            {new Date(payload[0].payload.timestamp).toLocaleString()}
+            {new Date(payload[0].payload.timestamp).toLocaleString('en-US', { 
+              month: 'short', 
+              day: 'numeric', 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
           </p>
         </div>
       );
@@ -131,30 +136,56 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
     return null;
   };
 
+  // Get the latest price for display
+  const latestPrice = data[data.length - 1]?.price || 0;
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+      <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+        <defs>
+          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="hsl(var(--chart-orange))" stopOpacity={0.3}/>
+            <stop offset="95%" stopColor="hsl(var(--chart-orange))" stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid 
+          strokeDasharray="0" 
+          stroke="hsl(var(--border))" 
+          opacity={0.1}
+          horizontal={true}
+          vertical={false}
+        />
         <XAxis 
           dataKey="timestamp" 
           tickFormatter={formatXAxis}
           stroke="hsl(var(--muted-foreground))"
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+          axisLine={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+          tickLine={false}
         />
         <YAxis 
           domain={[0, 100]}
           stroke="hsl(var(--muted-foreground))"
-          tick={{ fontSize: 12 }}
-          tickFormatter={(value) => `${value}¢`}
+          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+          tickFormatter={(value) => `${value}%`}
+          axisLine={false}
+          tickLine={false}
+          width={45}
         />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }} />
         <Line 
           type="monotone" 
           dataKey="price" 
-          stroke="hsl(var(--primary))" 
-          strokeWidth={2}
+          stroke="hsl(var(--chart-orange))" 
+          strokeWidth={2.5}
           dot={false}
-          activeDot={{ r: 4, fill: "hsl(var(--primary))" }}
+          activeDot={{ 
+            r: 5, 
+            fill: "hsl(var(--chart-orange))",
+            stroke: "hsl(var(--background))",
+            strokeWidth: 2
+          }}
+          isAnimationActive={false}
         />
       </LineChart>
     </ResponsiveContainer>

@@ -43,6 +43,14 @@ All colors MUST be HSL.
     --terminal-green-bright: 45 95% 59%;
     --terminal-green-dim: 45 85% 39%;
     
+    /* Chart colors for multi-outcome markets */
+    --chart-orange: 24 95% 53%;
+    --chart-blue: 217 91% 60%;
+    --chart-yellow: 45 93% 47%;
+    --chart-gray: 210 14% 66%;
+    --chart-green: 142 76% 36%;
+    --chart-red: 0 84% 60%;
+    
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(var(--terminal-green)), hsl(var(--terminal-green-bright)));
     --gradient-glow: 0 0 40px hsl(var(--terminal-green) / 0.3);

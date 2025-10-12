@@ -232,17 +232,28 @@ const MarketDetail = () => {
                   
                   {market.isMultiOutcome && market.subMarkets ? (
                     // Multi-outcome market - show each outcome with its own chart
-                    market.subMarkets.map((outcome, idx) => (
+                    market.subMarkets.map((outcome, idx) => {
+                      const colorClasses = [
+                        'bg-[hsl(var(--chart-orange))]',
+                        'bg-[hsl(var(--chart-blue))]',
+                        'bg-[hsl(var(--chart-green))]',
+                        'bg-[hsl(var(--chart-yellow))]',
+                      ];
+                      const textColorClasses = [
+                        'text-[hsl(var(--chart-orange))]',
+                        'text-[hsl(var(--chart-blue))]',
+                        'text-[hsl(var(--chart-green))]',
+                        'text-[hsl(var(--chart-yellow))]',
+                      ];
+                      
+                      return (
                       <Card key={outcome.id} className="overflow-hidden">
                         {/* Outcome Header */}
                         <div className="p-4 border-b border-border">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1">
                               <div 
-                                className="w-10 h-10 rounded flex items-center justify-center font-bold text-white text-sm"
-                                style={{ 
-                                  backgroundColor: ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b'][idx % 4]
-                                }}
+                                className={`w-10 h-10 rounded flex items-center justify-center font-bold text-background text-sm ${colorClasses[idx % 4]}`}
                               >
                                 {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
                               </div>
@@ -254,7 +265,9 @@ const MarketDetail = () => {
                             
                             <div className="flex items-center gap-3">
                               <div className="text-right">
-                                <div className="text-2xl font-bold">{outcome.yesPrice || 50}%</div>
+                                <div className={`text-2xl font-bold ${textColorClasses[idx % 4]}`}>
+                                  {outcome.yesPrice || 50}%
+                                </div>
                               </div>
                               <div className="flex gap-2">
                                 <Button 
@@ -270,7 +283,7 @@ const MarketDetail = () => {
                         </div>
                         
                         {/* Individual Chart */}
-                        <div className="p-4 border-b border-border flex items-center justify-between bg-muted/20">
+                        <div className="p-4 border-b border-border flex items-center justify-between bg-card/30">
                           <div className="flex items-center gap-2">
                             <LineChart className="h-4 w-4 text-muted-foreground" />
                             <span className="text-sm font-medium">Price History</span>
@@ -279,9 +292,9 @@ const MarketDetail = () => {
                             {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
                               <Button
                                 key={range}
-                                variant={timeRange === range ? 'secondary' : 'ghost'}
+                                variant={timeRange === range ? 'default' : 'ghost'}
                                 size="sm"
-                                className="h-7 px-2 text-xs"
+                                className="h-8 px-3 text-xs font-medium"
                                 onClick={() => setTimeRange(range)}
                               >
                                 {range}
@@ -289,30 +302,31 @@ const MarketDetail = () => {
                             ))}
                           </div>
                         </div>
-                        <div className="h-[300px] bg-card p-4">
+                        <div className="h-[300px] bg-card/50 backdrop-blur-sm p-6 rounded-b-lg">
                           <MarketChart 
                             marketId={outcome.clobTokenId || outcome.id} 
                             timeRange={timeRange}
                           />
                         </div>
                       </Card>
-                    ))
+                      );
+                    })
                   ) : (
                     // Binary market - show single chart and Yes/No buttons
                     <>
                       <Card className="p-0 overflow-hidden">
-                        <div className="p-4 border-b border-border flex items-center justify-between">
+                        <div className="p-4 border-b border-border flex items-center justify-between bg-card/30">
                           <div className="flex items-center gap-2">
                             <LineChart className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold">Polymarket</span>
+                            <span className="font-medium">Price History</span>
                           </div>
                           <div className="flex items-center gap-1">
                             {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
                               <Button
                                 key={range}
-                                variant={timeRange === range ? 'secondary' : 'ghost'}
+                                variant={timeRange === range ? 'default' : 'ghost'}
                                 size="sm"
-                                className="h-7 px-2 text-xs"
+                                className="h-8 px-3 text-xs font-medium"
                                 onClick={() => setTimeRange(range)}
                               >
                                 {range}
@@ -321,7 +335,7 @@ const MarketDetail = () => {
                           </div>
                         </div>
                         
-                        <div className="h-[400px] bg-card p-4">
+                        <div className="h-[400px] bg-card/50 backdrop-blur-sm p-6">
                           <MarketChart 
                             marketId={market.clobTokenId || market.id} 
                             timeRange={timeRange}
