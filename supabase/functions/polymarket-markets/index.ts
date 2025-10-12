@@ -189,11 +189,46 @@ serve(async (req) => {
           })
         : [];
 
+      // For multi-outcome events, aggregate volume and liquidity across all markets
+      let totalVolume = formattedMain.volumeRaw;
+      let totalLiquidity = formattedMain.liquidityRaw;
+      
+      if (eventMarkets.length > 1) {
+        // Sum up all market volumes and liquidities
+        totalVolume = eventMarkets.reduce((sum: number, m: any) => {
+          const vol = toNumber(m.volume_usd || m.volume) ?? 0;
+          return sum + vol;
+        }, 0);
+        
+        totalLiquidity = eventMarkets.reduce((sum: number, m: any) => {
+          const liq = toNumber(m.liquidity || m.liquidity_usd) ?? 0;
+          return sum + liq;
+        }, 0);
+      }
+
+      // Format aggregated metrics
+      const volumeFormatted = totalVolume > 1_000_000 
+        ? `$${(totalVolume / 1_000_000).toFixed(1)}M` 
+        : totalVolume > 1_000 
+        ? `$${(totalVolume / 1_000).toFixed(0)}K` 
+        : `$${totalVolume.toFixed(0)}`;
+      
+      const liquidityFormatted = totalLiquidity > 1_000 
+        ? `$${(totalLiquidity / 1_000).toFixed(0)}K` 
+        : `$${totalLiquidity.toFixed(0)}`;
+
       return {
         ...formattedMain,
         title: event.title || formattedMain.title, // Use event title
         description: event.description || formattedMain.description,
         image: event.image || event.icon || formattedMain.image,
+        volume: volumeFormatted,
+        liquidity: liquidityFormatted,
+        volumeRaw: totalVolume,
+        liquidityRaw: totalLiquidity,
+        // For multi-outcome events, set prices to undefined to indicate multiple outcomes
+        yesPrice: eventMarkets.length > 1 ? undefined : formattedMain.yesPrice,
+        noPrice: eventMarkets.length > 1 ? undefined : formattedMain.noPrice,
         subMarkets,
         isMultiOutcome: eventMarkets.length > 1,
       };

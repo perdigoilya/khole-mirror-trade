@@ -345,31 +345,48 @@ const Markets = () => {
 
         {/* Prices with Bar */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-emerald-400 font-medium">{yesLabel}</span>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-red-400 font-medium">{noLabel}</span>
-          </div>
-          <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
-            <div 
-              className="bg-gradient-to-r from-emerald-500 to-emerald-400"
-              style={{ width: `${typeof y === 'number' ? y : 0}%` }}
-            />
-            <div 
-              className="bg-gradient-to-r from-red-400 to-red-500"
-              style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
-            />
-          </div>
+          {market.isMultiOutcome ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground/50 text-xs">Multiple outcomes</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-emerald-400 font-medium">{yesLabel}</span>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-red-400 font-medium">{noLabel}</span>
+              </div>
+              <div className="h-1.5 bg-card rounded-full overflow-hidden flex">
+                <div 
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-400"
+                  style={{ width: `${typeof y === 'number' ? y : 0}%` }}
+                />
+                <div 
+                  className="bg-gradient-to-r from-red-400 to-red-500"
+                  style={{ width: `${typeof n === 'number' ? n : (typeof y === 'number' ? 100 - y : 0)}%` }}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Outcome Badge */}
         <div className="flex items-center">
-          <Badge 
-            variant="outline" 
-            className={`${outcome.color} border text-xs px-3 py-1`}
-          >
-            {outcome.label}
-          </Badge>
+          {market.isMultiOutcome ? (
+            <Badge 
+              variant="outline" 
+              className="bg-muted/20 text-muted-foreground border-muted/30 text-xs px-3 py-1"
+            >
+              {market.subMarkets?.length || 0} outcomes
+            </Badge>
+          ) : (
+            <Badge 
+              variant="outline" 
+              className={`${outcome.color} border text-xs px-3 py-1`}
+            >
+              {outcome.label}
+            </Badge>
+          )}
         </div>
 
         {/* Volume */}
