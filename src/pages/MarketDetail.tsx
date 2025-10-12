@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/contexts/TradingContext";
 import Footer from "@/components/Footer";
+import { MarketChart } from "@/components/MarketChart";
 
 interface Market {
   id: string;
@@ -243,11 +244,11 @@ const MarketDetail = () => {
                     </div>
                   </div>
                   
-                  <div className="h-[400px] bg-card flex items-center justify-center border-b border-border">
-                    <div className="text-center">
-                      <LineChart className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">Price chart integration pending</p>
-                    </div>
+                  <div className="h-[400px] bg-card p-4">
+                    <MarketChart 
+                      marketId={market.id} 
+                      timeRange={timeRange}
+                    />
                   </div>
                 </Card>
 
