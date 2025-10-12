@@ -111,12 +111,34 @@ serve(async (req) => {
     // If a specific marketId (conditionId) is provided, filter to only the event containing that market
     if (marketId) {
       const target = String(marketId).toLowerCase();
+      const tokenIdCandidate = (() => {
+        let s = target;
+        if (/^[0-9]+$/.test(s)) return s;
+        try {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed) && parsed.length) s = String(parsed[0]);
+          else if (typeof parsed === 'string') s = parsed;
+        } catch (_) {}
+        if (/^[0-9]+$/.test(s)) return s;
+        const match = s.match(/\d{6,}/);
+        return match ? match[0] : undefined;
+      })();
       events = events.filter((ev: any) => {
         const ms = Array.isArray(ev?.markets) ? ev.markets : [];
         return ms.some((m: any) => {
           const cid = String(m?.conditionId || m?.condition_id || '').toLowerCase();
           const mid = String(m?.id || '').toLowerCase();
-          return cid === target || mid === target;
+          if (cid === target || mid === target) return true;
+          // Also try to match by CLOB token id if present on the Gamma payload
+          if (tokenIdCandidate) {
+            const clobIds: string[] = Array.isArray(m?.clobTokenIds)
+              ? m.clobTokenIds.map((x: any) => String(x))
+              : (typeof m?.clobTokenIds === 'string'
+                  ? String(m.clobTokenIds).split(',').map((s: string) => s.trim())
+                  : []);
+            if (clobIds.includes(String(tokenIdCandidate))) return true;
+          }
+          return false;
         });
       });
     }
@@ -389,6 +411,18 @@ serve(async (req) => {
           String(m.condition_id || m.conditionId || '').toLowerCase() === tLower
         );
       }
+      // If still not found, try matching by CLOB token id extracted from the provided id
+      let tokenIdCandidate: string | undefined;
+      if (!simp) {
+        tokenIdCandidate = normalizeTokenId(target);
+        if (tokenIdCandidate) {
+          simp = simplified.find((m: any) =>
+            Array.isArray(m.tokens) && m.tokens.some((t: any) =>
+              String(t.token_id ?? t.tokenId ?? t.id ?? '') === String(tokenIdCandidate)
+            )
+          );
+        }
+      }
       if (simp) {
         const fakeMarket = {
           conditionId: String(marketId),
@@ -402,7 +436,11 @@ serve(async (req) => {
           closed: false,
           is_resolved: false,
         };
-        const formattedOne = formatMarket(fakeMarket, simp);
+        const formattedOne: any = formatMarket(fakeMarket, simp);
+        // Ensure the clobTokenId matches the requested token when applicable
+        if (tokenIdCandidate && String(formattedOne.clobTokenId || '') !== String(tokenIdCandidate)) {
+          formattedOne.clobTokenId = String(tokenIdCandidate);
+        }
         const eventLike = {
           ...formattedOne,
           subMarkets: [],
