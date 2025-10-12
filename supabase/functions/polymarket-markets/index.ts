@@ -185,6 +185,46 @@ serve(async (req) => {
       if (cid) byConditionId.set(cid, m);
     }
 
+    // If a specific marketId is requested but its simplified market is not in the first page,
+    // paginate simplified-markets to find it so that we can price it accurately.
+    if (marketId) {
+      const targetLower = String(marketId).toLowerCase();
+      const hasTarget = Array.from(byConditionId.keys()).some(k => String(k).toLowerCase() === targetLower);
+      if (!hasTarget) {
+        try {
+          let nextCursor = '';
+          let page = 0;
+          const MAX_PAGES = 30;
+          while (page < MAX_PAGES) {
+            const url = `https://clob.polymarket.com/simplified-markets${nextCursor ? `?next_cursor=${encodeURIComponent(nextCursor)}` : ''}`;
+            const simpRes2 = await fetch(url, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
+            });
+            if (!simpRes2.ok) break;
+            const simpPayload2 = await simpRes2.json();
+            const simpList2: any[] = Array.isArray(simpPayload2)
+              ? simpPayload2
+              : (simpPayload2?.data || simpPayload2?.markets || []);
+
+            const match = simpList2.find((m: any) => String(m.condition_id || m.conditionId || '').toLowerCase() === targetLower);
+            if (match) {
+              const cid = match.condition_id || match.conditionId;
+              if (cid) byConditionId.set(cid, match);
+              console.log('Resolved simplified market via pagination for target condition id');
+              break;
+            }
+
+            nextCursor = (simpPayload2?.next_cursor ?? simpPayload2?.nextCursor ?? '') as string;
+            if (!nextCursor || nextCursor === 'LTE=' || nextCursor === '-1') break;
+            page += 1;
+          }
+        } catch (e) {
+          console.warn('Failed paginated lookup for simplified market:', e);
+        }
+      }
+    }
+
     const toNumber = (v: any): number | undefined => {
       if (v === null || v === undefined) return undefined;
       const n = typeof v === 'string' ? parseFloat(v) : v;
