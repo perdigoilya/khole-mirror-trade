@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Footer from "@/components/Footer";
 import { Star, TrendingUp, TrendingDown, ShoppingCart, DollarSign, LineChart, Filter } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -13,54 +13,94 @@ import {
 } from "@/components/ui/select";
 import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const Watchlist = () => {
   const { user } = useTrading();
   const { toast } = useToast();
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [watchedMarkets, setWatchedMarkets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const [watchedMarkets, setWatchedMarkets] = useState([
-    {
-      id: 1,
-      title: "Will S&P 500 reach 6000 by June 2025?",
-      yesPrice: 58,
-      noPrice: 42,
-      change: 3.2,
-      volume: "$2.1M",
-      liquidity: "$450K",
-      endDate: "Jun 30, 2025",
-      category: "Finance",
-      provider: "polymarket",
-      trend: "up",
-    },
-    {
-      id: 2,
-      title: "Will inflation fall below 2% in 2025?",
-      yesPrice: 41,
-      noPrice: 59,
-      change: -1.8,
-      volume: "$1.8M",
-      liquidity: "$320K",
-      endDate: "Dec 31, 2025",
-      category: "Economics",
-      provider: "polymarket",
-      trend: "down",
-    },
-    {
-      id: 3,
-      title: "Will Tesla stock hit $400 by Q2 2025?",
-      yesPrice: 34,
-      noPrice: 66,
-      change: 12.4,
-      volume: "$3.2M",
-      liquidity: "$580K",
-      endDate: "Jun 30, 2025",
-      category: "Stocks",
-      provider: "kalshi",
-      trend: "up",
-    },
-  ]);
+  // Fetch watchlist from database
+  useEffect(() => {
+    if (user) {
+      fetchWatchlist();
+      
+      // Set up realtime subscription
+      const channel = supabase
+        .channel('watchlist_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'watchlist',
+            filter: `user_id=eq.${user.id}`
+          },
+          () => {
+            fetchWatchlist();
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } else {
+      setWatchedMarkets([]);
+      setLoading(false);
+    }
+  }, [user]);
+
+  const fetchWatchlist = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('watchlist')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setWatchedMarkets(data.map(item => {
+          const marketData = item.market_data as any || {};
+          return {
+            id: item.market_id || item.market_ticker,
+            dbId: item.id,
+            title: marketData.title || item.market_title,
+            yesPrice: marketData.yesPrice || 50,
+            noPrice: marketData.noPrice || 50,
+            volume: marketData.volume || '$0',
+            liquidity: marketData.liquidity || '$0',
+            endDate: marketData.endDate || 'TBD',
+            category: marketData.category || 'Other',
+            provider: marketData.provider || 'polymarket',
+            trend: marketData.trend || 'up',
+            change: marketData.change || 0,
+            image: marketData.image,
+            description: marketData.description,
+            volumeRaw: marketData.volumeRaw || 0,
+            liquidityRaw: marketData.liquidityRaw || 0
+          };
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching watchlist:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load watchlist",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBuy = (market: any, side: 'yes' | 'no') => {
     if (!user) {
@@ -77,12 +117,29 @@ const Watchlist = () => {
     });
   };
 
-  const removeFromWatchlist = (marketId: number) => {
-    setWatchedMarkets(prev => prev.filter(market => market.id !== marketId));
-    toast({
-      title: "Removed from Watchlist",
-      description: "Market removed from your watchlist",
-    });
+  const removeFromWatchlist = async (marketId: string, dbId: string) => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('watchlist')
+        .delete()
+        .eq('id', dbId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Removed from Watchlist",
+        description: "Market removed from your watchlist",
+      });
+    } catch (error) {
+      console.error('Error removing from watchlist:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove from watchlist",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -127,7 +184,11 @@ const Watchlist = () => {
               </div>
             </div>
 
-            {watchedMarkets.length > 0 ? (
+            {loading ? (
+              <Card className="p-12 text-center">
+                <p className="text-muted-foreground">Loading watchlist...</p>
+              </Card>
+            ) : watchedMarkets.length > 0 ? (
               <div className="space-y-4">
                 {watchedMarkets.map((market) => (
                   <Card
@@ -155,7 +216,7 @@ const Watchlist = () => {
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 p-0"
-                            onClick={() => removeFromWatchlist(market.id)}
+                            onClick={() => removeFromWatchlist(market.id, market.dbId)}
                           >
                             <Star className="h-5 w-5 text-primary fill-primary" />
                           </Button>

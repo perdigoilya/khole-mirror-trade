@@ -323,7 +323,7 @@ const Markets = () => {
               variant="ghost" 
               size="sm" 
               className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
                 if (!user) {
                   toast({
@@ -332,10 +332,55 @@ const Markets = () => {
                     action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
                   });
                 } else {
-                  toast({
-                    title: "Added to Watchlist",
-                    description: `${market.title} has been added to your watchlist`,
-                  });
+                  try {
+                    const { error } = await supabase
+                      .from('watchlist')
+                      .insert([{
+                        user_id: user.id,
+                        market_id: market.id,
+                        market_ticker: market.id,
+                        market_title: market.title,
+                        market_data: {
+                          title: market.title,
+                          yesPrice: market.yesPrice,
+                          noPrice: market.noPrice,
+                          volume: market.volume,
+                          liquidity: market.liquidity,
+                          endDate: market.endDate,
+                          category: market.category,
+                          provider: market.provider,
+                          image: market.image,
+                          description: market.description,
+                          volumeRaw: market.volumeRaw,
+                          liquidityRaw: market.liquidityRaw,
+                          trend: market.yesPrice >= 50 ? 'up' : 'down',
+                          change: Math.random() * 20 - 5
+                        }
+                      }]);
+
+                    if (error) {
+                      if (error.code === '23505') { // Unique constraint violation
+                        toast({
+                          title: "Already in Watchlist",
+                          description: `${market.title} is already in your watchlist`,
+                        });
+                      } else {
+                        throw error;
+                      }
+                    } else {
+                      toast({
+                        title: "Added to Watchlist",
+                        description: `${market.title} has been added to your watchlist`,
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error adding to watchlist:', error);
+                    toast({
+                      title: "Error",
+                      description: "Failed to add to watchlist",
+                      variant: "destructive",
+                    });
+                  }
                 }
               }}
             >

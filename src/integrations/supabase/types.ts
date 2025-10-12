@@ -173,6 +173,8 @@ export type Database = {
         Row: {
           added_at: string | null
           id: string
+          market_data: Json | null
+          market_id: string | null
           market_ticker: string
           market_title: string
           user_id: string
@@ -180,6 +182,8 @@ export type Database = {
         Insert: {
           added_at?: string | null
           id?: string
+          market_data?: Json | null
+          market_id?: string | null
           market_ticker: string
           market_title: string
           user_id: string
@@ -187,6 +191,8 @@ export type Database = {
         Update: {
           added_at?: string | null
           id?: string
+          market_data?: Json | null
+          market_id?: string | null
           market_ticker?: string
           market_title?: string
           user_id?: string
