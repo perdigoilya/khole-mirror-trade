@@ -1,16 +1,20 @@
 import { useState, useEffect } from "react";
 import Footer from "@/components/Footer";
-import { Wallet, TrendingUp, BarChart3, DollarSign } from "lucide-react";
+import { Wallet, TrendingUp, BarChart3, DollarSign, Key } from "lucide-react";
 import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
+import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
 
 const Portfolio = () => {
   const { user, isKalshiConnected, isPolymarketConnected } = useTrading();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'history'>('overview');
+  const [showKalshiDialog, setShowKalshiDialog] = useState(false);
+  const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
 
@@ -41,21 +45,38 @@ const Portfolio = () => {
             ) : !hasAnyConnection ? (
               // Logged in but no connections
               <div className="space-y-6">
-                <Card className="p-12 text-center">
-                  <Wallet className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <h2 className="text-2xl font-semibold mb-2">
-                    Connect your trading accounts
-                  </h2>
-                  <p className="text-muted-foreground mb-6">
-                    Link your Kalshi or Polymarket accounts to view your portfolio
-                  </p>
-                  <div className="flex gap-3 justify-center">
-                    <Button variant="outline">
-                      Connect Kalshi
-                    </Button>
-                    <Button variant="outline">
-                      Connect Polymarket
-                    </Button>
+                <Card className="p-8 text-center border-2 border-primary/20">
+                  <div className="max-w-2xl mx-auto">
+                    <div className="p-4 rounded-full bg-primary/10 w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+                      <Key className="h-10 w-10 text-primary" />
+                    </div>
+                    <h2 className="text-3xl font-bold mb-3">
+                      Connect Your Trading Accounts
+                    </h2>
+                    <p className="text-muted-foreground mb-8 text-lg">
+                      Link your Kalshi or Polymarket accounts to start viewing your portfolio and placing trades
+                    </p>
+                    <div className="flex gap-4 justify-center flex-col sm:flex-row max-w-lg mx-auto">
+                      <Button 
+                        size="lg"
+                        className="h-16 text-lg font-semibold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 flex-1"
+                        onClick={() => setShowKalshiDialog(true)}
+                      >
+                        <Key className="h-5 w-5 mr-2" />
+                        Connect Kalshi
+                      </Button>
+                      <Button 
+                        size="lg"
+                        className="h-16 text-lg font-semibold bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white border-0 flex-1"
+                        onClick={() => setShowPolymarketDialog(true)}
+                      >
+                        <Key className="h-5 w-5 mr-2" />
+                        Connect Polymarket
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-6">
+                      Your credentials are stored securely in your browser and never shared
+                    </p>
                   </div>
                 </Card>
 
@@ -151,6 +172,10 @@ const Portfolio = () => {
           </div>
         </div>
       </main>
+
+      {/* Connection Dialogs */}
+      <ConnectKalshiDialog open={showKalshiDialog} onOpenChange={setShowKalshiDialog} />
+      <ConnectPolymarketDialog open={showPolymarketDialog} onOpenChange={setShowPolymarketDialog} />
 
       <Footer />
     </div>
