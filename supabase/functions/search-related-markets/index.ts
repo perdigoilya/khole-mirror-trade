@@ -29,7 +29,7 @@ serve(async (req) => {
     let markets = [];
 
     if (provider === 'polymarket') {
-      markets = await searchPolymarketPublic(keywords);
+      markets = await searchPolymarketEvents(keywords);
     } else if (provider === 'kalshi') {
       // TODO: Implement Kalshi search
       markets = [];
@@ -73,13 +73,12 @@ function extractKeywords(text: string): string[] {
   return [...new Set(words)].slice(0, 5);
 }
 
-async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
+async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
   try {
-    // Use Polymarket's Gamma API (events endpoint) with search
-    const searchQuery = keywords.join(' ');
-    console.log("Searching Polymarket with query:", searchQuery);
+    console.log("Searching Polymarket events with keywords:", keywords);
     
-    const response = await fetch(`https://gamma-api.polymarket.com/events?closed=false&limit=50`, {
+    // Fetch events from Gamma API
+    const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=100", {
       method: "GET",
       headers: {
         "Accept": "application/json",
@@ -87,15 +86,16 @@ async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
       },
     });
 
-    if (!response.ok) {
-      console.error("Polymarket API error:", response.status);
+    if (!eventsResponse.ok) {
+      console.error("Polymarket Events API error:", eventsResponse.status);
       return [];
     }
 
-    const events = await response.json();
-    console.log(`Fetched ${Array.isArray(events) ? events.length : 0} events from Polymarket`);
-    
-    // Also fetch simplified markets for pricing data
+    const eventsData = await eventsResponse.json();
+    const events = Array.isArray(eventsData) ? eventsData : [];
+    console.log(`Fetched ${events.length} events from Polymarket`);
+
+    // Fetch simplified markets for pricing
     const simplifiedRes = await fetch("https://clob.polymarket.com/simplified-markets", {
       method: "GET",
       headers: {
@@ -104,22 +104,25 @@ async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
       },
     });
     
-    const simplified = simplifiedRes.ok ? await simplifiedRes.json() : [];
+    const simplifiedData = simplifiedRes.ok ? await simplifiedRes.json() : [];
+    const simplified = Array.isArray(simplifiedData) ? simplifiedData : [];
+    console.log(`Fetched ${simplified.length} simplified markets`);
+    
     const byConditionId = new Map();
     for (const m of simplified) {
       const cid = m.condition_id || m.conditionId;
       if (cid) byConditionId.set(cid, m);
     }
 
-    // Filter events/markets based on keywords
+    // Filter and format events based on keywords
     const relevantMarkets: any[] = [];
     
     for (const event of events) {
-      const eventText = `${event.title} ${event.description}`.toLowerCase();
-      const hasMatch = keywords.some(keyword => eventText.includes(keyword));
+      const eventText = `${event.title || ''} ${event.description || ''}`.toLowerCase();
+      const hasMatch = keywords.some(keyword => eventText.includes(keyword.toLowerCase()));
       
       if (hasMatch) {
-        const markets = event.markets || [];
+        const markets = Array.isArray(event.markets) ? event.markets : [];
         const mainMarket = markets[0];
         
         if (mainMarket) {
@@ -136,7 +139,9 @@ async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
             const bid = token.best_bid ?? token.bbo?.BUY ?? token.prices?.BUY;
             const ask = token.best_ask ?? token.bbo?.SELL ?? token.prices?.SELL;
             if (bid !== undefined && ask !== undefined) {
-              const mid = (parseFloat(bid) + parseFloat(ask)) / 2;
+              const bidNum = typeof bid === 'string' ? parseFloat(bid) : bid;
+              const askNum = typeof ask === 'string' ? parseFloat(ask) : ask;
+              const mid = (bidNum + askNum) / 2;
               yesPrice = Math.round(mid <= 1 ? mid * 100 : mid);
               noPrice = 100 - yesPrice;
             }
@@ -145,8 +150,8 @@ async function searchPolymarketPublic(keywords: string[]): Promise<any[]> {
           const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
           
           relevantMarkets.push({
-            id: cid || event.id || mainMarket.id,
-            title: event.title || mainMarket.question || mainMarket.title,
+            id: cid || event.id || mainMarket.id || crypto.randomUUID(),
+            title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
             description: event.description || mainMarket.description || '',
             yesPrice,
             noPrice,
