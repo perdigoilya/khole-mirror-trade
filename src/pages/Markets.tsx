@@ -135,23 +135,23 @@ const Markets = () => {
   const filteredAndSortedMarkets = React.useMemo(() => {
     let result = [...markets];
     
-    // Time filter
+    // Time filter - filter by when markets will end
     if (timeFilter !== 'all-time') {
       const now = new Date();
-      const filterDate = new Date();
+      let maxEndDate = new Date();
       
       if (timeFilter === 'today') {
-        filterDate.setHours(0, 0, 0, 0);
+        maxEndDate.setHours(23, 59, 59, 999);
       } else if (timeFilter === 'this-week') {
-        filterDate.setDate(now.getDate() - 7);
+        maxEndDate.setDate(now.getDate() + 7);
       } else if (timeFilter === 'this-month') {
-        filterDate.setMonth(now.getMonth() - 1);
+        maxEndDate.setDate(now.getDate() + 30);
       }
       
       result = result.filter((market: any) => {
         if (!market.endDate || market.endDate === 'TBD') return true;
         const endDate = new Date(market.endDate);
-        return endDate >= filterDate;
+        return endDate >= now && endDate <= maxEndDate;
       });
     }
     
@@ -188,8 +188,12 @@ const Markets = () => {
     }
     
     // Apply sorting
-    if (sortBy === 'trending' || sortBy === 'top') {
+    if (sortBy === 'trending') {
+      // Trending: sort by 24hr volume (recent activity)
       result.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
+    } else if (sortBy === 'top') {
+      // Top: sort by liquidity (market depth/total size)
+      result.sort((a: any, b: any) => (b.liquidityRaw || 0) - (a.liquidityRaw || 0));
     } else if (sortBy === 'new') {
       result.reverse();
     }
@@ -408,7 +412,14 @@ const Markets = () => {
 
         {/* End Date */}
         <div className="flex items-center">
-          <span className="text-sm text-muted-foreground">{market.endDate}</span>
+          <span className="text-sm text-muted-foreground">
+            {(() => {
+              if (!market.endDate || market.endDate === 'TBD') return 'TBD';
+              const endDate = new Date(market.endDate);
+              const now = new Date();
+              return endDate < now ? 'Ended' : market.endDate;
+            })()}
+          </span>
         </div>
       </div>
     );
