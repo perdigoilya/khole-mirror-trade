@@ -27,8 +27,76 @@ serve(async (req) => {
     console.log("Polymarket API response status:", response.status);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Polymarket API error:", response.status, errorText?.slice(0, 500));
+      const errorText = await response.text().catch(() => undefined);
+      console.error("Polymarket API error:", response.status, errorText?.slice?.(0, 500));
+
+      // Fallback: if a specific marketId was requested, try to serve minimal data
+      // using the CLOB simplified markets so the page can still load.
+      if (marketId) {
+        try {
+          const simpRes = await fetch("https://clob.polymarket.com/simplified-markets", {
+            method: "GET",
+            headers: { "Accept": "application/json", "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)" },
+          });
+          if (simpRes.ok) {
+            const simpPayload = await simpRes.json();
+            const simpList: any[] = Array.isArray(simpPayload)
+              ? simpPayload
+              : (simpPayload?.data || simpPayload?.markets || []);
+
+            const cidLower = String(marketId).toLowerCase();
+            const simp = simpList.find((m: any) => String(m.condition_id || m.conditionId || '').toLowerCase() === cidLower);
+
+            if (simp) {
+              const tokens: any[] = Array.isArray(simp.tokens) ? simp.tokens : [];
+              // Pick a token (highest volume if possible)
+              const toNumber = (v: any) => {
+                if (v === null || v === undefined) return undefined;
+                const n = typeof v === 'string' ? parseFloat(v) : v;
+                return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+              };
+              const pick = tokens.reduce((max: any, t: any) => {
+                const maxVol = toNumber(max?.volume ?? max?.volume_24hr ?? 0) ?? 0;
+                const tVol = toNumber(t?.volume ?? t?.volume_24hr ?? 0) ?? 0;
+                return tVol > maxVol ? t : max;
+              }, tokens[0]);
+              const bid = toNumber(pick?.best_bid ?? pick?.bbo?.BUY ?? pick?.prices?.BUY ?? pick?.buy);
+              const ask = toNumber(pick?.best_ask ?? pick?.bbo?.SELL ?? pick?.prices?.SELL ?? pick?.sell);
+              let yes = 50;
+              if (bid !== undefined && ask !== undefined) {
+                const mid = (bid + ask) / 2;
+                yes = Math.round(mid <= 1 ? mid * 100 : mid);
+              }
+
+              const minimal = {
+                id: String(marketId),
+                title: simp.title || simp.question || 'Market',
+                description: simp.description || '',
+                image: simp.image || '',
+                yesPrice: yes,
+                noPrice: 100 - yes,
+                volume: '$0',
+                liquidity: '$0',
+                endDate: 'TBD',
+                status: 'Active',
+                category: simp.category || 'Other',
+                provider: 'polymarket',
+                volumeRaw: 0,
+                liquidityRaw: 0,
+                clobTokenId: String(pick?.token_id ?? pick?.tokenId ?? pick?.id ?? ''),
+              };
+
+              return new Response(
+                JSON.stringify({ markets: [minimal] }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+          }
+        } catch (e) {
+          console.warn('Fallback via simplified-markets failed:', e);
+        }
+      }
+
       return new Response(
         JSON.stringify({ error: "Failed to fetch markets from Polymarket", details: errorText }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
