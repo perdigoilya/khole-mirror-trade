@@ -13,10 +13,10 @@ serve(async (req) => {
   try {
     const { searchTerm, offset = 0 } = await req.json().catch(() => ({}));
 
-    console.log("Fetching Polymarket markets...", searchTerm ? `Searching for: ${searchTerm}` : "", `Offset: ${offset}`);
+    console.log("Fetching Polymarket events...", searchTerm ? `Searching for: ${searchTerm}` : "", `Offset: ${offset}`);
 
-    // Fetch active markets from Polymarket Gamma API - sorted by volume for trending markets
-    const response = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=${offset}&order=volume24hr&ascending=false`, {
+    // Fetch active events from Polymarket Gamma API - events contain grouped markets
+    const response = await fetch(`https://gamma-api.polymarket.com/events?closed=false&limit=100&offset=${offset}&order=volume24hr&ascending=false`, {
       method: "GET",
       headers: {
         "Accept": "application/json",
@@ -36,18 +36,18 @@ serve(async (req) => {
     }
 
     const payload = await response.json();
-    let markets: any[] = Array.isArray(payload)
+    let events: any[] = Array.isArray(payload)
       ? payload
-      : (payload?.markets || payload?.data || []);
-    console.log("Fetched markets count:", Array.isArray(markets) ? markets.length : 0);
-    console.log("Sample market data:", JSON.stringify(markets[0], null, 2).slice(0, 1000));
+      : (payload?.events || payload?.data || []);
+    console.log("Fetched events count:", Array.isArray(events) ? events.length : 0);
+    console.log("Sample event data:", JSON.stringify(events[0], null, 2).slice(0, 1000));
 
     // Filter by search term if provided
     if (searchTerm && searchTerm.trim()) {
       const searchLower = searchTerm.toLowerCase().trim();
-      markets = markets.filter((market: any) => {
-        const titleMatch = market.question?.toLowerCase().includes(searchLower);
-        const descMatch = market.description?.toLowerCase().includes(searchLower);
+      events = events.filter((event: any) => {
+        const titleMatch = event.title?.toLowerCase().includes(searchLower);
+        const descMatch = event.description?.toLowerCase().includes(searchLower);
         return titleMatch || descMatch;
       });
     }
@@ -89,42 +89,6 @@ serve(async (req) => {
       return n <= 1 ? Math.round(n * 100) : Math.round(n);
     };
 
-    // Group markets using provider grouping metadata (collection/event) with robust fallbacks
-    const marketGroups = new Map<string, any[]>();
-    const groupTitles = new Map<string, string>();
-
-    const extractTopic = (title: string): string | undefined => {
-      if (!title) return undefined;
-      const m = title.match(/win\s+(?:the\s+)?(.+?)\?/i);
-      if (m) return m[1].trim();
-      const sb = title.match(/(Super\s+Bowl\s+\d{4})/i);
-      if (sb) return sb[1].trim();
-      const ws = title.match(/(World\s+Series\s+\d{4})/i);
-      if (ws) return ws[1].trim();
-      return undefined;
-    };
-
-    const getGroupKey = (m: any): { key: string; title?: string } => {
-      const cid = m.conditionId || m.condition_id;
-      const simp = cid ? byConditionId.get(cid) : undefined;
-      const fromMarket = m.groupItemTitle || m.groupTitle || m.group || m.collection_title || m.collectionTitle || m.collection || m.eventName || m.event_title || m.event || m.series || m.topic_group || m.parentMarketSlug || m.parent_market_slug;
-      const fromSimp = simp?.collection_title || simp?.collectionTitle || simp?.event_name || simp?.eventTitle || simp?.group_title;
-      const topic = extractTopic(m.question || m.title || '');
-      const keyRaw = (fromMarket || fromSimp || topic || cid || m.id || m.slug || crypto.randomUUID()).toString();
-      const title = (fromMarket || fromSimp || topic) as string | undefined;
-      return { key: keyRaw.toLowerCase(), title };
-    };
-
-    for (const m of markets as any[]) {
-      const { key, title } = getGroupKey(m);
-      if (!marketGroups.has(key)) {
-        marketGroups.set(key, []);
-        if (title) groupTitles.set(key, title);
-      }
-      marketGroups.get(key)!.push(m);
-    }
-
-    console.log(`Grouped ${markets.length} markets into ${marketGroups.size} unique groups`);
     // Helper to format a single market into our UI structure
     const formatMarket = (market: any, simp: any) => {
       const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
@@ -205,35 +169,37 @@ serve(async (req) => {
         liquidityRaw: liq,
       };
     };
-    // Format markets with grouping
-    const formattedMarkets = Array.from(marketGroups.values())
-      .map((marketGroup: any[]) => {
-        // For multi-outcome markets, use the highest volume market as the main display
-        const mainMarket = marketGroup.reduce((highest, current) => {
-          const highestVol = toNumber(highest.volume_usd || highest.volume || 0) || 0;
-          const currentVol = toNumber(current.volume_usd || current.volume || 0) || 0;
-          return currentVol > highestVol ? current : highest;
-        }, marketGroup[0]);
+    // Format events - each event already contains its grouped markets
+    const formattedMarkets = events.map((event: any) => {
+      const eventMarkets = event.markets || [];
+      
+      // Use the event's main market (first market) as the display market
+      const mainMarket = eventMarkets[0] || {};
+      const cid = mainMarket.conditionId || mainMarket.condition_id;
+      const simp = cid ? byConditionId.get(cid) : undefined;
 
-        const cid = mainMarket.conditionId || mainMarket.condition_id;
-        const simp = cid ? byConditionId.get(cid) : undefined;
+      const formattedMain = formatMarket(mainMarket, simp);
+      
+      // Format all sub-markets if this is a multi-outcome event
+      const subMarkets = eventMarkets.length > 1 
+        ? eventMarkets.map((m: any) => {
+            const mcid = m.conditionId || m.condition_id;
+            const msimp = mcid ? byConditionId.get(mcid) : undefined;
+            return formatMarket(m, msimp);
+          })
+        : [];
 
-        const formattedMain = formatMarket(mainMarket, simp);
-        
-        // If this is a multi-outcome market, format all sub-markets
-        const subMarkets = marketGroup.length > 1 
-          ? marketGroup.map(m => formatMarket(m, simp))
-          : [];
+      return {
+        ...formattedMain,
+        title: event.title || formattedMain.title, // Use event title
+        description: event.description || formattedMain.description,
+        image: event.image || event.icon || formattedMain.image,
+        subMarkets,
+        isMultiOutcome: eventMarkets.length > 1,
+      };
+    });
 
-        return {
-          ...formattedMain,
-          subMarkets,
-          isMultiOutcome: marketGroup.length > 1,
-        };
-      });
-
-
-    console.log(`Returning ${formattedMarkets.length} Polymarket markets`);
+    console.log(`Returning ${formattedMarkets.length} Polymarket events`);
 
     return new Response(
       JSON.stringify({ markets: formattedMarkets }),
