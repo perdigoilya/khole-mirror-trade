@@ -147,23 +147,23 @@ export type Database = {
       }
       user_polymarket_credentials: {
         Row: {
-          api_key: string
           created_at: string
           id: string
+          private_key: string
           updated_at: string
           user_id: string
         }
         Insert: {
-          api_key: string
           created_at?: string
           id?: string
+          private_key: string
           updated_at?: string
           user_id: string
         }
         Update: {
-          api_key?: string
           created_at?: string
           id?: string
+          private_key?: string
           updated_at?: string
           user_id?: string
         }

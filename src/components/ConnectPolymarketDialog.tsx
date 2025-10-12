@@ -21,18 +21,18 @@ interface ConnectPolymarketDialogProps {
 export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarketDialogProps) => {
   const { connectPolymarket } = useTrading();
   const { toast } = useToast();
-  const [apiKey, setApiKey] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleClear = () => {
-    setApiKey("");
+    setPrivateKey("");
   };
 
   const handleConnect = async () => {
-    if (!apiKey.trim()) {
+    if (!privateKey.trim()) {
       toast({
-        title: "Missing API Key",
-        description: "Please provide your Polymarket API key",
+        title: "Missing Private Key",
+        description: "Please provide your Polymarket wallet private key",
         variant: "destructive",
       });
       return;
@@ -40,7 +40,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
     setIsLoading(true);
     try {
-      await connectPolymarket({ apiKey: apiKey.trim() });
+      await connectPolymarket({ privateKey: privateKey.trim() });
       
       toast({
         title: "Connected",
@@ -66,35 +66,34 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         <DialogHeader>
           <DialogTitle>Connect to Polymarket</DialogTitle>
           <DialogDescription>
-            Enter your Polymarket API credentials to enable trading.
+            Enter your wallet private key to enable trading.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key</Label>
+            <Label htmlFor="privateKey">Wallet Private Key</Label>
             <Input
-              id="apiKey"
-              placeholder="Your Polymarket API Key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              id="privateKey"
+              placeholder="0x..."
+              value={privateKey}
+              onChange={(e) => setPrivateKey(e.target.value)}
               type="password"
             />
           </div>
 
           <div className="rounded-lg bg-muted p-4 text-sm">
-            <p className="font-semibold mb-2">How to get your API Key:</p>
+            <p className="font-semibold mb-2">How to get your private key:</p>
             <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-              <li>Go to Polymarket settings</li>
-              <li>Navigate to API section</li>
-              <li>Generate a new API key</li>
-              <li>Copy and paste it here</li>
+              <li>Connect via email or wallet on Polymarket</li>
+              <li>Export your private key from your wallet</li>
+              <li>Copy and paste it here (starts with 0x)</li>
             </ol>
           </div>
 
           <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 text-sm">
             <p className="text-blue-900 dark:text-blue-300">
-              🔒 Your API key is encrypted and stored securely. It never leaves your account.
+              🔒 Your private key is encrypted and stored securely. It never leaves your account.
             </p>
           </div>
         </div>
