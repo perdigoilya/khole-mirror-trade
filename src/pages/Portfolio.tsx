@@ -22,14 +22,6 @@ const Portfolio = () => {
           <div className="max-w-7xl mx-auto">
             {/* Header */}
             <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-3xl font-bold mb-2">Portfolio</h1>
-                  <p className="text-muted-foreground">
-                    Connect your trading accounts to view positions and performance
-                  </p>
-                </div>
-              </div>
             </div>
 
             {!user ? (
