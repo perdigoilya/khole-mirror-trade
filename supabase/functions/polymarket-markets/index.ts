@@ -226,15 +226,47 @@ serve(async (req) => {
       
       const extractMid = (t: any): number | undefined => {
         if (!t) return undefined;
-        const bid = toNumber(t.best_bid ?? t.bbo?.BUY ?? t.prices?.BUY ?? t.buy);
-        const ask = toNumber(t.best_ask ?? t.bbo?.SELL ?? t.prices?.SELL ?? t.sell);
+        
+        // Try to extract bid/ask from various possible field names in CLOB API
+        const bid = toNumber(
+          t.bid ?? t.best_bid ?? t.bestBid ?? 
+          t.bbo?.BUY ?? t.bbo?.buy ?? 
+          t.prices?.buy ?? t.prices?.BUY ?? 
+          t.buy
+        );
+        const ask = toNumber(
+          t.ask ?? t.best_ask ?? t.bestAsk ?? 
+          t.bbo?.SELL ?? t.bbo?.sell ?? 
+          t.prices?.sell ?? t.prices?.SELL ?? 
+          t.sell
+        );
+        
+        // Log what we found for debugging
+        if (bid !== undefined || ask !== undefined) {
+          console.log(`Token price data: bid=${bid}, ask=${ask}, outcome=${t.outcome}`);
+        }
+        
         if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
         if (ask !== undefined) return ask;
         if (bid !== undefined) return bid;
-        const p = toNumber(t.price ?? t.last_price ?? t.last);
+        
+        // Try last trade price as fallback
+        const p = toNumber(
+          t.price ?? t.last_price ?? t.lastPrice ?? 
+          t.last_trade_price ?? t.lastTradePrice ?? 
+          t.last
+        );
+        if (p !== undefined) {
+          console.log(`Using last trade price: ${p}, outcome=${t.outcome}`);
+        }
         return p;
       };
 
+      // Log token structure for debugging
+      if (tokens.length > 0) {
+        console.log(`Token structure sample for market ${market.question || market.title}:`, JSON.stringify(tokens[0], null, 2).slice(0, 500));
+      }
+      
       // For multi-outcome markets (>2 tokens), find the highest volume token
       let topToken = tokens[0];
       if (tokens.length > 2) {
@@ -249,6 +281,8 @@ serve(async (req) => {
       const topPrice = extractMid(topToken);
       let finalYes = toCents(topPrice);
       let finalNo: number | undefined;
+      
+      console.log(`Price extraction: topPrice=${topPrice}, finalYes=${finalYes}, finalNo=${finalNo}`);
 
       // For binary markets, try to get complementary NO price
       if (tokens.length === 2) {
