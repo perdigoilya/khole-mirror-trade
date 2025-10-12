@@ -200,9 +200,9 @@ Deno.serve(async (req) => {
     let totalTweetsFetched = 0;
     let rateLimitHit = false;
     let accountsProcessed = 0;
-    const maxAccountsPerRun = 5; // Only fetch 5 accounts per run to stay within rate limits
+    const maxAccountsPerRun = 1; // Only fetch 1 account per run (every minute)
 
-    // Process accounts in batches
+    // Process accounts in batches (just 1 at a time)
     for (const account of (accounts || []).slice(0, maxAccountsPerRun)) {
       try {
         // Get or fetch user ID
@@ -265,8 +265,8 @@ Deno.serve(async (req) => {
         console.log(`✓ Fetched ${tweets.length} tweets from @${account.twitter_username}`);
         accountsProcessed++;
         
-        // 3 second delay between accounts to respect rate limits (15 requests per 15 min window)
-        await delay(3000);
+        // No delay needed since we only fetch 1 account per minute
+        // await delay(3000);
       } catch (error: any) {
         if (error.message?.includes('RATE_LIMIT')) {
           console.warn(`⚠️  Rate limit hit at @${account.twitter_username}. Stopping batch.`);

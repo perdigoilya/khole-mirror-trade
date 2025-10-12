@@ -53,7 +53,6 @@ const Feed = () => {
   const [isLoadingMarkets, setIsLoadingMarkets] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [categories, setCategories] = useState<string[]>([]);
-  const [feedStatus, setFeedStatus] = useState<'live' | 'idle' | 'error'>('idle');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [attemptedAutoRefresh, setAttemptedAutoRefresh] = useState(false);
   const formatTimestamp = (timestamp: string) => {
@@ -114,8 +113,8 @@ const Feed = () => {
         if (latestFetchedAt) {
           setLastUpdate(latestFetchedAt);
           const ageMs = Date.now() - latestFetchedAt.getTime();
-          const fifteenMin = 15 * 60 * 1000;
-          if (ageMs > fifteenMin && !attemptedAutoRefresh) {
+          const twoMin = 2 * 60 * 1000;
+          if (ageMs > twoMin && !attemptedAutoRefresh) {
             setAttemptedAutoRefresh(true);
             // Try to fetch new tweets silently once
             refreshTwitterFeed(true).catch(() => {});
@@ -173,7 +172,6 @@ const Feed = () => {
     if (!silent) setIsRefreshing(true);
     
     try {
-      setFeedStatus('live');
       const { data, error } = await supabase.functions.invoke('twitter-fetch');
       
       if (error) throw error;
@@ -187,9 +185,7 @@ const Feed = () => {
       
       await fetchTweets();
       setLastUpdate(new Date());
-      setFeedStatus('idle');
     } catch (error: any) {
-      setFeedStatus('error');
       console.error("Twitter fetch error:", error);
       
       // Check if it's a rate limit error
@@ -229,10 +225,10 @@ const Feed = () => {
       )
       .subscribe();
 
-    // Auto-refresh every 15 minutes (since cron job runs every 15 minutes)
+    // Auto-refresh every 2 minutes (cron job runs every minute, we check every 2)
     const autoRefreshInterval = setInterval(() => {
       refreshTwitterFeed(true);
-    }, 900000); // 15 minutes
+    }, 120000); // 2 minutes
 
     // Update relative timestamps every minute
     const timestampInterval = setInterval(() => {
@@ -257,25 +253,13 @@ const Feed = () => {
                 {/* Live Status Indicator */}
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 border border-border">
                   <div className="relative">
-                    <div 
-                      className={`w-2 h-2 rounded-full ${
-                        feedStatus === 'live' 
-                          ? 'bg-green-500 animate-pulse' 
-                          : feedStatus === 'error' 
-                          ? 'bg-red-500' 
-                          : 'bg-green-500'
-                      }`}
-                    />
-                    {(feedStatus === 'live' || feedStatus === 'idle') && (
-                      <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
-                    )}
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1">
-                    <span className="text-xs font-medium">
-                      {feedStatus === 'live' ? 'Updating...' : feedStatus === 'error' ? 'Down' : 'Auto-updating every 15 min'}
-                    </span>
+                    <span className="text-xs font-medium">Live</span>
                     {lastUpdate && (
-                      <span className="hidden sm:inline text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground sm:ml-1">
                         · Updated {formatTimestamp(lastUpdate.toISOString())}
                       </span>
                     )}
@@ -313,11 +297,11 @@ const Feed = () => {
                 {mainFeed.length === 0 ? (
                   <Card className="p-8 text-center">
                     <p className="text-muted-foreground mb-4">
-                      No tweets available. The feed auto-updates every 15 minutes, or you can refresh manually.
+                      No tweets available yet. New tweets are fetched automatically every minute.
                     </p>
                     <Button onClick={() => refreshTwitterFeed(false)} disabled={isRefreshing}>
                       <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                      Fetch Latest Tweets
+                      Fetch Now
                     </Button>
                   </Card>
                 ) : (
