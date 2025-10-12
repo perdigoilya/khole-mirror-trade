@@ -152,6 +152,20 @@ serve(async (req) => {
       const end = market.end_date_iso || market.end_date || market.endDate;
       const cid = market.conditionId || market.condition_id;
 
+      // Extract CLOB token ids from Gamma when available
+      const clobIds: string[] = Array.isArray(market?.clobTokenIds)
+        ? market.clobTokenIds
+        : (typeof market?.clobTokenIds === 'string'
+            ? String(market.clobTokenIds)
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+            : []);
+
+      const topClobId = String(
+        topToken?.token_id ?? topToken?.tokenId ?? topToken?.id ?? clobIds[0] ?? ''
+      );
+
       return {
         id: cid || market.id || market.slug || crypto.randomUUID(),
         title: market.question || market.title || "Unknown Market",
@@ -167,6 +181,8 @@ serve(async (req) => {
         provider: "polymarket",
         volumeRaw: vol,
         liquidityRaw: liq,
+        clobTokenId: topClobId || undefined,
+        clobTokenIds: clobIds.length ? clobIds : undefined,
       };
     };
     // Format events - each event already contains its grouped markets

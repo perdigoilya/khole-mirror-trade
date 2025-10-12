@@ -26,6 +26,7 @@ interface Market {
   provider: 'kalshi' | 'polymarket';
   volumeRaw: number;
   liquidityRaw: number;
+  clobTokenId?: string;
   isMultiOutcome?: boolean;
   subMarkets?: Market[];
 }
@@ -289,7 +290,7 @@ const MarketDetail = () => {
                         </div>
                         <div className="h-[300px] bg-card p-4">
                           <MarketChart 
-                            marketId={outcome.id} 
+                            marketId={outcome.clobTokenId || outcome.id} 
                             timeRange={timeRange}
                           />
                         </div>
@@ -321,7 +322,7 @@ const MarketDetail = () => {
                         
                         <div className="h-[400px] bg-card p-4">
                           <MarketChart 
-                            marketId={market.id} 
+                            marketId={market.clobTokenId || market.id} 
                             timeRange={timeRange}
                           />
                         </div>
