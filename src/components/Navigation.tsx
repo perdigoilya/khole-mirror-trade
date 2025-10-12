@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
 import { useTrading } from "@/contexts/TradingContext";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
+import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
+import { ConnectPlatformDialog } from "@/components/ConnectPlatformDialog";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,8 +16,10 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isKalshiConnected, user, kalshiCredentials } = useTrading();
-  const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const { isKalshiConnected, isPolymarketConnected, user, kalshiCredentials } = useTrading();
+  const [showPlatformDialog, setShowPlatformDialog] = useState(false);
+  const [showKalshiDialog, setShowKalshiDialog] = useState(false);
+  const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
@@ -41,7 +45,7 @@ const Navigation = () => {
         description: "Please connect your Kalshi account to search markets",
         variant: "destructive",
       });
-      setShowConnectDialog(true);
+      setShowPlatformDialog(true);
       return;
     }
 
@@ -102,11 +106,11 @@ const Navigation = () => {
             {user ? (
               <>
                 <Button 
-                  onClick={() => setShowConnectDialog(true)}
-                  variant={isKalshiConnected ? "outline" : "default"}
+                  onClick={() => setShowPlatformDialog(true)}
+                  variant={(isKalshiConnected || isPolymarketConnected) ? "outline" : "default"}
                   className="font-medium text-sm hidden lg:flex"
                 >
-                  {isKalshiConnected ? "Connected" : "Connect"}
+                  {(isKalshiConnected || isPolymarketConnected) ? "Connected" : "Connect"}
                 </Button>
                 <Button 
                   onClick={async () => {
@@ -178,13 +182,13 @@ const Navigation = () => {
                     <>
                       <Button 
                         onClick={() => {
-                          setShowConnectDialog(true);
+                          setShowPlatformDialog(true);
                           setMobileMenuOpen(false);
                         }}
-                        variant={isKalshiConnected ? "outline" : "default"}
+                        variant={(isKalshiConnected || isPolymarketConnected) ? "outline" : "default"}
                         className="w-full font-medium"
                       >
-                        {isKalshiConnected ? "Connected to Kalshi" : "Connect Kalshi"}
+                        {(isKalshiConnected || isPolymarketConnected) ? "Connected" : "Connect Platform"}
                       </Button>
                       <Button 
                         onClick={async () => {
@@ -217,7 +221,16 @@ const Navigation = () => {
         </div>
       </div>
       
-      <ConnectKalshiDialog open={showConnectDialog} onOpenChange={setShowConnectDialog} />
+      <ConnectPlatformDialog 
+        open={showPlatformDialog} 
+        onOpenChange={setShowPlatformDialog}
+        onSelectKalshi={() => setShowKalshiDialog(true)}
+        onSelectPolymarket={() => setShowPolymarketDialog(true)}
+        isKalshiConnected={isKalshiConnected}
+        isPolymarketConnected={isPolymarketConnected}
+      />
+      <ConnectKalshiDialog open={showKalshiDialog} onOpenChange={setShowKalshiDialog} />
+      <ConnectPolymarketDialog open={showPolymarketDialog} onOpenChange={setShowPolymarketDialog} />
     </nav>
   );
 };
