@@ -103,6 +103,29 @@ serve(async (req) => {
       return n <= 1 ? Math.round(n * 100) : Math.round(n);
     };
 
+    // Normalize/clean incoming token ids that may be stringified arrays
+    const normalizeTokenId = (id: any): string | undefined => {
+      if (id === null || id === undefined) return undefined;
+      let s = String(id);
+      // Already numeric
+      if (/^[0-9]+$/.test(s)) return s;
+      // Try JSON parsing
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length) {
+          s = String(parsed[0]);
+        } else if (typeof parsed === 'string') {
+          s = parsed;
+        }
+        if (/^[0-9]+$/.test(s)) return s;
+      } catch (_) {
+        // ignore parse errors
+      }
+      // Extract first long run of digits
+      const match = s.match(/\d{6,}/);
+      return match ? match[0] : undefined;
+    };
+
     // Helper to format a single market into our UI structure
     const formatMarket = (market: any, simp: any) => {
       const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];

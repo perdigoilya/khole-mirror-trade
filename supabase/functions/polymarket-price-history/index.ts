@@ -31,15 +31,28 @@ serve(async (req) => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    // Determine token id (CLOB token ID). The prices-history endpoint requires the CLOB token id.
-    // We now expect the frontend to pass the correct token id (clobTokenId). To avoid rate limits and 422s,
-    // we no longer paginate external endpoints here. If the provided id is not a numeric token id, we return
-    // an empty history so the UI can fallback gracefully.
-    let tokenId = String(marketId);
+    // Normalize token id (handle cases like "123", ["123", "456"], or strings containing brackets)
+    const normalizeTokenId = (input: any): string | null => {
+      if (input === null || input === undefined) return null;
+      let s = String(input);
+      // Already numeric
+      if (/^[0-9]+$/.test(s)) return s;
+      // Try JSON parsing
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length) s = String(parsed[0]);
+        else if (typeof parsed === 'string') s = parsed;
+      } catch (_) {
+        // ignore
+      }
+      if (/^[0-9]+$/.test(s)) return s;
+      const match = s.match(/\d{6,}/);
+      return match ? match[0] : null;
+    };
 
-    const isNumericTokenId = /^[0-9]+$/.test(tokenId);
-    if (!isNumericTokenId) {
-      console.warn('polymarket-price-history: non-numeric id provided; expected CLOB token id. Returning empty history. id=', tokenId);
+    let tokenId = normalizeTokenId(marketId);
+    if (!tokenId) {
+      console.warn('polymarket-price-history: non-numeric id provided; expected CLOB token id. Returning empty history. id=', marketId);
       return new Response(
         JSON.stringify({ data: [], message: 'No price history available' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -19,16 +19,45 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Normalize incoming marketId into a numeric CLOB token id if possible
+  const normalizeTokenId = (id: string): string | null => {
+    if (!id) return null;
+    // If already numeric
+    if (/^[0-9]+$/.test(id)) return id;
+    // Try JSON parse (sometimes arrives like ["12345", "67890"]) or "12345"
+    try {
+      const parsed = JSON.parse(id);
+      if (Array.isArray(parsed) && parsed.length && /^[0-9]+$/.test(String(parsed[0]))) {
+        return String(parsed[0]);
+      }
+      if (typeof parsed === 'string' && /^[0-9]+$/.test(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // ignore parse errors
+    }
+    // Fallback: pick the first long run of digits
+    const match = id.match(/\d{6,}/);
+    return match ? match[0] : null;
+  };
+
   useEffect(() => {
     const fetchPriceHistory = async () => {
       setLoading(true);
       setError(null);
-      
+
+      const tokenId = normalizeTokenId(marketId);
+      if (!tokenId) {
+        setError("No price data available");
+        setLoading(false);
+        return;
+      }
+
       try {
         const { data: result, error: fetchError } = await supabase.functions.invoke(
           'polymarket-price-history',
           {
-            body: { marketId, timeRange }
+            body: { marketId: tokenId, timeRange }
           }
         );
 
