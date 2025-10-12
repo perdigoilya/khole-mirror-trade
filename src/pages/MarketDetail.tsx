@@ -193,6 +193,9 @@ const MarketDetail = () => {
                     src={market.image} 
                     alt={market.title}
                     className="w-12 h-12 rounded-lg object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
                   />
                 )}
                 <div>
@@ -252,8 +255,21 @@ const MarketDetail = () => {
                         <div className="p-4 border-b border-border">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3 flex-1">
+                              {outcome.image ? (
+                                <img 
+                                  src={outcome.image}
+                                  alt={outcome.title}
+                                  className="w-10 h-10 rounded object-cover"
+                                  onError={(e) => {
+                                    // Fallback to colored initial if image fails to load
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                    if (fallback) fallback.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
                               <div 
-                                className={`w-10 h-10 rounded flex items-center justify-center font-bold text-background text-sm ${colorClasses[idx % 4]}`}
+                                className={`w-10 h-10 rounded flex items-center justify-center font-bold text-background text-sm ${colorClasses[idx % 4]} ${outcome.image ? 'hidden' : ''}`}
                               >
                                 {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
                               </div>
