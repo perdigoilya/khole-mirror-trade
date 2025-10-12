@@ -20,24 +20,75 @@ serve(async (req) => {
       );
     }
 
-    // Map timeRange to intervals and durations
-    const rangeConfig: Record<string, { interval: string; duration: number }> = {
-      '1H': { interval: '1m', duration: 3600 },
-      '6H': { interval: '5m', duration: 21600 },
-      '1D': { interval: '1h', duration: 86400 },
-      '1W': { interval: '1h', duration: 604800 },
-      '1M': { interval: '1d', duration: 2592000 },
-      'ALL': { interval: '1d', duration: 31536000 }, // 1 year max
+    // Map UI timeRange to CLOB params
+    const intervalMap: Record<string, string> = {
+      '1H': '1h',
+      '6H': '6h',
+      '1D': '1d',
+      '1W': '1w',
+      'ALL': 'max',
     };
 
-    const config = rangeConfig[timeRange] || rangeConfig['1D'];
-    const endTime = Math.floor(Date.now() / 1000);
-    const startTime = endTime - config.duration;
+    const now = Math.floor(Date.now() / 1000);
 
-    console.log(`Fetching price history for market ${marketId}, range: ${timeRange}`);
+    // Determine token id (CLOB token ID). If a condition id was passed, map via simplified-markets
+    let tokenId = marketId as string;
 
-    // Fetch from Polymarket price history API
-    const url = `https://gamma-api.polymarket.com/prices-history?interval=${config.interval}&market=${marketId}&startTs=${startTime}&endTs=${endTime}`;
+    const isDecimalId = /^[0-9]+$/.test(tokenId);
+    if (!isDecimalId) {
+      const simpRes = await fetch('https://clob.polymarket.com/simplified-markets', {
+        method: 'GET',
+        headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
+      });
+      if (simpRes.ok) {
+        const simpPayload = await simpRes.json();
+        const markets: any[] = Array.isArray(simpPayload) ? simpPayload : (simpPayload?.data || []);
+        const match = markets.find((m: any) => (m.condition_id || m.conditionId)?.toLowerCase() === tokenId.toLowerCase());
+        if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
+          // Pick token with highest volume or first as fallback
+          const pick = match.tokens.reduce((best: any, t: any) => {
+            const vBest = Number(best?.volume ?? best?.volume_24hr ?? 0) || 0;
+            const v = Number(t?.volume ?? t?.volume_24hr ?? 0) || 0;
+            return v > vBest ? t : best;
+          }, match.tokens[0]);
+          tokenId = String(pick.token_id || pick.tokenId || pick.id);
+        } else {
+          console.warn('No tokens found for condition id, returning empty history');
+          return new Response(
+            JSON.stringify({ data: [], message: 'No price history available' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        console.warn('Failed to fetch simplified markets to resolve token id:', simpRes.status);
+        return new Response(
+          JSON.stringify({ data: [], message: 'No price history available' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    console.log(`Fetching price history for token ${tokenId}, range: ${timeRange}`);
+
+    // Build query
+    const params = new URLSearchParams();
+    params.set('market', tokenId);
+
+    if (timeRange === '1M') {
+      const startTs = now - 30 * 24 * 60 * 60;
+      params.set('startTs', String(startTs));
+      params.set('endTs', String(now));
+      params.set('fidelity', '60'); // 60 minutes
+    } else {
+      const interval = intervalMap[timeRange] || '1d';
+      params.set('interval', interval);
+      // Optional fidelity for shorter ranges
+      if (interval === '1h' || interval === '6h') params.set('fidelity', '1');
+      if (interval === '1d' || interval === '1w' || interval === 'max') params.set('fidelity', '60');
+    }
+
+    // Fetch from Polymarket CLOB price history API
+    const url = `https://clob.polymarket.com/prices-history?${params.toString()}`;
     
     const response = await fetch(url, {
       method: "GET",
