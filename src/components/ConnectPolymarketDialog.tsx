@@ -8,10 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wallet } from "lucide-react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useWeb3Modal } from "@web3modal/wagmi/react";
 
 interface ConnectPolymarketDialogProps {
   open: boolean;
@@ -21,18 +21,22 @@ interface ConnectPolymarketDialogProps {
 export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarketDialogProps) => {
   const { connectPolymarket } = useTrading();
   const { toast } = useToast();
-  const [privateKey, setPrivateKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { address, isConnected } = useAccount();
+  const { open: openWalletModal } = useWeb3Modal();
+  const { disconnect } = useDisconnect();
 
-  const handleClear = () => {
-    setPrivateKey("");
-  };
+  const handleWalletConnect = async () => {
+    if (!isConnected) {
+      // Open WalletConnect modal
+      await openWalletModal();
+      return;
+    }
 
-  const handleConnect = async () => {
-    if (!privateKey.trim()) {
+    if (!address) {
       toast({
-        title: "Missing Private Key",
-        description: "Please provide your Polymarket wallet private key",
+        title: "No wallet address",
+        description: "Please connect your wallet first",
         variant: "destructive",
       });
       return;
@@ -40,7 +44,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
     setIsLoading(true);
     try {
-      await connectPolymarket({ privateKey: privateKey.trim() });
+      await connectPolymarket({ walletAddress: address });
       
       toast({
         title: "Connected",
@@ -48,7 +52,6 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       });
       
       onOpenChange(false);
-      handleClear();
     } catch (error: any) {
       toast({
         title: "Connection failed",
@@ -60,59 +63,93 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     }
   };
 
+  const handleDisconnect = () => {
+    disconnect();
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Connect to Polymarket</DialogTitle>
           <DialogDescription>
-            Enter your wallet private key to enable trading.
+            Connect your wallet securely using WalletConnect.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="privateKey">Wallet Private Key</Label>
-            <Input
-              id="privateKey"
-              placeholder="0x..."
-              value={privateKey}
-              onChange={(e) => setPrivateKey(e.target.value)}
-              type="password"
-            />
-          </div>
+          {isConnected && address ? (
+            <div className="space-y-3">
+              <div className="rounded-lg bg-muted p-4">
+                <p className="text-sm font-semibold mb-1">Connected Wallet</p>
+                <p className="text-sm font-mono text-muted-foreground break-all">
+                  {address}
+                </p>
+              </div>
+              
+              <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm">
+                <p className="text-green-900 dark:text-green-300">
+                  ✓ Wallet connected! Click "Save Connection" to enable trading.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg bg-muted p-4 text-sm">
+                <p className="font-semibold mb-2">How WalletConnect works:</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>Click "Connect Wallet" below</li>
+                  <li>Choose your wallet (MetaMask, Coinbase, etc.)</li>
+                  <li>Approve the connection in your wallet</li>
+                  <li>Your wallet address will be securely stored</li>
+                </ol>
+              </div>
 
-          <div className="rounded-lg bg-muted p-4 text-sm">
-            <p className="font-semibold mb-2">How to get your private key:</p>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-              <li>Connect via email or wallet on Polymarket</li>
-              <li>Export your private key from your wallet</li>
-              <li>Copy and paste it here (starts with 0x)</li>
-            </ol>
-          </div>
-
-          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 text-sm">
-            <p className="text-blue-900 dark:text-blue-300">
-              🔒 Your private key is encrypted and stored securely. It never leaves your account.
-            </p>
-          </div>
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 text-sm">
+                <p className="text-blue-900 dark:text-blue-300">
+                  🔒 No private keys needed. Your funds stay in your wallet. WalletConnect is the industry-standard secure connection protocol.
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex gap-3 justify-end">
-          <Button
-            variant="outline"
-            onClick={handleClear}
-            disabled={isLoading}
-          >
-            Clear
-          </Button>
-          <Button
-            onClick={handleConnect}
-            disabled={isLoading}
-          >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Connect
-          </Button>
+          {isConnected && address ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={handleDisconnect}
+                disabled={isLoading}
+              >
+                Disconnect
+              </Button>
+              <Button
+                onClick={handleWalletConnect}
+                disabled={isLoading}
+                className="bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
+              >
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Connection
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleWalletConnect}
+                className="bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
+              >
+                <Wallet className="mr-2 h-4 w-4" />
+                Connect Wallet
+              </Button>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -149,23 +149,23 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          private_key: string
           updated_at: string
           user_id: string
+          wallet_address: string
         }
         Insert: {
           created_at?: string
           id?: string
-          private_key: string
           updated_at?: string
           user_id: string
+          wallet_address: string
         }
         Update: {
           created_at?: string
           id?: string
-          private_key?: string
           updated_at?: string
           user_id?: string
+          wallet_address?: string
         }
         Relationships: []
       }
