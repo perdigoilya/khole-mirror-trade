@@ -510,8 +510,25 @@ const MarketDetail = () => {
 
                     <Button 
                       className="w-full h-12 bg-primary hover:bg-primary/90"
-                      disabled={!selectedOutcome || parseFloat(tradeAmount) === 0}
                       onClick={() => {
+                        if (!selectedOutcome) {
+                          toast({
+                            title: "Select Outcome",
+                            description: "Please select Yes or No first",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        
+                        if (parseFloat(tradeAmount) === 0) {
+                          toast({
+                            title: "Enter Amount",
+                            description: "Please enter a trade amount",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        
                         if (!user) {
                           toast({
                             title: "Authentication Required",
