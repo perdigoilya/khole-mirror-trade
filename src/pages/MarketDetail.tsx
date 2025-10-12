@@ -52,8 +52,8 @@ const MarketDetail = () => {
 
   useEffect(() => {
     const passed = (location.state as any)?.market;
-    if (!passed || !passed.clobTokenId) {
-      // Fetch full market to resolve CLOB token IDs for charts
+    // Only fetch if we don't have complete market data
+    if (!passed || !passed.clobTokenId || !passed.endDate || !passed.status) {
       fetchMarket();
     }
   }, [marketId]);

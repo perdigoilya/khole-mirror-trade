@@ -148,6 +148,14 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
           }
           
           const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
+          const liq = parseFloat(event.liquidity || mainMarket.liquidity || 0);
+          
+          // Get CLOB token ID for charts
+          let clobTokenId = '';
+          if (tokens.length > 0) {
+            const token = tokens[0];
+            clobTokenId = token.token_id || token.tokenId || '';
+          }
           
           // Only add markets with valid condition IDs
           if (cid) {
@@ -158,7 +166,15 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
               yesPrice,
               noPrice,
               volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
+              liquidity: liq > 1_000_000 ? `$${(liq / 1_000_000).toFixed(1)}M` : liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
+              endDate: event.end_date_iso || event.end_date || mainMarket.end_date_iso || mainMarket.end_date || 'TBD',
+              status: event.active === false || event.closed === true ? 'Closed' : 'Active',
+              category: event.category || 'Other',
               provider: 'polymarket',
+              volumeRaw: vol,
+              liquidityRaw: liq,
+              clobTokenId: clobTokenId,
+              image: event.image || event.icon || mainMarket.image,
             });
           }
         }

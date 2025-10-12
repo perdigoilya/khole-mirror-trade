@@ -39,7 +39,15 @@ interface RelatedMarket {
   yesPrice: number;
   noPrice: number;
   volume: string;
+  liquidity: string;
+  endDate: string;
+  status: string;
+  category: string;
   provider: string;
+  volumeRaw: number;
+  liquidityRaw: number;
+  clobTokenId?: string;
+  image?: string;
 }
 
 const Feed = () => {
@@ -156,14 +164,7 @@ const Feed = () => {
   const handleMarketClick = (market: RelatedMarket) => {
     navigate(`/market/${market.id}`, { 
       state: { 
-        market: {
-          ...market,
-          endDate: "TBD",
-          status: "Active",
-          category: "Market News",
-          volumeRaw: 0,
-          liquidityRaw: 0,
-        } 
+        market: market
       } 
     });
   };
