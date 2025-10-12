@@ -143,15 +143,12 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
   return (
     <div className="relative w-full h-full">
       {/* Logo Watermark */}
-      <div 
-        className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"
-        style={{ 
-          backgroundImage: `url(${fomoLogo})`,
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          backgroundSize: '120px',
-          opacity: 1
-        }}
+      <img 
+        src={fomoLogo}
+        alt=""
+        aria-hidden="true"
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0 select-none"
+        style={{ width: '140px', height: 'auto', opacity: 1, filter: 'invert(1)' }}
       />
       
       {/* Chart */}
