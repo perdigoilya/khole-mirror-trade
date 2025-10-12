@@ -200,10 +200,11 @@ const Feed = () => {
       )
       .subscribe();
 
-    // Auto-refresh every 10 minutes to avoid Twitter rate limits (15 requests per 15-min window)
+    // Auto-refresh every 3 minutes - processes 5 accounts per run with 3s delays = ~15s
+    // This allows cycling through all accounts every ~15 minutes while respecting rate limits
     const autoRefreshInterval = setInterval(() => {
       refreshTwitterFeed(true);
-    }, 600000); // 10 minutes
+    }, 180000); // 3 minutes
 
     return () => {
       supabase.removeChannel(channel);

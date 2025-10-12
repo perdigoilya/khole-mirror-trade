@@ -107,7 +107,7 @@ interface TwitterResponse {
   };
 }
 
-async function getUserByUsername(username: string): Promise<string> {
+async function getUserByUsername(username: string, supabase: any): Promise<string> {
   const cleanUsername = username.replace('@', '');
   const url = `https://api.x.com/2/users/by/username/${cleanUsername}`;
   
@@ -127,15 +127,20 @@ async function getUserByUsername(username: string): Promise<string> {
   }
 
   const data = await response.json();
-  return data.data.id;
+  const userId = data.data.id;
+  
+  // Store the user ID in the database to avoid future lookups
+  await supabase
+    .from('followed_twitter_accounts')
+    .update({ twitter_user_id: userId })
+    .eq('twitter_username', cleanUsername);
+  
+  console.log(`Cached user ID for @${cleanUsername}: ${userId}`);
+  
+  return userId;
 }
 
-async function fetchUserTimeline(username: string, userId?: string): Promise<TwitterResponse> {
-  // Get user ID if not provided
-  if (!userId) {
-    userId = await getUserByUsername(username);
-  }
-
+async function fetchUserTimeline(username: string, userId: string, supabase: any): Promise<TwitterResponse> {
   const url = `https://api.x.com/2/users/${userId}/tweets?max_results=10&tweet.fields=created_at,author_id,public_metrics&expansions=author_id&user.fields=name,username,profile_image_url`;
 
   console.log(`Fetching tweets for @${username} (ID: ${userId})`);
@@ -152,6 +157,12 @@ async function fetchUserTimeline(username: string, userId?: string): Promise<Twi
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`Twitter API error for @${username}: ${response.status} ${errorText}`);
+    
+    // If it's a rate limit, throw a special error
+    if (response.status === 429) {
+      throw new Error(`RATE_LIMIT: ${response.status}`);
+    }
+    
     throw new Error(`Twitter API error: ${response.status}`);
   }
 
@@ -176,7 +187,8 @@ Deno.serve(async (req) => {
     // Get list of followed accounts
     const { data: accounts, error: accountsError } = await supabase
       .from('followed_twitter_accounts')
-      .select('*');
+      .select('*')
+      .order('last_fetched_at', { ascending: true, nullsFirst: true });
 
     if (accountsError) {
       console.error('Error fetching accounts:', accountsError);
@@ -186,13 +198,25 @@ Deno.serve(async (req) => {
     console.log(`Found ${accounts?.length || 0} Twitter accounts to fetch`);
 
     let totalTweetsFetched = 0;
+    let rateLimitHit = false;
+    let accountsProcessed = 0;
+    const maxAccountsPerRun = 5; // Only fetch 5 accounts per run to stay within rate limits
 
-    // Fetch tweets from each account with rate limiting
-    for (const account of accounts || []) {
+    // Process accounts in batches
+    for (const account of (accounts || []).slice(0, maxAccountsPerRun)) {
       try {
+        // Get or fetch user ID
+        let userId = account.twitter_user_id;
+        if (!userId) {
+          console.log(`Fetching user ID for @${account.twitter_username}...`);
+          userId = await getUserByUsername(account.twitter_username, supabase);
+          await delay(2000); // Extra delay after user lookup
+        }
+
         const twitterData = await fetchUserTimeline(
           account.twitter_username,
-          account.twitter_user_id || undefined
+          userId,
+          supabase
         );
         
         if (!twitterData.data) {
@@ -232,21 +256,39 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log(`Fetched ${tweets.length} tweets from @${account.twitter_username}`);
+        // Update last fetched timestamp
+        await supabase
+          .from('followed_twitter_accounts')
+          .update({ last_fetched_at: new Date().toISOString() })
+          .eq('id', account.id);
+
+        console.log(`✓ Fetched ${tweets.length} tweets from @${account.twitter_username}`);
+        accountsProcessed++;
         
-        // Add 1 second delay between accounts to respect rate limits
-        await delay(1000);
-      } catch (error) {
-        console.error(`Error fetching tweets for @${account.twitter_username}:`, error);
-        // Add delay even on error to avoid hammering the API
-        await delay(1000);
+        // 3 second delay between accounts to respect rate limits (15 requests per 15 min window)
+        await delay(3000);
+      } catch (error: any) {
+        if (error.message?.includes('RATE_LIMIT')) {
+          console.warn(`⚠️  Rate limit hit at @${account.twitter_username}. Stopping batch.`);
+          rateLimitHit = true;
+          break; // Stop processing if we hit rate limit
+        }
+        console.error(`❌ Error fetching tweets for @${account.twitter_username}:`, error);
+        await delay(3000);
       }
     }
+
+    const message = rateLimitHit 
+      ? `Fetched ${totalTweetsFetched} tweets from ${accountsProcessed} accounts (rate limit reached)`
+      : `Fetched ${totalTweetsFetched} tweets from ${accountsProcessed} accounts`;
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: `Fetched ${totalTweetsFetched} new tweets from ${accounts?.length || 0} accounts` 
+        message,
+        accountsProcessed,
+        totalTweetsFetched,
+        rateLimitHit
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
