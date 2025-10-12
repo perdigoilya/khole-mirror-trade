@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTrading } from "@/contexts/TradingContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Clock, RefreshCw, Heart, Repeat, Eye, Filter, TrendingUp } from "lucide-react";
+import { Clock, RefreshCw, Heart, Repeat, Eye, Filter, TrendingUp, UserPlus, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -16,6 +16,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface NewsItem {
   id: string;
@@ -63,6 +73,11 @@ const Feed = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [attemptedAutoRefresh, setAttemptedAutoRefresh] = useState(false);
+  const [followedAccounts, setFollowedAccounts] = useState<any[]>([]);
+  const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [isAddingAccount, setIsAddingAccount] = useState(false);
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -206,8 +221,90 @@ const Feed = () => {
     }
   };
 
+  const fetchFollowedAccounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('followed_twitter_accounts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setFollowedAccounts(data || []);
+    } catch (error) {
+      console.error('Error fetching followed accounts:', error);
+    }
+  };
+
+  const handleAddAccount = async () => {
+    if (!newUsername.trim()) {
+      toast({
+        title: "Username required",
+        description: "Please enter a Twitter username",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAddingAccount(true);
+    try {
+      const { error } = await supabase
+        .from('followed_twitter_accounts')
+        .insert([{
+          twitter_username: newUsername.trim().replace('@', ''),
+          display_name: newDisplayName.trim() || newUsername.trim(),
+          account_category: 'General'
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Account added",
+        description: `@${newUsername.trim()} will be included in the next feed refresh`,
+      });
+
+      setNewUsername('');
+      setNewDisplayName('');
+      fetchFollowedAccounts();
+    } catch (error: any) {
+      console.error('Error adding account:', error);
+      toast({
+        title: "Failed to add account",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingAccount(false);
+    }
+  };
+
+  const handleRemoveAccount = async (id: string, username: string) => {
+    try {
+      const { error } = await supabase
+        .from('followed_twitter_accounts')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Account removed",
+        description: `@${username} will no longer be tracked`,
+      });
+
+      fetchFollowedAccounts();
+    } catch (error: any) {
+      console.error('Error removing account:', error);
+      toast({
+        title: "Failed to remove account",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     fetchTweets();
+    fetchFollowedAccounts();
 
     // Subscribe to realtime updates
     const channel = supabase
@@ -280,16 +377,118 @@ const Feed = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <Button 
-                onClick={() => refreshTwitterFeed(false)} 
-                disabled={isRefreshing}
-                variant="outline"
-                size="sm"
-                className="w-full sm:w-auto"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Refresh Now
-              </Button>
+              <div className="flex gap-2">
+                <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Manage Accounts
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Manage Twitter Accounts</DialogTitle>
+                      <DialogDescription>
+                        Add or remove Twitter accounts to track in your feed
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4">
+                      {/* Add New Account Form */}
+                      <Card className="p-4">
+                        <h3 className="font-semibold mb-3">Add New Account</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="username">Twitter Username</Label>
+                            <Input
+                              id="username"
+                              placeholder="e.g., elonmusk"
+                              value={newUsername}
+                              onChange={(e) => setNewUsername(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleAddAccount()}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="displayName">Display Name (optional)</Label>
+                            <Input
+                              id="displayName"
+                              placeholder="e.g., Elon Musk"
+                              value={newDisplayName}
+                              onChange={(e) => setNewDisplayName(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleAddAccount()}
+                            />
+                          </div>
+                          <Button 
+                            onClick={handleAddAccount} 
+                            disabled={isAddingAccount || !newUsername.trim()}
+                            className="w-full"
+                          >
+                            {isAddingAccount ? 'Adding...' : 'Add Account'}
+                          </Button>
+                        </div>
+                      </Card>
+
+                      {/* Current Accounts List */}
+                      <div>
+                        <h3 className="font-semibold mb-3">
+                          Current Accounts ({followedAccounts.length})
+                        </h3>
+                        {followedAccounts.length === 0 ? (
+                          <Card className="p-8 text-center">
+                            <p className="text-muted-foreground">No accounts tracked yet</p>
+                          </Card>
+                        ) : (
+                          <div className="space-y-2">
+                            {followedAccounts.map((account) => (
+                              <Card key={account.id} className="p-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <Avatar className="h-8 w-8">
+                                      <AvatarFallback>
+                                        {account.twitter_username[0].toUpperCase()}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                      <p className="font-medium text-sm">
+                                        {account.display_name || account.twitter_username}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        @{account.twitter_username}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveAccount(account.id, account.twitter_username)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                
+                <Button 
+                  onClick={() => refreshTwitterFeed(false)} 
+                  disabled={isRefreshing}
+                  variant="outline"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh Now
+                </Button>
+              </div>
             </div>
 
             <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
