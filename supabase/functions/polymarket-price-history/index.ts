@@ -59,13 +59,14 @@ serve(async (req) => {
         const target = String(marketId).toLowerCase();
         let nextCursor = '';
         let page = 0;
-        const MAX_PAGES = 20; // safety cap
+        const MAX_PAGES = 50; // safety cap
         const toNumber = (v: any) => {
           if (v === null || v === undefined) return 0;
           const n = typeof v === 'string' ? parseFloat(v) : v;
           return typeof n === 'number' && !Number.isNaN(n) ? n : 0;
         };
 
+        // First try: simplified-markets
         while (!tokenId && page < MAX_PAGES) {
           const url = `https://clob.polymarket.com/simplified-markets${nextCursor ? `?next_cursor=${encodeURIComponent(nextCursor)}` : ''}`;
           const simpRes = await fetch(url, {
@@ -98,6 +99,36 @@ serve(async (req) => {
             break;
           }
           page += 1;
+        }
+
+        // Second try: full markets endpoint, prefer YES outcome
+        if (!tokenId) {
+          let next2 = '';
+          let page2 = 0;
+          while (!tokenId && page2 < MAX_PAGES) {
+            const url2 = `https://clob.polymarket.com/markets${next2 ? `?next_cursor=${encodeURIComponent(next2)}` : ''}`;
+            const mRes = await fetch(url2, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
+            });
+            if (!mRes.ok) {
+              console.warn('markets fetch failed with status', mRes.status);
+              break;
+            }
+            const mPayload = await mRes.json();
+            const mList: any[] = Array.isArray(mPayload) ? mPayload : (mPayload?.data || []);
+            const m = mList.find((x: any) => String(x.condition_id || x.conditionId || '').toLowerCase() === target);
+            if (m && Array.isArray(m.tokens) && m.tokens.length > 0) {
+              const yes = m.tokens.find((t: any) => String(t.outcome || '').toLowerCase() === 'yes');
+              const chosen = yes || m.tokens[0];
+              tokenId = String(chosen?.token_id ?? chosen?.tokenId ?? chosen?.id ?? '');
+              console.log('Resolved token id from markets endpoint:', tokenId);
+              break;
+            }
+            next2 = (mPayload?.next_cursor ?? '') as string;
+            if (!next2 || next2 === 'LTE=' || next2 === '-1') break;
+            page2 += 1;
+          }
         }
       } catch (e) {
         console.warn('Failed to resolve token id from condition id:', e);
