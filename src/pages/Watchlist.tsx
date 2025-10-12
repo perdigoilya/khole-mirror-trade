@@ -94,12 +94,6 @@ const Watchlist = () => {
             {/* Header with Filters */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-3xl font-bold mb-2">Watchlist</h1>
-                  <p className="text-muted-foreground">
-                    Monitor your favorite markets and execute trades instantly
-                  </p>
-                </div>
                 <Badge variant="outline" className="text-sm px-3 py-1">
                   {watchedMarkets.length} Markets
                 </Badge>
