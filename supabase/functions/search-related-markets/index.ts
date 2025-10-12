@@ -149,15 +149,18 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
           
           const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
           
-          relevantMarkets.push({
-            id: cid || event.id || mainMarket.id || crypto.randomUUID(),
-            title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
-            description: event.description || mainMarket.description || '',
-            yesPrice,
-            noPrice,
-            volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
-            provider: 'polymarket',
-          });
+          // Only add markets with valid condition IDs
+          if (cid) {
+            relevantMarkets.push({
+              id: cid,
+              title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
+              description: event.description || mainMarket.description || '',
+              yesPrice,
+              noPrice,
+              volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
+              provider: 'polymarket',
+            });
+          }
         }
       }
       

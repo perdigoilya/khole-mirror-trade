@@ -136,8 +136,19 @@ const Feed = () => {
     }
   };
 
-  const handleMarketClick = (marketId: string) => {
-    navigate(`/market/${marketId}`);
+  const handleMarketClick = (market: RelatedMarket) => {
+    navigate(`/market/${market.id}`, { 
+      state: { 
+        market: {
+          ...market,
+          endDate: "TBD",
+          status: "Active",
+          category: "Market News",
+          volumeRaw: 0,
+          liquidityRaw: 0,
+        } 
+      } 
+    });
   };
 
   const refreshTwitterFeed = async (silent = false) => {
@@ -357,7 +368,7 @@ const Feed = () => {
                         <Card 
                           key={market.id} 
                           className="p-4 hover:border-primary/50 transition-colors cursor-pointer"
-                          onClick={() => handleMarketClick(market.id)}
+                          onClick={() => handleMarketClick(market)}
                         >
                           <Badge variant="outline" className="mb-2 text-xs">
                             {market.provider}
