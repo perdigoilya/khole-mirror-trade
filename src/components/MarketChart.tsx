@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import fomoLogo from "@/assets/fomo-logo.png";
 
 interface ChartData {
   timestamp: number;
@@ -140,54 +141,71 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
   const latestPrice = data[data.length - 1]?.price || 0;
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
-        <defs>
-          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="hsl(var(--chart-orange))" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="hsl(var(--chart-orange))" stopOpacity={0}/>
-          </linearGradient>
-        </defs>
-        <CartesianGrid 
-          strokeDasharray="0" 
-          stroke="hsl(var(--border))" 
-          opacity={0.1}
-          horizontal={true}
-          vertical={false}
-        />
-        <XAxis 
-          dataKey="timestamp" 
-          tickFormatter={formatXAxis}
-          stroke="hsl(var(--muted-foreground))"
-          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-          axisLine={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
-          tickLine={false}
-        />
-        <YAxis 
-          domain={[0, 100]}
-          stroke="hsl(var(--muted-foreground))"
-          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-          tickFormatter={(value) => `${value}%`}
-          axisLine={false}
-          tickLine={false}
-          width={45}
-        />
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }} />
-        <Line 
-          type="monotone" 
-          dataKey="price" 
-          stroke="hsl(var(--chart-orange))" 
-          strokeWidth={2.5}
-          dot={false}
-          activeDot={{ 
-            r: 5, 
-            fill: "hsl(var(--chart-orange))",
-            stroke: "hsl(var(--background))",
-            strokeWidth: 2
-          }}
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <div className="relative w-full h-full">
+      {/* Logo Watermark */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center pointer-events-none z-0"
+        style={{ 
+          backgroundImage: `url(${fomoLogo})`,
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: '120px',
+          opacity: 0.1
+        }}
+      />
+      
+      {/* Chart */}
+      <div className="relative z-10 w-full h-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+            <defs>
+              <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--chart-orange))" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="hsl(var(--chart-orange))" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid 
+              strokeDasharray="0" 
+              stroke="hsl(var(--border))" 
+              opacity={0.1}
+              horizontal={true}
+              vertical={false}
+            />
+            <XAxis 
+              dataKey="timestamp" 
+              tickFormatter={formatXAxis}
+              stroke="hsl(var(--muted-foreground))"
+              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+              axisLine={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+              tickLine={false}
+            />
+            <YAxis 
+              domain={[0, 100]}
+              stroke="hsl(var(--muted-foreground))"
+              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+              tickFormatter={(value) => `${value}%`}
+              axisLine={false}
+              tickLine={false}
+              width={45}
+            />
+            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }} />
+            <Line 
+              type="monotone" 
+              dataKey="price" 
+              stroke="hsl(var(--chart-orange))" 
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ 
+                r: 5, 
+                fill: "hsl(var(--chart-orange))",
+                stroke: "hsl(var(--background))",
+                strokeWidth: 2
+              }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 };
