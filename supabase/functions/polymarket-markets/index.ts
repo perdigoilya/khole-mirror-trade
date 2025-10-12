@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { searchTerm, offset = 0 } = await req.json().catch(() => ({}));
+    const { searchTerm, offset = 0, marketId } = await req.json().catch(() => ({}));
 
     console.log("Fetching Polymarket events...", searchTerm ? `Searching for: ${searchTerm}` : "", `Offset: ${offset}`);
 
@@ -39,6 +39,20 @@ serve(async (req) => {
     let events: any[] = Array.isArray(payload)
       ? payload
       : (payload?.events || payload?.data || []);
+
+    // If a specific marketId (conditionId) is provided, filter to only the event containing that market
+    if (marketId) {
+      const target = String(marketId).toLowerCase();
+      events = events.filter((ev: any) => {
+        const ms = Array.isArray(ev?.markets) ? ev.markets : [];
+        return ms.some((m: any) => {
+          const cid = String(m?.conditionId || m?.condition_id || '').toLowerCase();
+          const mid = String(m?.id || '').toLowerCase();
+          return cid === target || mid === target;
+        });
+      });
+    }
+
     console.log("Fetched events count:", Array.isArray(events) ? events.length : 0);
     console.log("Sample event data:", JSON.stringify(events[0], null, 2).slice(0, 1000));
 

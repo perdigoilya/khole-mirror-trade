@@ -31,92 +31,19 @@ serve(async (req) => {
 
     const now = Math.floor(Date.now() / 1000);
 
-    // Determine token id (CLOB token ID). If a condition id was passed, map via simplified-markets
-    let tokenId = marketId as string;
+    // Determine token id (CLOB token ID). The prices-history endpoint requires the CLOB token id.
+    // We now expect the frontend to pass the correct token id (clobTokenId). To avoid rate limits and 422s,
+    // we no longer paginate external endpoints here. If the provided id is not a numeric token id, we return
+    // an empty history so the UI can fallback gracefully.
+    let tokenId = String(marketId);
 
-    const isDecimalId = /^[0-9]+$/.test(tokenId);
-    if (!isDecimalId) {
-      try {
-        // Resolve condition_id -> CLOB token id by paginating simplified-markets
-        let cursor = "";
-        let foundTokenId: string | null = null;
-        let safety = 0;
-
-        while (safety < 50) {
-          const url = cursor
-            ? `https://clob.polymarket.com/simplified-markets?next_cursor=${encodeURIComponent(cursor)}`
-            : 'https://clob.polymarket.com/simplified-markets';
-          const simpRes = await fetch(url, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
-          });
-          if (!simpRes.ok) {
-            console.warn('Simplified markets page fetch failed:', simpRes.status);
-            break;
-          }
-          const simpPayload = await simpRes.json();
-          const markets: any[] = Array.isArray(simpPayload) ? simpPayload : (simpPayload?.data || []);
-          const match = markets.find((m: any) => {
-            const cid = (m.condition_id || m.conditionId || '').toLowerCase();
-            return cid === tokenId.toLowerCase();
-          });
-          if (match && Array.isArray(match.tokens) && match.tokens.length > 0) {
-            // Pick token with highest volume or first as fallback
-            const pick = match.tokens.reduce((best: any, t: any) => {
-              const vBest = Number(best?.volume ?? best?.volume_24hr ?? 0) || 0;
-              const v = Number(t?.volume ?? t?.volume_24hr ?? 0) || 0;
-              return v > vBest ? t : best;
-            }, match.tokens[0]);
-            foundTokenId = String(pick.token_id || pick.tokenId || pick.id);
-            break;
-          }
-          const next = (simpPayload?.next_cursor ?? simpPayload?.nextCursor ?? '');
-          if (!next || next === 'LTE=') {
-            break;
-          }
-          cursor = next;
-          safety++;
-        }
-
-        if (foundTokenId) {
-          tokenId = foundTokenId;
-        } else {
-          // Fallback: use Gamma API to resolve CLOB token IDs for the market
-          const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets/${tokenId}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json', 'User-Agent': 'LovableCloud/1.0 (+https://lovable.dev)' },
-          });
-          if (gammaRes.ok) {
-            const mkt = await gammaRes.json();
-            const ids = Array.isArray(mkt?.clobTokenIds)
-              ? mkt.clobTokenIds
-              : (typeof mkt?.clobTokenIds === 'string' ? mkt.clobTokenIds.split(',') : []);
-            if (ids.length > 0) {
-              tokenId = String(ids[0]).trim();
-            } else if (Array.isArray(mkt?.tokens) && mkt.tokens.length > 0) {
-              tokenId = String(mkt.tokens[0]?.clobTokenId || mkt.tokens[0]?.token_id || mkt.tokens[0]?.id);
-            } else {
-              console.warn('No token ids on gamma market response, returning empty history');
-              return new Response(
-                JSON.stringify({ data: [], message: 'No price history available' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
-            }
-          } else {
-            console.warn('Gamma market lookup failed:', gammaRes.status);
-            return new Response(
-              JSON.stringify({ data: [], message: 'No price history available' }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-        }
-      } catch (e) {
-        console.warn('Error resolving token id from condition id:', e);
-        return new Response(
-          JSON.stringify({ data: [], message: 'No price history available' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+    const isNumericTokenId = /^[0-9]+$/.test(tokenId);
+    if (!isNumericTokenId) {
+      console.warn('polymarket-price-history: non-numeric id provided; expected CLOB token id. Returning empty history. id=', tokenId);
+      return new Response(
+        JSON.stringify({ data: [], message: 'No price history available' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     console.log(`Fetching price history for token ${tokenId}, range: ${timeRange}`);
