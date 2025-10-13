@@ -72,6 +72,8 @@ const Portfolio = () => {
         throw new Error("No active session");
       }
 
+      console.log("Fetching portfolio data...");
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-portfolio`,
         {
@@ -82,12 +84,38 @@ const Portfolio = () => {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch portfolio");
+        const errorText = await response.text();
+        console.error("Portfolio fetch error:", errorText);
+        throw new Error(`Failed to fetch portfolio: ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log("Portfolio data received:", data);
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       setPositions(data.positions || []);
-      setSummary(data.summary || null);
+      setSummary(data.summary || {
+        totalValue: 0,
+        totalPnl: 0,
+        totalRealizedPnl: 0,
+        activePositions: 0,
+        totalInvested: 0,
+      });
+
+      if (data.positions && data.positions.length > 0) {
+        toast({
+          title: "Portfolio loaded",
+          description: `Found ${data.positions.length} active position${data.positions.length > 1 ? 's' : ''}`,
+        });
+      } else {
+        toast({
+          title: "Portfolio loaded",
+          description: "No active positions found",
+        });
+      }
     } catch (error: any) {
       console.error("Error fetching portfolio:", error);
       toast({
@@ -258,46 +286,50 @@ const Portfolio = () => {
                 )}
 
                 {/* Portfolio Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm text-muted-foreground">Total Value</p>
-                      <Badge variant="outline" className="text-xs">Live</Badge>
-                    </div>
-                    <p className="text-2xl font-bold text-foreground mb-1">
-                      ${summary?.totalValue?.toFixed(2) || '0.00'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Initial: ${summary?.totalInvested?.toFixed(2) || '0.00'}
-                    </p>
-                  </Card>
-                  
-                  <Card className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm text-muted-foreground">Total P&L</p>
-                      <TrendingUp className={`h-4 w-4 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} />
-                    </div>
-                    <p className={`text-2xl font-bold mb-1 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                      {(summary?.totalPnl || 0) >= 0 ? '+' : ''}${summary?.totalPnl?.toFixed(2) || '0.00'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Realized: ${summary?.totalRealizedPnl?.toFixed(2) || '0.00'}
-                    </p>
-                  </Card>
-                  
-                  <Card className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm text-muted-foreground">Active Positions</p>
-                      <BarChart3 className="h-4 w-4 text-primary" />
-                    </div>
-                    <p className="text-2xl font-bold text-foreground mb-1">
-                      {summary?.activePositions || 0}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Open markets
-                    </p>
-                  </Card>
-                </div>
+                {summary && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-muted-foreground">Total Value</p>
+                        <Badge variant="outline" className="text-xs">
+                          {loading ? "Loading..." : "Live"}
+                        </Badge>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground mb-1">
+                        ${summary?.totalValue?.toFixed(2) || '0.00'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Initial: ${summary?.totalInvested?.toFixed(2) || '0.00'}
+                      </p>
+                    </Card>
+                    
+                    <Card className="p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-muted-foreground">Total P&L</p>
+                        <TrendingUp className={`h-4 w-4 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                      </div>
+                      <p className={`text-2xl font-bold mb-1 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {(summary?.totalPnl || 0) >= 0 ? '+' : ''}${summary?.totalPnl?.toFixed(2) || '0.00'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Realized: ${summary?.totalRealizedPnl?.toFixed(2) || '0.00'}
+                      </p>
+                    </Card>
+                    
+                    <Card className="p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-muted-foreground">Active Positions</p>
+                        <BarChart3 className="h-4 w-4 text-primary" />
+                      </div>
+                      <p className="text-2xl font-bold text-foreground mb-1">
+                        {summary?.activePositions || 0}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Open markets
+                      </p>
+                    </Card>
+                  </div>
+                )}
 
                 {/* Positions List */}
                 {positions.length === 0 ? (

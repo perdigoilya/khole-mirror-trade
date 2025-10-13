@@ -52,39 +52,74 @@ serve(async (req) => {
     }
 
     const walletAddress = credentials.wallet_address;
+    console.log("Fetching portfolio for wallet:", walletAddress);
 
     // Fetch positions from Polymarket
     const positionsResponse = await fetch(
       `https://data-api.polymarket.com/positions?user=${walletAddress}`
     );
 
+    console.log("Positions API response status:", positionsResponse.status);
+
     if (!positionsResponse.ok) {
+      const errorText = await positionsResponse.text();
+      console.error("Polymarket positions API error:", errorText);
       throw new Error(`Polymarket API error: ${positionsResponse.statusText}`);
     }
 
-    const positions = await positionsResponse.json();
+    const positionsData = await positionsResponse.json();
+    console.log("Raw positions data:", JSON.stringify(positionsData).substring(0, 500));
+
+    // Handle both array and object responses
+    const positions = Array.isArray(positionsData) ? positionsData : [];
+    console.log("Processed positions count:", positions.length);
 
     // Fetch total value
     const valueResponse = await fetch(
       `https://data-api.polymarket.com/value?user=${walletAddress}`
     );
 
+    console.log("Value API response status:", valueResponse.status);
+
     let totalValue = 0;
     if (valueResponse.ok) {
       const valueData = await valueResponse.json();
+      console.log("Value data:", JSON.stringify(valueData).substring(0, 200));
       if (Array.isArray(valueData) && valueData.length > 0) {
         totalValue = valueData[0].value || 0;
       }
     }
 
-    // Calculate summary statistics
+    // Calculate current value from positions if API doesn't provide it
+    const calculatedValue = positions.reduce((sum: number, pos: any) => {
+      return sum + (pos.currentValue || pos.value || 0);
+    }, 0);
+
+    // Use calculated value if API value is 0
+    if (totalValue === 0 && calculatedValue > 0) {
+      totalValue = calculatedValue;
+    }
+
+    console.log("Total value:", totalValue, "Calculated value:", calculatedValue);
+
+    // Calculate summary statistics with better field handling
     const summary = {
       totalValue,
-      totalPnl: positions.reduce((sum: number, pos: any) => sum + (pos.cashPnl || 0), 0),
-      totalRealizedPnl: positions.reduce((sum: number, pos: any) => sum + (pos.realizedPnl || 0), 0),
+      totalPnl: positions.reduce((sum: number, pos: any) => {
+        const pnl = pos.cashPnl || pos.pnl || pos.unrealizedPnl || 0;
+        return sum + pnl;
+      }, 0),
+      totalRealizedPnl: positions.reduce((sum: number, pos: any) => {
+        return sum + (pos.realizedPnl || 0);
+      }, 0),
       activePositions: positions.length,
-      totalInvested: positions.reduce((sum: number, pos: any) => sum + (pos.initialValue || 0), 0),
+      totalInvested: positions.reduce((sum: number, pos: any) => {
+        const invested = pos.initialValue || pos.invested || (pos.size * pos.avgPrice) || 0;
+        return sum + invested;
+      }, 0),
     };
+
+    console.log("Summary calculated:", summary);
 
     return new Response(
       JSON.stringify({
