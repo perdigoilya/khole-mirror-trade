@@ -12,10 +12,12 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const { isKalshiConnected, isPolymarketConnected, user, kalshiCredentials } = useTrading();
   const [showPlatformDialog, setShowPlatformDialog] = useState(false);
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
@@ -41,8 +43,8 @@ const Navigation = () => {
     
     if (!isKalshiConnected || !kalshiCredentials) {
       toast({
-        title: "Connect Kalshi",
-        description: "Please connect your Kalshi account to search markets",
+        title: t.nav.connectKalshi,
+        description: t.nav.connectKalshiDesc,
         variant: "destructive",
       });
       setShowPlatformDialog(true);
@@ -54,11 +56,11 @@ const Navigation = () => {
   };
   
   const navItems = [
-    { path: "/markets", label: "Markets" },
-    { path: "/feed", label: "Feed" },
-    { path: "/watchlist", label: "Watchlist" },
-    { path: "/portfolio", label: "Portfolio" },
-    { path: "/faq", label: "FAQ" },
+    { path: "/markets", label: t.nav.markets },
+    { path: "/feed", label: t.nav.feed },
+    { path: "/watchlist", label: t.nav.watchlist },
+    { path: "/portfolio", label: t.nav.portfolio },
+    { path: "/faq", label: t.nav.faq },
   ];
 
   return (
@@ -93,7 +95,7 @@ const Navigation = () => {
             <form onSubmit={handleSearch} className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Search markets..." 
+                placeholder={t.nav.searchPlaceholder}
                 className="pl-10 bg-muted/50 border-border"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -110,7 +112,7 @@ const Navigation = () => {
                   variant={(isKalshiConnected || isPolymarketConnected) ? "outline" : "default"}
                   className="font-medium text-sm hidden lg:flex"
                 >
-                  {(isKalshiConnected || isPolymarketConnected) ? "Connected" : "Connect"}
+                  {(isKalshiConnected || isPolymarketConnected) ? t.nav.connected : t.nav.connect}
                 </Button>
                 <Button 
                   onClick={async () => {
@@ -120,7 +122,7 @@ const Navigation = () => {
                   variant="outline" 
                   className="font-medium text-sm"
                 >
-                  Logout
+                  {t.nav.logout}
                 </Button>
               </>
             ) : (
@@ -129,7 +131,7 @@ const Navigation = () => {
                 variant="default" 
                 className="font-medium text-sm"
               >
-                Login
+                {t.nav.login}
               </Button>
             )}
           </div>
@@ -150,7 +152,7 @@ const Navigation = () => {
                 }} className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input 
-                    placeholder="Search markets..." 
+                    placeholder={t.nav.searchPlaceholder}
                     className="pl-10 bg-muted/50 border-border"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -188,7 +190,7 @@ const Navigation = () => {
                         variant={(isKalshiConnected || isPolymarketConnected) ? "outline" : "default"}
                         className="w-full font-medium"
                       >
-                        {(isKalshiConnected || isPolymarketConnected) ? "Connected" : "Connect Platform"}
+                        {(isKalshiConnected || isPolymarketConnected) ? t.nav.connected : t.nav.connectPlatform}
                       </Button>
                       <Button 
                         onClick={async () => {
@@ -199,7 +201,7 @@ const Navigation = () => {
                         variant="outline" 
                         className="w-full font-medium"
                       >
-                        Logout
+                        {t.nav.logout}
                       </Button>
                     </>
                   ) : (
@@ -211,7 +213,7 @@ const Navigation = () => {
                       variant="default" 
                       className="w-full font-medium"
                     >
-                      Login
+                      {t.nav.login}
                     </Button>
                   )}
                 </div>

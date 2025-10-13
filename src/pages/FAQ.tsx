@@ -5,36 +5,39 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const FAQ = () => {
+  const { t } = useLanguage();
+  
   const faqs = [
     {
-      question: "What is FOMO App?",
-      answer: "FOMO App is a comprehensive prediction markets platform that aggregates markets from Kalshi and Polymarket. Track real-time odds, manage your portfolio across multiple chains, and never miss trending prediction markets with our curated social feed.",
+      question: t.faq.question1,
+      answer: t.faq.answer1,
     },
     {
-      question: "How do I connect to Polymarket?",
-      answer: "Navigate to the Portfolio page and click 'Connect' under Polymarket. You'll connect your wallet using WalletConnect - simply scan the QR code with your mobile wallet or connect through your browser extension. Your wallet address is stored securely and used to fetch your positions.",
+      question: t.faq.question2,
+      answer: t.faq.answer2,
     },
     {
-      question: "How do I connect to Kalshi?",
-      answer: "Go to the Portfolio page and click 'Connect' under Kalshi. You'll need your Kalshi API credentials (API Key ID and Private Key) from your Kalshi account settings. Your credentials are encrypted and stored securely in our database.",
+      question: t.faq.question3,
+      answer: t.faq.answer3,
     },
     {
-      question: "Is my data secure?",
-      answer: "Yes. For Polymarket, we use WalletConnect which never exposes your private keys - you maintain full control through your wallet. Kalshi credentials are encrypted and stored securely. We never have access to execute trades without your explicit permission.",
+      question: t.faq.question4,
+      answer: t.faq.answer4,
     },
     {
-      question: "What chains does FOMO App support?",
-      answer: "FOMO App supports multiple chains for viewing your portfolio balances: Polygon (where Polymarket operates), Ethereum mainnet, Base, Arbitrum, and Optimism. You can switch between chains to view your native token balances on each network.",
+      question: t.faq.question5,
+      answer: t.faq.answer5,
     },
     {
-      question: "How does the watchlist work?",
-      answer: "Add any market to your watchlist by clicking the bookmark icon. Your watchlist is saved to your account and syncs across devices. Access it anytime from the Watchlist page to track markets you're interested in.",
+      question: t.faq.question6,
+      answer: t.faq.answer6,
     },
     {
-      question: "Can I use FOMO App on mobile?",
-      answer: "Yes! FOMO App is fully responsive and works great on mobile devices. For Polymarket connections, mobile wallet apps make it even easier to connect via WalletConnect.",
+      question: t.faq.question7,
+      answer: t.faq.answer7,
     },
   ];
 
@@ -45,9 +48,9 @@ const FAQ = () => {
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto">
             <div className="mb-12 text-center">
-              <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
+              <h1 className="text-4xl font-bold mb-4">{t.faq.title}</h1>
               <p className="text-muted-foreground text-lg">
-                Everything you need to know about FOMO App
+                {t.faq.subtitle}
               </p>
             </div>
 
@@ -69,9 +72,9 @@ const FAQ = () => {
             </Accordion>
 
             <div className="mt-12 p-8 rounded-lg border border-border bg-card text-center">
-              <h2 className="text-2xl font-bold mb-2">Still have questions?</h2>
+              <h2 className="text-2xl font-bold mb-2">{t.faq.stillHaveQuestions}</h2>
               <p className="text-muted-foreground mb-4">
-                Reach out to us on Twitter or check our documentation
+                {t.faq.reachOut}
               </p>
               <a
                 href="https://x.com/tryFOMOapp"
@@ -79,7 +82,7 @@ const FAQ = () => {
                 rel="noopener noreferrer"
                 className="text-primary hover:underline font-semibold"
               >
-                Contact Support →
+                {t.faq.contactSupport}
               </a>
             </div>
           </div>
