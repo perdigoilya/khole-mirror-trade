@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ArrowLeft, LineChart, Star, Share2, TrendingUp, ExternalLink, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -52,22 +52,25 @@ const MarketDetail = () => {
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<{outcome: string, side: 'yes' | 'no', price: number} | null>(null);
 
+  const marketDetailCacheRef = useRef<Map<string, { market: Market, timestamp: number }>>(new Map());
+  const CACHE_DURATION = 60000; // 60 seconds
+  
   useEffect(() => {
     const passed = (location.state as any)?.market;
     // Only fetch if we don't have complete market data
     if (!passed || !passed.clobTokenId || !passed.endDate || !passed.status) {
       fetchMarket();
+    } else {
+      setMarket(passed);
+      setLoading(false);
     }
   }, [marketId]);
-
-  const marketDetailCacheRef = useState<Map<string, { market: Market, timestamp: number }>>(new Map())[0];
-  const CACHE_DURATION = 30000; // 30 seconds
 
   const fetchMarket = async () => {
     if (!marketId) return;
     
     // Check cache
-    const cached = marketDetailCacheRef.get(marketId);
+    const cached = marketDetailCacheRef.current.get(marketId);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       setMarket(cached.market);
       return;
@@ -84,7 +87,7 @@ const MarketDetail = () => {
       const foundMarket = data?.markets?.find((m: Market) => m.id === marketId);
       if (foundMarket) {
         // Cache the result
-        marketDetailCacheRef.set(marketId, {
+        marketDetailCacheRef.current.set(marketId, {
           market: foundMarket,
           timestamp: Date.now()
         });

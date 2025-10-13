@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, memo } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -15,15 +15,27 @@ interface MarketChartProps {
   timeRange: '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL';
 }
 
-export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
+export const MarketChart = memo(({ marketId, timeRange }: MarketChartProps) => {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Let the backend resolve condition IDs (0x...) to token IDs; avoid guessing here
+  
+  // Cache for price history data
+  const cacheRef = useRef<Map<string, { data: ChartData[], timestamp: number }>>(new Map());
+  const CACHE_DURATION = 60000; // 60 seconds
 
   useEffect(() => {
     const fetchPriceHistory = async () => {
+      const cacheKey = `${marketId}-${timeRange}`;
+      
+      // Check cache first
+      const cached = cacheRef.current.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+        setData(cached.data);
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
       setError(null);
       try {
@@ -37,6 +49,11 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
         if (fetchError) throw fetchError;
         
         if (result?.data && result.data.length > 0) {
+          // Cache the result
+          cacheRef.current.set(cacheKey, {
+            data: result.data,
+            timestamp: Date.now()
+          });
           setData(result.data);
         } else {
           setError("No price data available");
@@ -178,4 +195,4 @@ export const MarketChart = ({ marketId, timeRange }: MarketChartProps) => {
       </div>
     </div>
   );
-};
+});
