@@ -60,7 +60,19 @@ const MarketDetail = () => {
     }
   }, [marketId]);
 
+  const marketDetailCacheRef = useState<Map<string, { market: Market, timestamp: number }>>(new Map())[0];
+  const CACHE_DURATION = 30000; // 30 seconds
+
   const fetchMarket = async () => {
+    if (!marketId) return;
+    
+    // Check cache
+    const cached = marketDetailCacheRef.get(marketId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      setMarket(cached.market);
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('polymarket-markets', {
@@ -71,6 +83,11 @@ const MarketDetail = () => {
       
       const foundMarket = data?.markets?.find((m: Market) => m.id === marketId);
       if (foundMarket) {
+        // Cache the result
+        marketDetailCacheRef.set(marketId, {
+          market: foundMarket,
+          timestamp: Date.now()
+        });
         setMarket(foundMarket);
       }
     } catch (error) {

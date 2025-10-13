@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
 import { Card } from "@/components/ui/card";
@@ -149,8 +149,21 @@ const Feed = () => {
     }
   };
 
+  const marketSearchCacheRef = useRef<Map<string, { markets: RelatedMarket[], timestamp: number }>>(new Map());
+  const MARKET_CACHE_DURATION = 60000; // 1 minute
+
   const handleTweetClick = async (tweet: NewsItem) => {
     setSelectedTweet(tweet);
+    
+    // Check cache first
+    const cacheKey = `${tweet.tweet_id}-${activeProvider}`;
+    const cached = marketSearchCacheRef.current.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < MARKET_CACHE_DURATION) {
+      setRelatedMarkets(cached.markets);
+      return;
+    }
+
     setIsLoadingMarkets(true);
     setRelatedMarkets([]);
 
@@ -162,6 +175,11 @@ const Feed = () => {
       if (error) throw error;
 
       if (data?.markets) {
+        // Cache the results
+        marketSearchCacheRef.current.set(cacheKey, {
+          markets: data.markets,
+          timestamp: Date.now()
+        });
         setRelatedMarkets(data.markets);
       }
     } catch (error: any) {

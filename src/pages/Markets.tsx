@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import * as React from "react";
 import Footer from "@/components/Footer";
 import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
@@ -48,22 +48,54 @@ const Markets = () => {
   const [maxPrice, setMaxPrice] = useState<number>(100);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  // Cache for market data
+  const marketCacheRef = useRef<Map<string, { data: any[], timestamp: number }>>(new Map());
+  const CACHE_DURATION = 30000; // 30 seconds
+  
+  // Debounce timer
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
+
   useEffect(() => {
-    // Reset offset and fetch markets on mount and when platform/search params change
-    setOffset(0);
-    const searchTerm = searchParams.get("search");
-    
-    if (platform === 'kalshi') {
-      if (isKalshiConnected && kalshiCredentials) {
-        fetchMarkets(searchTerm, 'kalshi', 0, false);
-      }
-    } else {
-      // Polymarket (public API, no credentials needed)
-      fetchMarkets(searchTerm, 'polymarket', 0, false);
+    // Debounce search changes
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
+
+    debounceTimerRef.current = setTimeout(() => {
+      setOffset(0);
+      const searchTerm = searchParams.get("search");
+      
+      if (platform === 'kalshi') {
+        if (isKalshiConnected && kalshiCredentials) {
+          fetchMarkets(searchTerm, 'kalshi', 0, false);
+        }
+      } else {
+        fetchMarkets(searchTerm, 'polymarket', 0, false);
+      }
+    }, 300); // 300ms debounce
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [platform, isKalshiConnected, kalshiCredentials, searchParams]);
 
-  const fetchMarkets = async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
+  const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
+    // Generate cache key
+    const cacheKey = `${provider}-${searchTerm || 'all'}-${loadOffset}`;
+    
+    // Check cache first
+    const cached = marketCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      if (append) {
+        setMarkets(prev => [...prev, ...cached.data]);
+      } else {
+        setMarkets(cached.data);
+      }
+      return;
+    }
+
     if (append) {
       setLoadingMore(true);
     } else {
@@ -74,12 +106,10 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi' && kalshiCredentials) {
-        // Fetch from Kalshi (requires credentials)
         result = await supabase.functions.invoke('kalshi-markets', {
           body: kalshiCredentials
         });
       } else {
-        // Fetch from Polymarket (public API)
         result = await supabase.functions.invoke('polymarket-markets', {
           body: { searchTerm, offset: loadOffset }
         });
@@ -90,7 +120,6 @@ const Markets = () => {
       if (!error && data?.markets) {
         let filteredMarkets = data.markets;
         
-        // Additional client-side filtering for Kalshi (Polymarket already filters server-side)
         if (provider === 'kalshi' && searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
             market.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,24 +127,34 @@ const Markets = () => {
           );
         }
         
+        // Update cache
+        marketCacheRef.current.set(cacheKey, {
+          data: filteredMarkets,
+          timestamp: Date.now()
+        });
+        
         if (append) {
           setMarkets(prev => [...prev, ...filteredMarkets]);
         } else {
           setMarkets(filteredMarkets);
         }
       } else {
+        if (!append) {
+          toast({
+            title: "Error",
+            description: error?.message || data?.error || "Failed to fetch markets",
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      if (!append) {
         toast({
           title: "Error",
-          description: error?.message || data?.error || "Failed to fetch markets",
+          description: "Failed to fetch markets",
           variant: "destructive",
         });
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch markets",
-        variant: "destructive",
-      });
     } finally {
       if (append) {
         setLoadingMore(false);
@@ -123,7 +162,7 @@ const Markets = () => {
         setLoading(false);
       }
     }
-  };
+  }, [kalshiCredentials, toast]);
   
   const loadMoreMarkets = () => {
     const searchTerm = searchParams.get("search");
