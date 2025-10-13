@@ -46,18 +46,20 @@ interface RelatedMarket {
   id: string;
   title: string;
   description: string;
-  yesPrice: number;
-  noPrice: number;
+  yesPrice?: number;
+  noPrice?: number;
   volume: string;
   liquidity: string;
   endDate: string;
   status: string;
   category: string;
-  provider: string;
+  provider: 'kalshi' | 'polymarket';
   volumeRaw: number;
   liquidityRaw: number;
   clobTokenId?: string;
   image?: string;
+  isMultiOutcome?: boolean;
+  subMarkets?: RelatedMarket[];
 }
 
 const Feed = () => {
@@ -195,9 +197,17 @@ const Feed = () => {
   };
 
   const handleMarketClick = (market: RelatedMarket) => {
+    // Ensure all required fields are present to prevent refetch
+    const completeMarket = {
+      ...market,
+      clobTokenId: market.clobTokenId || market.id,
+      endDate: market.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      status: market.status || 'active'
+    };
+    
     navigate(`/market/${market.id}`, { 
       state: { 
-        market: market
+        market: completeMarket
       } 
     });
   };

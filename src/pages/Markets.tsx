@@ -344,7 +344,9 @@ const Markets = () => {
               volumeRaw: market.volumeRaw || 0,
               liquidityRaw: market.liquidityRaw || 0,
               category: market.category || 'Other',
-              status: market.status || 'Active'
+              status: market.status || 'Active',
+              clobTokenId: market.clobTokenId || market.id,
+              endDate: market.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
             };
             navigate(`/market/${market.id}`, { state: { market: marketToNavigate }});
           }}
@@ -524,7 +526,9 @@ const Markets = () => {
               volumeRaw: market.volumeRaw || 0,
               liquidityRaw: market.liquidityRaw || 0,
               category: market.category || 'Other',
-              status: market.status || 'Active'
+              status: market.status || 'Active',
+              clobTokenId: market.clobTokenId || market.id,
+              endDate: market.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
             };
             navigate(`/market/${market.id}`, { state: { market: marketToNavigate }});
           }}
