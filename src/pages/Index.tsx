@@ -4,23 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Footer from "@/components/Footer";
 import nameLogo from "@/assets/name-logo.png";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Index = () => {
+  const { t } = useLanguage();
+  
   const features = [
     {
       icon: Zap,
-      title: "Alpha-Matched News Feed",
-      description: "Real-time news matched with relevant markets. Snipe opportunities before resolution. Be first to confirmed results.",
+      title: t.home.featureTitle1,
+      description: t.home.featureDesc1,
     },
     {
       icon: BarChart3,
-      title: "High-Performance Terminal",
-      description: "Real-time WebSocket feeds. Instant order execution. Advanced charting. Built for serious traders.",
+      title: t.home.featureTitle2,
+      description: t.home.featureDesc2,
     },
     {
       icon: Shield,
-      title: "Streamlined Trading",
-      description: "Professional portfolio management. Direct Kalshi integration. Zero friction, maximum speed.",
+      title: t.home.featureTitle3,
+      description: t.home.featureDesc3,
     },
   ];
 
@@ -37,12 +40,12 @@ const Index = () => {
                 variant="outline" 
                 className="border-primary text-primary text-sm px-3 py-1 font-display"
               >
-                ALPHA
+                {t.home.badge}
               </Badge>
             </div>
 
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-fade-in opacity-0 [animation-delay:300ms] [animation-fill-mode:forwards]">
-              Match breaking news with prediction markets in real-time. Snipe opportunities before resolution. The alpha terminal for serious traders.
+              {t.home.tagline}
             </p>
 
             <a 
@@ -51,7 +54,7 @@ const Index = () => {
               rel="noopener noreferrer"
               className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer animate-fade-in opacity-0 [animation-delay:500ms] [animation-fill-mode:forwards]"
             >
-              <span className="text-base text-foreground font-medium">$FOMO now live on Four.meme</span>
+              <span className="text-base text-foreground font-medium">{t.home.liveLink}</span>
               <ExternalLink className="h-5 w-5 text-primary" />
             </a>
 
@@ -62,7 +65,7 @@ const Index = () => {
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-display text-lg px-8 py-6 group"
               >
                 <Link to="/markets">
-                  Start Trading
+                  {t.home.startTrading}
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </Button>
@@ -74,7 +77,7 @@ const Index = () => {
                 className="border-border hover:bg-muted font-display text-lg px-8 py-6"
               >
                 <Link to="/feed">
-                  NEWS FEED
+                  {t.home.viewMarkets}
                 </Link>
               </Button>
             </div>

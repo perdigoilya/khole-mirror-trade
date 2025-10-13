@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TradingProvider } from "@/contexts/TradingContext";
 import { Web3Provider } from "@/contexts/Web3Provider";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import Navigation from "@/components/Navigation";
 import Index from "./pages/Index";
 import Markets from "./pages/Markets";
@@ -20,29 +21,31 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <Web3Provider>
-      <TradingProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Navigation />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/markets" element={<Markets />} />
-              <Route path="/feed" element={<Feed />} />
-              <Route path="/market/:marketId" element={<MarketDetail />} />
-              <Route path="/portfolio" element={<Portfolio />} />
-              <Route path="/watchlist" element={<Watchlist />} />
-              <Route path="/faq" element={<FAQ />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </TooltipProvider>
-      </TradingProvider>
-    </Web3Provider>
+    <LanguageProvider>
+      <Web3Provider>
+        <TradingProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Navigation />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/markets" element={<Markets />} />
+                <Route path="/feed" element={<Feed />} />
+                <Route path="/market/:marketId" element={<MarketDetail />} />
+                <Route path="/portfolio" element={<Portfolio />} />
+                <Route path="/watchlist" element={<Watchlist />} />
+                <Route path="/faq" element={<FAQ />} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </TradingProvider>
+      </Web3Provider>
+    </LanguageProvider>
   </QueryClientProvider>
 );
 

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X } from "lucide-react";
+import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Sheet,
   SheetContent,
@@ -28,6 +29,7 @@ interface Tweet {
 }
 
 const Footer = () => {
+  const { language, setLanguage, t } = useLanguage();
   const [systemStatus, setSystemStatus] = useState<'operational' | 'degraded' | 'down'>('operational');
   const [latestTweets, setLatestTweets] = useState<Tweet[]>([]);
   const [isLoadingTweets, setIsLoadingTweets] = useState(false);
@@ -95,10 +97,10 @@ const Footer = () => {
     : 'text-red-500';
 
   const statusText = systemStatus === 'operational'
-    ? 'Systems Operational'
+    ? t.footer.systemOperational
     : systemStatus === 'degraded'
-    ? 'Degraded Performance'
-    : 'Service Down';
+    ? t.footer.systemDegraded
+    : t.footer.systemDown;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm border-t border-border">
@@ -114,14 +116,14 @@ const Footer = () => {
           <SheetTrigger asChild>
             <Button variant="ghost" size="sm" className="gap-2">
               <Activity className="h-4 w-4" />
-              <span className="text-sm font-medium">Feed Tracker</span>
+              <span className="text-sm font-medium">{t.footer.feedTracker}</span>
             </Button>
           </SheetTrigger>
           <SheetContent side="bottom" className="h-[60vh]">
             <SheetHeader>
-              <SheetTitle>Latest Feed Activity</SheetTitle>
+              <SheetTitle>{t.footer.feedTrackerTitle}</SheetTitle>
               <SheetDescription>
-                Real-time updates from prediction market news sources
+                {t.footer.feedTrackerDesc}
               </SheetDescription>
             </SheetHeader>
             
@@ -132,7 +134,7 @@ const Footer = () => {
                 </div>
               ) : latestTweets.length === 0 ? (
                 <div className="text-center p-8 text-muted-foreground">
-                  No recent activity. Check back soon!
+                  {t.footer.noActivity}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -171,8 +173,18 @@ const Footer = () => {
           </SheetContent>
         </Sheet>
 
-        {/* Right: X Link & Help */}
+        {/* Right: Language, X Link & Help */}
         <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
+            className="gap-2"
+          >
+            <Languages className="h-4 w-4" />
+            <span className="text-sm font-medium">{language === 'en' ? '中文' : 'EN'}</span>
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"
@@ -192,7 +204,7 @@ const Footer = () => {
           <Button variant="outline" size="sm" asChild>
             <Link to="/faq" className="gap-2">
               <HelpCircle className="h-4 w-4" />
-              <span className="text-sm">Help & Support</span>
+              <span className="text-sm">{t.footer.helpSupport}</span>
             </Link>
           </Button>
         </div>
