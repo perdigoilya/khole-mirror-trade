@@ -107,7 +107,7 @@ const translations: Record<Language, Translations> = {
     home: {
       badge: 'Professional Trading Terminal',
       tagline: 'Match Breaking News with Prediction Markets in Real-Time',
-      liveLink: '$FOMO is live on Solana',
+      liveLink: '$FOMO is live on BSC',
       startTrading: 'Start Trading',
       viewMarkets: 'View Markets',
       featureTitle1: 'Real-Time Market Data',
@@ -191,7 +191,7 @@ const translations: Record<Language, Translations> = {
     home: {
       badge: '专业交易终端',
       tagline: '实时匹配突发新闻与预测市场',
-      liveLink: '$FOMO 已在 Solana 上线',
+      liveLink: '$FOMO 已在 BSC 上线',
       startTrading: '开始交易',
       viewMarkets: '查看市场',
       featureTitle1: '实时市场数据',
