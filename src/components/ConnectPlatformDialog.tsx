@@ -9,6 +9,8 @@ interface ConnectPlatformDialogProps {
   onOpenChange: (open: boolean) => void;
   onSelectKalshi: () => void;
   onSelectPolymarket: () => void;
+  onDisconnectKalshi: () => void;
+  onDisconnectPolymarket: () => void;
   isKalshiConnected: boolean;
   isPolymarketConnected: boolean;
 }
@@ -18,6 +20,8 @@ export function ConnectPlatformDialog({
   onOpenChange,
   onSelectKalshi,
   onSelectPolymarket,
+  onDisconnectKalshi,
+  onDisconnectPolymarket,
   isKalshiConnected,
   isPolymarketConnected,
 }: ConnectPlatformDialogProps) {
@@ -35,16 +39,17 @@ export function ConnectPlatformDialog({
           {/* Kalshi Option */}
           <button
             onClick={() => {
-              if (!isKalshiConnected) {
+              if (isKalshiConnected) {
+                onDisconnectKalshi();
+              } else {
                 onSelectKalshi();
               }
             }}
-            disabled={isKalshiConnected}
             className={cn(
-              "w-full p-5 rounded-lg border-2 transition-all text-left group",
+              "w-full p-5 rounded-lg border-2 transition-all text-left group cursor-pointer",
               isKalshiConnected
-                ? "border-[hsl(var(--kalshi-teal))]/30 bg-[hsl(var(--kalshi-teal))]/5 cursor-not-allowed"
-                : "border-[hsl(var(--kalshi-teal))]/40 hover:border-[hsl(var(--kalshi-teal))] hover:bg-[hsl(var(--kalshi-teal))]/10 cursor-pointer"
+                ? "border-[hsl(var(--kalshi-teal))]/30 bg-[hsl(var(--kalshi-teal))]/5 hover:border-red-500/50 hover:bg-red-500/5"
+                : "border-[hsl(var(--kalshi-teal))]/40 hover:border-[hsl(var(--kalshi-teal))] hover:bg-[hsl(var(--kalshi-teal))]/10"
             )}
           >
             <div className="flex items-center justify-between">
@@ -60,7 +65,7 @@ export function ConnectPlatformDialog({
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {isKalshiConnected 
-                    ? "Account connected with API credentials" 
+                    ? "Account connected - Click to disconnect" 
                     : "Connect with your API key"}
                 </p>
               </div>
@@ -73,16 +78,17 @@ export function ConnectPlatformDialog({
           {/* Polymarket Option */}
           <button
             onClick={() => {
-              if (!isPolymarketConnected) {
+              if (isPolymarketConnected) {
+                onDisconnectPolymarket();
+              } else {
                 onSelectPolymarket();
               }
             }}
-            disabled={isPolymarketConnected}
             className={cn(
-              "w-full p-5 rounded-lg border-2 transition-all text-left group",
+              "w-full p-5 rounded-lg border-2 transition-all text-left group cursor-pointer",
               isPolymarketConnected
-                ? "border-[hsl(var(--polymarket-blue))]/30 bg-[hsl(var(--polymarket-blue))]/5 cursor-not-allowed"
-                : "border-[hsl(var(--polymarket-blue))]/40 hover:border-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/10 cursor-pointer"
+                ? "border-[hsl(var(--polymarket-blue))]/30 bg-[hsl(var(--polymarket-blue))]/5 hover:border-red-500/50 hover:bg-red-500/5"
+                : "border-[hsl(var(--polymarket-blue))]/40 hover:border-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/10"
             )}
           >
             <div className="flex items-center justify-between">
@@ -98,7 +104,7 @@ export function ConnectPlatformDialog({
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {isPolymarketConnected 
-                    ? "Wallet connected via WalletConnect" 
+                    ? "Wallet connected - Click to disconnect" 
                     : "Connect with your wallet"}
                 </p>
               </div>

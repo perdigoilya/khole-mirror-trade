@@ -21,7 +21,7 @@ const Navigation = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { themeColor } = useTheme();
-  const { isKalshiConnected, isPolymarketConnected, user, kalshiCredentials } = useTrading();
+  const { isKalshiConnected, isPolymarketConnected, user, kalshiCredentials, disconnectKalshi, disconnectPolymarket } = useTrading();
   const [showPlatformDialog, setShowPlatformDialog] = useState(false);
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
@@ -233,6 +233,14 @@ const Navigation = () => {
         onOpenChange={setShowPlatformDialog}
         onSelectKalshi={() => setShowKalshiDialog(true)}
         onSelectPolymarket={() => setShowPolymarketDialog(true)}
+        onDisconnectKalshi={async () => {
+          await disconnectKalshi();
+          toast({ title: "Kalshi disconnected", description: "Your Kalshi account has been disconnected." });
+        }}
+        onDisconnectPolymarket={async () => {
+          await disconnectPolymarket();
+          toast({ title: "Polymarket disconnected", description: "Your Polymarket wallet has been disconnected." });
+        }}
         isKalshiConnected={isKalshiConnected}
         isPolymarketConnected={isPolymarketConnected}
       />
