@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Languages } from "lucide-react";
+import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Languages, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useTrading } from "@/contexts/TradingContext";
 import {
   Sheet,
   SheetContent,
@@ -11,6 +13,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,9 +37,20 @@ interface Tweet {
 
 const Footer = () => {
   const { language, setLanguage, t } = useLanguage();
+  const { themeColor, setThemeColor } = useTheme();
+  const { user } = useTrading();
   const [systemStatus, setSystemStatus] = useState<'operational' | 'degraded' | 'down'>('operational');
   const [latestTweets, setLatestTweets] = useState<Tweet[]>([]);
   const [isLoadingTweets, setIsLoadingTweets] = useState(false);
+
+  const themeOptions = [
+    { id: 'golden', name: 'Golden Yellow', color: 'hsl(45, 91%, 49%)' },
+    { id: 'emerald', name: 'Emerald Green', color: 'hsl(160, 85%, 45%)' },
+    { id: 'blue', name: 'Ocean Blue', color: 'hsl(217, 91%, 60%)' },
+    { id: 'purple', name: 'Royal Purple', color: 'hsl(270, 70%, 60%)' },
+    { id: 'red', name: 'Crimson Red', color: 'hsl(0, 84%, 60%)' },
+    { id: 'teal', name: 'Teal Cyan', color: 'hsl(180, 75%, 50%)' },
+  ] as const;
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -173,8 +191,52 @@ const Footer = () => {
           </SheetContent>
         </Sheet>
 
-        {/* Right: Language, X Link & Help */}
+        {/* Right: Theme, Language, X Link & Help */}
         <div className="flex items-center gap-3">
+          {user && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Palette className="h-4 w-4" />
+                  <span className="text-sm font-medium">Theme</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64" align="end" side="top">
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Choose Theme Color</h4>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Select your preferred accent color
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {themeOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => setThemeColor(option.id)}
+                        className={`flex items-center gap-2 p-3 rounded-lg border transition-all hover:border-primary/50 ${
+                          themeColor === option.id
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border bg-card'
+                        }`}
+                      >
+                        <div
+                          className="w-6 h-6 rounded-full border-2 border-background shadow-sm"
+                          style={{ backgroundColor: option.color }}
+                        />
+                        <span className="text-xs font-medium">{option.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
           <Button
             variant="ghost"
             size="sm"
