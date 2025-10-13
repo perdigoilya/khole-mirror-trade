@@ -5,6 +5,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// In-memory cache for Polymarket data
+let eventsCache: { data: any[], timestamp: number } | null = null;
+let simplifiedCache: { data: any[], timestamp: number } | null = null;
+const CACHE_DURATION = 120000; // 2 minutes
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -77,36 +82,54 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
   try {
     console.log("Searching Polymarket events with keywords:", keywords);
     
-    // Fetch events from Gamma API
-    const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=100", {
-      method: "GET",
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
-      },
-    });
+    const now = Date.now();
+    let events: any[] = [];
+    let simplified: any[] = [];
+    
+    // Check cache for events
+    if (eventsCache && (now - eventsCache.timestamp) < CACHE_DURATION) {
+      events = eventsCache.data;
+      console.log(`Using cached ${events.length} events (age: ${Math.round((now - eventsCache.timestamp) / 1000)}s)`);
+    } else {
+      // Fetch events from Gamma API
+      const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=100", {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
+        },
+      });
 
-    if (!eventsResponse.ok) {
-      console.error("Polymarket Events API error:", eventsResponse.status);
-      return [];
+      if (!eventsResponse.ok) {
+        console.error("Polymarket Events API error:", eventsResponse.status);
+        return [];
+      }
+
+      const eventsData = await eventsResponse.json();
+      events = Array.isArray(eventsData) ? eventsData : [];
+      eventsCache = { data: events, timestamp: now };
+      console.log(`Fetched ${events.length} events from Polymarket`);
     }
 
-    const eventsData = await eventsResponse.json();
-    const events = Array.isArray(eventsData) ? eventsData : [];
-    console.log(`Fetched ${events.length} events from Polymarket`);
-
-    // Fetch simplified markets for pricing
-    const simplifiedRes = await fetch("https://clob.polymarket.com/simplified-markets", {
-      method: "GET",
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
-      },
-    });
-    
-    const simplifiedData = simplifiedRes.ok ? await simplifiedRes.json() : [];
-    const simplified = Array.isArray(simplifiedData) ? simplifiedData : [];
-    console.log(`Fetched ${simplified.length} simplified markets`);
+    // Check cache for simplified markets
+    if (simplifiedCache && (now - simplifiedCache.timestamp) < CACHE_DURATION) {
+      simplified = simplifiedCache.data;
+      console.log(`Using cached ${simplified.length} simplified markets (age: ${Math.round((now - simplifiedCache.timestamp) / 1000)}s)`);
+    } else {
+      // Fetch simplified markets for pricing
+      const simplifiedRes = await fetch("https://clob.polymarket.com/simplified-markets", {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
+        },
+      });
+      
+      const simplifiedData = simplifiedRes.ok ? await simplifiedRes.json() : [];
+      simplified = Array.isArray(simplifiedData) ? simplifiedData : [];
+      simplifiedCache = { data: simplified, timestamp: now };
+      console.log(`Fetched ${simplified.length} simplified markets`);
+    }
     
     const byConditionId = new Map();
     for (const m of simplified) {
