@@ -5,6 +5,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// In-memory cache for price history
+let priceHistoryCache: Map<string, { data: any[], timestamp: number }> = new Map();
+const CACHE_DURATION = 60000; // 1 minute
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -144,6 +148,19 @@ serve(async (req) => {
     }
 
     console.log(`Fetching price history for token ${tokenId}, range: ${timeRange}`);
+    
+    // Check cache
+    const cacheKey = `${tokenId}-${timeRange}`;
+    const cached = priceHistoryCache.get(cacheKey);
+    const now_ms = Date.now();
+    
+    if (cached && (now_ms - cached.timestamp) < CACHE_DURATION) {
+      console.log(`Returning cached price history (${cached.data.length} points, age: ${Math.round((now_ms - cached.timestamp) / 1000)}s)`);
+      return new Response(
+        JSON.stringify({ data: cached.data }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Build query
     const params = new URLSearchParams();
@@ -202,6 +219,20 @@ serve(async (req) => {
     }));
 
     console.log(`Fetched ${chartData.length} price points`);
+    
+    // Cache the result
+    priceHistoryCache.set(cacheKey, {
+      data: chartData,
+      timestamp: Date.now()
+    });
+    
+    // Limit cache size to prevent memory issues
+    if (priceHistoryCache.size > 100) {
+      const firstKey = priceHistoryCache.keys().next().value;
+      if (firstKey) {
+        priceHistoryCache.delete(firstKey);
+      }
+    }
 
     return new Response(
       JSON.stringify({ data: chartData }),

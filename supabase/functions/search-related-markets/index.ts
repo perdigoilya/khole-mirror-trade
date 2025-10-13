@@ -202,11 +202,23 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
           const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
           const liq = parseFloat(event.liquidity || mainMarket.liquidity || 0);
           
-          // Get CLOB token ID for charts
+          // Get CLOB token ID for charts - try multiple sources
           let clobTokenId = '';
-          if (tokens.length > 0) {
-            const token = tokens[0];
-            clobTokenId = token.token_id || token.tokenId || '';
+          
+          // First, try to get from the main market directly
+          clobTokenId = mainMarket.clobTokenIds?.[0] || mainMarket.clob_token_ids?.[0] || '';
+          
+          // If not found, try from tokens array
+          if (!clobTokenId && tokens.length > 0) {
+            const yesToken = tokens.find((t: any) => 
+              String(t?.outcome ?? t?.label ?? '').toLowerCase().includes('yes')
+            ) || tokens[0];
+            clobTokenId = yesToken?.token_id || yesToken?.tokenId || yesToken?.id || '';
+          }
+          
+          // Fallback: use condition ID as token ID if nothing else works
+          if (!clobTokenId && cid) {
+            clobTokenId = cid;
           }
           
           // Only add markets with valid condition IDs
