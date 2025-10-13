@@ -265,7 +265,38 @@ const Portfolio = () => {
                   </Button>
                 </div>
 
-                {/* Chain Balance Card */}
+                {/* Wallet Information Card */}
+                <Card className="p-6 border-l-4 border-l-primary">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold">Connected Wallet</h3>
+                    </div>
+                    <Badge variant="secondary">
+                      {isPolymarketConnected ? "Polymarket" : "Kalshi"}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Wallet Address
+                  </p>
+                  <p className="font-mono text-sm mb-4">
+                    {polymarketCredentials?.walletAddress 
+                      ? `${polymarketCredentials.walletAddress.slice(0, 6)}...${polymarketCredentials.walletAddress.slice(-4)}`
+                      : "Not connected"}
+                  </p>
+                  {isPolymarketConnected && !isConnected && (
+                    <div className="bg-muted p-3 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-2">
+                        <strong>Note:</strong> Currently showing Polymarket trading positions only.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        To see your on-chain wallet balance, connect via WalletConnect button in navigation.
+                      </p>
+                    </div>
+                  )}
+                </Card>
+
+                {/* Chain Balance Card - only shown if wallet is connected via WalletConnect */}
                 {isConnected && balance && (
                   <Card className="p-6">
                     <div className="flex items-center justify-between mb-2">
@@ -280,14 +311,21 @@ const Portfolio = () => {
                       {Number(balance.formatted).toFixed(4)} {balance.symbol}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Wallet: {address?.slice(0, 6)}...{address?.slice(-4)}
+                      On-Chain Wallet: {address?.slice(0, 6)}...{address?.slice(-4)}
                     </p>
                   </Card>
                 )}
 
-                {/* Portfolio Summary Cards */}
+                {/* Portfolio Summary Cards - Polymarket Trading Positions */}
                 {summary && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold">Polymarket Positions</h3>
+                        <p className="text-sm text-muted-foreground">Trading activity from Polymarket API</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card className="p-6">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-sm text-muted-foreground">Total Value</p>
@@ -329,6 +367,7 @@ const Portfolio = () => {
                       </p>
                     </Card>
                   </div>
+                  </>
                 )}
 
                 {/* Positions List */}
