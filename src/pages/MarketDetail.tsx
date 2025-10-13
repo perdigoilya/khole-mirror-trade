@@ -49,6 +49,8 @@ const MarketDetail = () => {
   const [contentTab, setContentTab] = useState<'description' | 'positions' | 'trades'>('description');
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
+  const [currentTrade, setCurrentTrade] = useState<{outcome: string, side: 'yes' | 'no', price: number} | null>(null);
 
   useEffect(() => {
     const passed = (location.state as any)?.market;
@@ -83,7 +85,7 @@ const MarketDetail = () => {
     }
   };
 
-  const handleTrade = (outcome: string, side: 'yes' | 'no') => {
+  const handleTrade = (outcome: string, side: 'yes' | 'no', price: number) => {
     if (!user) {
       toast({
         title: "Authentication Required",
@@ -103,10 +105,42 @@ const MarketDetail = () => {
       return;
     }
     
-    toast({
-      title: "Trade Placed",
-      description: `Buying ${side.toUpperCase()} on "${outcome}"`,
-    });
+    setCurrentTrade({ outcome, side, price });
+    setTradeDialogOpen(true);
+  };
+
+  const executeTrade = async () => {
+    if (!currentTrade || !market) return;
+
+    try {
+      const shares = parseFloat(tradeAmount);
+      if (isNaN(shares) || shares <= 0) {
+        toast({
+          title: "Invalid Amount",
+          description: "Please enter a valid number of shares",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const cost = (shares * currentTrade.price / 100).toFixed(2);
+
+      toast({
+        title: "Trade Order Submitted",
+        description: `Buying ${shares} shares of ${currentTrade.side.toUpperCase()} at ${currentTrade.price}¢ (Total: $${cost})`,
+      });
+
+      setTradeDialogOpen(false);
+      setTradeAmount('0');
+      setCurrentTrade(null);
+    } catch (error) {
+      console.error('Trade error:', error);
+      toast({
+        title: "Trade Failed",
+        description: "Failed to execute trade. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCopyLink = () => {
@@ -302,7 +336,7 @@ const MarketDetail = () => {
                                   className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                                   onClick={() => {
                                     setSelectedSubMarket(outcome);
-                                    handleTrade(outcome.title, 'yes');
+                                    handleTrade(outcome.title, 'yes', outcome.yesPrice || 50);
                                   }}
                                 >
                                   Buy {outcome.yesPrice}¢
@@ -387,7 +421,7 @@ const MarketDetail = () => {
                             <div className="text-3xl font-bold text-emerald-400">{market.yesPrice}¢</div>
                             <Button 
                               className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              onClick={() => handleTrade(market.title, 'yes')}
+                              onClick={() => handleTrade(market.title, 'yes', market.yesPrice || 50)}
                             >
                               Buy Yes
                             </Button>
@@ -397,7 +431,7 @@ const MarketDetail = () => {
                             <div className="text-3xl font-bold text-red-400">{market.noPrice}¢</div>
                             <Button 
                               className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                              onClick={() => handleTrade(market.title, 'no')}
+                              onClick={() => handleTrade(market.title, 'no', market.noPrice || 50)}
                             >
                               Buy No
                             </Button>
@@ -619,6 +653,90 @@ const MarketDetail = () => {
                 Connect Account
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Trade Confirmation Dialog */}
+      <Dialog open={tradeDialogOpen} onOpenChange={setTradeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Trade</DialogTitle>
+            <DialogDescription>
+              Review your trade details before confirming
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {currentTrade && (
+              <>
+                <div className="p-4 rounded-lg bg-card border border-border">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Market</span>
+                      <span className="text-sm font-medium">{currentTrade.outcome}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Side</span>
+                      <Badge variant={currentTrade.side === 'yes' ? 'default' : 'destructive'}>
+                        {currentTrade.side.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Price</span>
+                      <span className="text-sm font-medium">{currentTrade.price}¢</span>
+                    </div>
+                    <div className="border-t border-border pt-3">
+                      <label className="text-sm text-muted-foreground block mb-2">
+                        Number of Shares
+                      </label>
+                      <Input
+                        type="number"
+                        value={tradeAmount}
+                        onChange={(e) => setTradeAmount(e.target.value)}
+                        placeholder="Enter amount"
+                        min="0"
+                        step="1"
+                        className="mb-3"
+                      />
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Total Cost</span>
+                        <span className="font-bold">
+                          ${((parseFloat(tradeAmount) || 0) * currentTrade.price / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      setTradeDialogOpen(false);
+                      setTradeAmount('0');
+                      setCurrentTrade(null);
+                    }}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={executeTrade}
+                    className={`flex-1 ${
+                      currentTrade.side === 'yes'
+                        ? 'bg-emerald-500 hover:bg-emerald-600'
+                        : 'bg-red-500 hover:bg-red-600'
+                    }`}
+                  >
+                    Confirm Trade
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground text-center">
+                  By trading, you agree to the Terms of Use.
+                </p>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
