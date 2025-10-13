@@ -43,7 +43,7 @@ const SUPPORTED_CHAINS = [
 ];
 
 const Portfolio = () => {
-  const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials, disconnectKalshi, disconnectPolymarket } = useTrading();
+  const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const { address, isConnected } = useAccount();
   const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'history'>('overview');
@@ -55,40 +55,6 @@ const Portfolio = () => {
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
-
-  const handleDisconnectKalshi = async () => {
-    try {
-      await disconnectKalshi();
-      toast({
-        title: "Disconnected",
-        description: "Successfully disconnected from Kalshi",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to disconnect from Kalshi",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDisconnectPolymarket = async () => {
-    try {
-      await disconnectPolymarket();
-      toast({
-        title: "Disconnected",
-        description: "Successfully disconnected from Polymarket",
-      });
-      setPositions([]);
-      setSummary(null);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to disconnect from Polymarket",
-        variant: "destructive",
-      });
-    }
-  };
 
   // Get balance for selected chain
   const { data: balance, refetch: refetchBalance } = useBalance({
@@ -246,101 +212,6 @@ const Portfolio = () => {
             ) : (
               // Has connections - show portfolio data
               <div className="space-y-6">
-                {/* Connected Accounts Section */}
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Connected Accounts</h3>
-                  <div className="space-y-3">
-                    {isKalshiConnected && (
-                      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card/50">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-[hsl(var(--kalshi-teal))]/10">
-                            <Key className="h-5 w-5 text-[hsl(var(--kalshi-teal))]" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Kalshi</p>
-                            <p className="text-xs text-muted-foreground">Connected</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleDisconnectKalshi}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          Disconnect
-                        </Button>
-                      </div>
-                    )}
-                    
-                    {isPolymarketConnected && (
-                      <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card/50">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-[hsl(var(--polymarket-blue))]/10">
-                            <Wallet className="h-5 w-5 text-[hsl(var(--polymarket-blue))]" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Polymarket</p>
-                            <p className="text-xs text-muted-foreground">
-                              {polymarketCredentials?.walletAddress?.slice(0, 6)}...
-                              {polymarketCredentials?.walletAddress?.slice(-4)}
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleDisconnectPolymarket}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          Disconnect
-                        </Button>
-                      </div>
-                    )}
-                    
-                    {!isKalshiConnected && (
-                      <div className="flex items-center justify-between p-4 rounded-lg border border-dashed border-border">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-muted">
-                            <Key className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-muted-foreground">Kalshi</p>
-                            <p className="text-xs text-muted-foreground">Not connected</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowKalshiDialog(true)}
-                        >
-                          Connect
-                        </Button>
-                      </div>
-                    )}
-                    
-                    {!isPolymarketConnected && (
-                      <div className="flex items-center justify-between p-4 rounded-lg border border-dashed border-border">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-muted">
-                            <Wallet className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-muted-foreground">Polymarket</p>
-                            <p className="text-xs text-muted-foreground">Not connected</p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowPolymarketDialog(true)}
-                        >
-                          Connect
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-
                 {/* Chain Selector and Refresh */}
                 <div className="flex justify-between items-center gap-4">
                   <Tabs value={selectedChain.toString()} onValueChange={(v) => setSelectedChain(Number(v))} className="flex-1">
