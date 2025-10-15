@@ -251,15 +251,16 @@ const Footer = () => {
             variant="ghost"
             size="sm"
             asChild
-            className="h-8 w-8 p-0"
+            className="gap-2"
           >
             <a
-              href="https://x.com/tryFOMOapp"
+              href="https://x.com/FOMOAPPbet"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Twitter"
+              aria-label="X (Twitter)"
             >
               <X className="h-4 w-4" />
+              <span className="text-sm font-medium">X(twitter)</span>
             </a>
           </Button>
 
