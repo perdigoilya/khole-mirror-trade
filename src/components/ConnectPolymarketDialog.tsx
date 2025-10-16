@@ -87,31 +87,46 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         await switchChainAsync({ chainId: polygon.id });
       }
 
-      // Validate wallet through edge function to avoid CORS issues
-      const { data, error } = await supabase.functions.invoke('polymarket-validate', {
-        body: { walletAddress: address }
-      });
-
-      if (error) throw error;
-
-      if (!data.success || data.error) {
-        setValidationFailed(true);
-        toast({
-          title: "Wallet Uses Proxy Trading",
-          description: "Your wallet trades via Polymarket's proxy. Click 'Connect Anyway' to proceed.",
-        });
-        setIsLoading(false);
-        return;
+      // Auto-detect proxy/funder address
+      let detectedFunder: string | null = null;
+      
+      // Step 1: Try Safe Client API for browser wallet users
+      try {
+        const safeResponse = await fetch(`https://safe-client.safe.global/v1/chains/137/owners/${address}/safes`);
+        if (safeResponse.ok) {
+          const safeData = await safeResponse.json();
+          if (safeData.safes && safeData.safes.length > 0) {
+            const candidateProxy = safeData.safes[0];
+            
+            // Validate with Polymarket Data-API
+            const valueResponse = await fetch(`https://data-api.polymarket.com/value?user=${candidateProxy}`);
+            if (valueResponse.ok) {
+              const valueData = await valueResponse.json();
+              if (valueData.value && parseFloat(valueData.value) > 0) {
+                detectedFunder = candidateProxy;
+                console.log('Auto-detected Safe proxy:', candidateProxy);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.log('Safe API detection skipped:', err);
       }
 
-      const balance = data.balance || 0;
-
-      if (balance === 0) {
-        toast({
-          title: "Warning: Zero Balance",
-          description: "Your Polymarket account has no funds. Deposit USDC at polymarket.com to start trading.",
-          variant: "destructive",
-        });
+      // Step 2: If no Safe found, try EOA directly
+      if (!detectedFunder) {
+        try {
+          const valueResponse = await fetch(`https://data-api.polymarket.com/value?user=${address}`);
+          if (valueResponse.ok) {
+            const valueData = await valueResponse.json();
+            if (valueData.value && parseFloat(valueData.value) > 0) {
+              detectedFunder = address;
+              console.log('Using EOA as funder (has value):', address);
+            }
+          }
+        } catch (err) {
+          console.log('EOA value check failed:', err);
+        }
       }
 
       // Create API credentials for authenticated trading
@@ -123,19 +138,18 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       // Fetch server time required by Polymarket for EIP-712 signing
       const timeRes = await supabase.functions.invoke('polymarket-time');
       if (timeRes.error) throw new Error(timeRes.error.message || 'Failed to fetch server time');
-      const timestamp = parseInt(timeRes.data?.timestamp, 10);
-      const message = {
-        address: address,
-        timestamp: String(timestamp),
-        nonce: 0,
-        message: "This message attests that I control the given wallet",
-      };
+      
+      const tsRaw = timeRes.data?.timestamp;
+      let timestamp = Number(typeof tsRaw === 'string' ? tsRaw.trim() : tsRaw);
+      if (!Number.isFinite(timestamp) || timestamp <= 0) {
+        timestamp = Math.floor(Date.now() / 1000);
+      }
 
       const domain = {
         name: "ClobAuthDomain",
         version: "1",
-        chainId: 137, // Polygon mainnet
-      };
+        chainId: 137,
+      } as const;
 
       const types = {
         ClobAuth: [
@@ -144,7 +158,14 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           { name: "nonce", type: "uint256" },
           { name: "message", type: "string" },
         ],
-      };
+      } as const;
+
+      const message = {
+        address,
+        timestamp: String(timestamp),
+        nonce: 0n,
+        message: "This message attests that I control the given wallet",
+      } as const;
 
       // Request signature from wallet
       const signature = await signTypedDataAsync({
@@ -177,8 +198,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         console.log('API key creation error (continuing):', err);
       }
 
-      // Use manual proxy address if provided, otherwise use what we got from API
-      const funderAddress = proxyAddress || apiCredentials?.funderAddress || address;
+      // Priority: manual input > auto-detected > API-provided > EOA
+      const funderAddress = proxyAddress || detectedFunder || apiCredentials?.funderAddress || address;
 
       await connectPolymarket({ 
         walletAddress: address,
@@ -190,18 +211,30 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       });
       
       toast({
-        title: "Connected Successfully",
-        description: `Polymarket wallet connected: ${address.slice(0, 6)}...${address.slice(-4)}`,
+        title: "Connected to Polymarket",
+        description: detectedFunder 
+          ? `Using proxy: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`
+          : "Your wallet has been connected successfully",
       });
       
       onOpenChange(false);
     } catch (error: any) {
-      setValidationFailed(true);
-      toast({
-        title: "Connection failed",
-        description: error.message || "Failed to connect to Polymarket",
-        variant: "destructive",
-      });
+      console.error('Wallet connection error:', error);
+      
+      if (error.message?.includes('User rejected')) {
+        toast({
+          title: "Signature Rejected",
+          description: "You need to sign the message to connect to Polymarket",
+          variant: "destructive",
+        });
+      } else {
+        setValidationFailed(true);
+        toast({
+          title: "Connection Failed",
+          description: error.message || "Failed to connect to Polymarket",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -221,23 +254,22 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         await switchChainAsync({ chainId: polygon.id });
       }
 
-      // For unregistered wallets, just connect without API credentials
-      // They can register on polymarket.com later
+      // For unregistered wallets, use manual proxy or fallback to EOA
       const funderAddress = proxyAddress || address;
       await connectPolymarket({ 
         walletAddress: address,
         apiKey: apiKey || undefined,
-        apiCredentials: proxyAddress ? {
+        apiCredentials: {
           apiKey: '',
           secret: '',
           passphrase: '',
           funderAddress
-        } : undefined
+        }
       });
       
       toast({
         title: "Wallet Connected",
-        description: `Connected ${address.slice(0, 6)}...${address.slice(-4)}. Register at polymarket.com to start trading.`,
+        description: `Connected ${address.slice(0, 6)}...${address.slice(-4)}. You can trade once registered on polymarket.com.`,
       });
       
       onOpenChange(false);
@@ -388,13 +420,13 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 <Input
                   id="proxyAddress"
                   type="text"
-                  placeholder="0x... (leave empty to use connected wallet)"
+                  placeholder="0x... (we'll auto-detect if left empty)"
                   value={proxyAddress}
                   onChange={(e) => setProxyAddress(e.target.value)}
                   className="font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  If you trade through a proxy wallet on Polymarket, enter your proxy address here. This is the wallet that holds your USDC and positions.
+                  We'll automatically detect your Polymarket proxy via Safe API. Only fill this if auto-detection fails.
                 </p>
               </div>
               
