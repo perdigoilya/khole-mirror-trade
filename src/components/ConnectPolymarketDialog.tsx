@@ -81,9 +81,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       if (!data.success || data.error) {
         setValidationFailed(true);
         toast({
-          title: "Wallet Not Registered on Polymarket DeFi",
-          description: "See instructions below to enable DeFi mode",
-          variant: "destructive",
+          title: "Wallet Uses Proxy Trading",
+          description: "Your wallet trades via Polymarket's proxy. Click 'Connect Anyway' to proceed.",
         });
         setIsLoading(false);
         return;
@@ -103,7 +102,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       
       toast({
         title: "Connected Successfully",
-        description: `Polymarket account connected with $${balance.toFixed(2)} available`,
+        description: `Polymarket wallet connected: ${address.slice(0, 6)}...${address.slice(-4)}`,
       });
       
       onOpenChange(false);
@@ -112,6 +111,30 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       toast({
         title: "Connection failed",
         description: error.message || "Failed to connect to Polymarket",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConnectAnyway = async () => {
+    if (!address) return;
+    
+    setIsLoading(true);
+    try {
+      await connectPolymarket({ walletAddress: address });
+      
+      toast({
+        title: "Wallet Connected",
+        description: `Connected ${address.slice(0, 6)}...${address.slice(-4)}`,
+      });
+      
+      onOpenChange(false);
+    } catch (error: any) {
+      toast({
+        title: "Connection failed",
+        description: error.message || "Failed to connect wallet",
         variant: "destructive",
       });
     } finally {
@@ -129,7 +152,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         <DialogHeader>
           <DialogTitle>Connect to Polymarket</DialogTitle>
           <DialogDescription>
-            Connect your wallet and ensure it's registered on Polymarket's DeFi orderbook
+            Connect your wallet - works with both proxy and direct trading setups
           </DialogDescription>
         </DialogHeader>
 
@@ -156,7 +179,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   <div className="flex-1 space-y-3">
                     <div>
                       <p className="text-sm font-medium text-amber-500">
-                        Wallet Not Registered on Polymarket DeFi
+                        Wallet Uses Proxy Trading
                       </p>
                       <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
                         {address}
@@ -171,23 +194,29 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
                   <div className="space-y-3 text-sm">
                     <div>
-                      <p className="font-medium text-blue-500">Why Is This Happening?</p>
+                      <p className="font-medium text-blue-500">What's Happening?</p>
                       <p className="text-muted-foreground mt-1">
-                        Polymarket has two modes: <strong>Native</strong> (default) creates a separate smart contract wallet, 
-                        while <strong>DeFi mode</strong> uses your actual MetaMask/wallet address. 
-                        If you've traded on Polymarket before using Native mode, those funds are in a different address.
+                        When you trade on Polymarket.com, it uses a <strong>proxy wallet</strong> (smart contract) 
+                        instead of your EOA directly. This proxy holds your positions and USDC. 
+                        Our platform can't verify proxy setups, but <strong>you can still connect</strong>.
                       </p>
                     </div>
                     
                     <div>
-                      <p className="font-medium text-foreground">How to Fix:</p>
+                      <p className="font-medium text-foreground">Two Options:</p>
                       <ol className="list-decimal list-inside space-y-1.5 ml-2 mt-2 text-muted-foreground">
-                        <li>Go to <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">polymarket.com</a></li>
-                        <li>Settings → Enable "DeFi Trading"</li>
-                        <li>Switch to Polygon network when prompted</li>
-                        <li>Sign the onboarding message</li>
-                        <li>Deposit USDC to your wallet on Polygon (even $1 works)</li>
-                        <li>Click "Verify Again" below</li>
+                        <li><strong>Connect Anyway</strong> (Recommended) - Use your current wallet as-is</li>
+                        <li><strong>Advanced:</strong> Set up direct EOA trading via the{" "}
+                          <a 
+                            href="https://docs.polymarket.com/developers/CLOB/authentication" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            CLOB API
+                          </a>
+                          {" "}for on-chain verification
+                        </li>
                       </ol>
                     </div>
 
@@ -201,19 +230,18 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                         Open Polymarket
                       </Button>
                       <Button
-                        variant="outline"
                         size="sm"
-                        onClick={handleWalletConnect}
+                        onClick={handleConnectAnyway}
                         disabled={isLoading}
-                        className="text-xs"
+                        className="text-xs bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
                       >
                         {isLoading ? (
                           <>
                             <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                            Verifying...
+                            Connecting...
                           </>
                         ) : (
-                          'Verify Again'
+                          'Connect Anyway'
                         )}
                       </Button>
                     </div>
@@ -238,50 +266,31 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
             </div>
           ) : (
             <>
-              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 p-3 text-sm mb-4">
-                <p className="font-semibold text-amber-900 dark:text-amber-300 mb-2">⚠️ Important: Set up Polymarket first</p>
-                <p className="text-amber-800 dark:text-amber-400">
-                  Before connecting here, you must create a Polymarket account and deposit funds. Follow the guide below.
-                </p>
-              </div>
-
               <div className="rounded-lg bg-muted p-4 text-sm space-y-4">
-                <p className="font-semibold text-base mb-3">📋 Step-by-Step Setup Guide:</p>
+                <p className="font-semibold text-base mb-3">📋 Quick Start Guide:</p>
                 
                 <div className="space-y-3">
                   <div className="pl-2">
-                    <span className="font-semibold text-foreground">Step 1: Get a Crypto Wallet</span>
+                    <span className="font-semibold text-foreground">Step 1: Get a Wallet</span>
                     <p className="text-muted-foreground mt-1">
-                      If you don't have a crypto wallet yet, download one:
+                      Download <a 
+                        href="https://metamask.io/download/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >MetaMask</a> or <a 
+                        href="https://www.coinbase.com/wallet" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline"
+                      >Coinbase Wallet</a>
                     </p>
-                    <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground space-y-1">
-                      <li>
-                        <a 
-                          href="https://metamask.io/download/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          MetaMask (Browser Extension)
-                        </a>
-                      </li>
-                      <li>
-                        <a 
-                          href="https://www.coinbase.com/wallet" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          Coinbase Wallet (Mobile & Browser)
-                        </a>
-                      </li>
-                    </ul>
                   </div>
 
                   <div className="pl-2">
-                    <span className="font-semibold text-foreground">Step 2: Create Polymarket Account</span>
+                    <span className="font-semibold text-foreground">Step 2: Fund Your Wallet</span>
                     <p className="text-muted-foreground mt-1">
-                      Visit{" "}
+                      Get USDC on Polygon at{" "}
                       <a 
                         href="https://polymarket.com" 
                         target="_blank" 
@@ -289,78 +298,29 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                         className="text-primary hover:underline font-medium"
                       >
                         polymarket.com
-                      </a>
-                      {" "}and connect your wallet to create an account.
+                      </a> or buy from an exchange
                     </p>
                   </div>
 
                   <div className="pl-2">
-                    <span className="font-semibold text-foreground">Step 3: Get USDC (Required for Trading)</span>
+                    <span className="font-semibold text-foreground">Step 3: Connect Here</span>
                     <p className="text-muted-foreground mt-1">
-                      Polymarket uses USDC for all trades. You can:
-                    </p>
-                    <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground space-y-1">
-                      <li>
-                        Buy USDC directly on{" "}
-                        <a 
-                          href="https://polymarket.com/deposit" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          Polymarket's deposit page
-                        </a>
-                      </li>
-                      <li>Transfer USDC from another exchange (Coinbase, Binance, etc.)</li>
-                      <li>
-                        Bridge ETH to USDC on{" "}
-                        <a 
-                          href="https://bridge.polygon.technology/" 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          Polygon Bridge
-                        </a>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="pl-2">
-                    <span className="font-semibold text-foreground">Step 4: Return Here & Connect</span>
-                    <p className="text-muted-foreground mt-1">
-                      Once your Polymarket account has USDC, click "Connect Wallet" below and select the same wallet you used on Polymarket.
+                      Click "Connect Wallet" below and approve the connection
                     </p>
                   </div>
                 </div>
 
                 <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 mt-4">
                   <p className="text-sm text-blue-900 dark:text-blue-300">
-                    💡 <span className="font-semibold">Need help?</span> Visit the{" "}
-                    <a 
-                      href="https://polymarket.com/faq" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="underline hover:text-blue-700 dark:hover:text-blue-100"
-                    >
-                      Polymarket FAQ
-                    </a>
-                    {" "}or{" "}
-                    <a 
-                      href="https://docs.polymarket.com/" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="underline hover:text-blue-700 dark:hover:text-blue-100"
-                    >
-                      Documentation
-                    </a>
+                    💡 Already trading on Polymarket? Just connect the same wallet -{" "}
+                    <strong>proxy wallets work fine</strong>!
                   </p>
                 </div>
               </div>
 
               <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm mt-4">
                 <p className="text-green-900 dark:text-green-300">
-                  🔒 Your wallet connection is secure. We only verify your wallet is registered on Polymarket - we never access your funds.
+                  🔒 Secure connection - we never access your funds
                 </p>
               </div>
             </>
