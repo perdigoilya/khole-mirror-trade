@@ -56,7 +56,6 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     serverClosedOnly?: boolean;
     serverTradingEnabled?: boolean;
     serverL2Debug?: any;
-    l1Diag?: any;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -240,9 +239,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
       // Create/derive API key (REQUIRED for trading)
       let apiCredentials = null;
-      let apiKeyResponse = null;
       try {
-        apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
+        const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
           body: {
             walletAddress: address,
             signature,
@@ -253,21 +251,6 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
         if (apiKeyResponse.error) {
           const errorData = apiKeyResponse.error as any;
-          
-          // Check if this is an inline verification failure (401)
-          if (errorData.status === 401) {
-            toast({
-              title: "Credentials Verification Failed",
-              description: "Fresh credentials failed inline test. Please try reconnecting.",
-              variant: "destructive",
-            });
-            setDiagnostics(prev => ({
-              ...prev,
-              l2Body: errorData.upstream || errorData,
-              tradingEnabled: false,
-            }));
-            return;
-          }
           
           // Check if this is a registration-required error
           if (errorData.cert_required || errorData.status === 'not_registered') {
@@ -284,9 +267,9 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         }
 
         apiCredentials = apiKeyResponse.data;
-        console.log('API credentials created and inline-verified');
+        console.log('API credentials created');
       } catch (err: any) {
-        console.error('API key creation/verification failed:', err);
+        console.error('API key creation failed:', err);
         throw err;
       }
 
@@ -482,105 +465,6 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
   const handleDisconnect = () => {
     disconnect();
-  };
-
-  const handleResignL1 = async () => {
-    if (!address) {
-      toast({ title: "No wallet address", description: "Connect your wallet first", variant: "destructive" });
-      return;
-    }
-    setIsLoading(true);
-    try {
-      // Fetch server time for EIP-712
-      const timeRes = await supabase.functions.invoke('polymarket-time');
-      if (timeRes.error) throw new Error(timeRes.error.message || 'Failed to fetch server time');
-      const tsRaw = timeRes.data?.timestamp;
-      let timestamp = Number(typeof tsRaw === 'string' ? tsRaw.trim() : tsRaw);
-      if (!Number.isFinite(timestamp) || timestamp <= 0) {
-        timestamp = Math.floor(Date.now() / 1000);
-      }
-
-      const domain = { name: "ClobAuthDomain", version: "1", chainId: 137 } as const;
-      const types = {
-        ClobAuth: [
-          { name: "address", type: "address" },
-          { name: "timestamp", type: "string" },
-          { name: "nonce", type: "uint256" },
-          { name: "message", type: "string" },
-        ],
-      } as const;
-      const message = {
-        address,
-        timestamp: String(timestamp),
-        nonce: 0n,
-        message: "This message attests that I control the given wallet",
-      } as const;
-
-      const signature = await signTypedDataAsync({
-        account: address,
-        domain,
-        types,
-        primaryType: "ClobAuth",
-        message,
-      });
-
-      const { data: smokeData, error: smokeError } = await supabase.functions.invoke('polymarket-smoke', {
-        body: { walletAddress: address, signature, timestamp, nonce: 0 }
-      });
-
-      if (smokeError) {
-        setDiagnostics(prev => ({ ...prev, l1Diag: smokeError }));
-        toast({ title: 'L1 failed', description: 'See diagnostics below', variant: 'destructive' });
-      } else {
-        setDiagnostics(prev => ({ ...prev, l1Diag: smokeData }));
-        const ready = smokeData?.ready || smokeData?.createApiKey?.status === 200 || smokeData?.deriveApiKey?.status === 200;
-        if (ready) {
-          const normalizedEOA = address.toLowerCase();
-          const { data: statusData, error: statusError } = await supabase.functions.invoke('polymarket-connect-status', {
-            body: { connectedEOA: normalizedEOA }
-          });
-          if (!statusError && statusData) {
-            const {
-              hasKey: serverHasKey = false,
-              hasSecret: serverHasSecret = false,
-              hasPassphrase: serverHasPassphrase = false,
-              ownerAddress: serverOwnerAddress = '',
-              connectedEOA: serverConnectedEOA = '',
-              ownerMatch: serverOwnerMatch = false,
-              closed_only: serverClosedOnly = false,
-              tradingEnabled: serverTradingEnabled = false,
-              banStatusRaw,
-              l2Debug,
-            } = statusData;
-            setDiagnostics(prev => ({
-              ...prev,
-              l2SanityCheck: true,
-              tradingEnabled: serverTradingEnabled,
-              closedOnly: serverClosedOnly,
-              l2Body: banStatusRaw,
-              serverHasKey,
-              serverHasSecret,
-              serverHasPassphrase,
-              serverOwnerAddress,
-              serverConnectedEOA,
-              serverOwnerMatch,
-              serverTradingEnabled,
-              serverClosedOnly,
-              serverL2Debug: l2Debug,
-            } as any));
-            if (serverTradingEnabled) {
-              toast({ title: 'Trading Ready', description: `closed_only=${String(serverClosedOnly)}` });
-            }
-          }
-        } else {
-          toast({ title: 'L1 not ready', description: 'Review upstream details', variant: 'destructive' });
-        }
-      }
-    } catch (e: any) {
-      toast({ title: 'Re-sign failed', description: e?.message || 'Unknown error', variant: 'destructive' });
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -809,14 +693,6 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                           }}
                         >
                           Force fresh creds
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleResignL1}
-                          disabled={isLoading}
-                        >
-                          {isLoading ? 'Re-signing…' : 'Re-sign L1'}
                         </Button>
                       </div>
                     </div>

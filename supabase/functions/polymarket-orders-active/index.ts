@@ -5,15 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const out = (obj: any, status = 200, extra: Record<string, string> = {}) =>
-  new Response(JSON.stringify(obj), { 
-    status, 
-    headers: { "content-type": "application/json", ...corsHeaders, ...extra }
-  });
-
-const safeJson = (t: string) => { try { return JSON.parse(t); } catch { return t; } };
-const suffix = (v: any) => typeof v === "string" && v.length > 6 ? v.slice(-6) : v || "";
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -32,13 +23,13 @@ serve(async (req) => {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData?.user) {
-      return out({ problem: 'Unauthorized', details: authErr?.message || 'No user' }, 401);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized', details: authErr?.message || 'No user' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
     }
 
     const userId = authData.user.id;
-    const dbKey = `polymarket:${Deno.env.get('DENO_REGION') || 'unknown'}:${userId}`;
-    console.log('DB key for creds:', dbKey);
-    
     const { data: credsRow, error: credsErr } = await supabase
       .from('user_polymarket_credentials')
       .select('*')
@@ -46,7 +37,10 @@ serve(async (req) => {
       .maybeSingle();
 
     if (credsErr || !credsRow) {
-      return out({ problem: 'Missing credentials', ready: false }, 400);
+      return new Response(
+        JSON.stringify({ error: 'Missing credentials', ready: false }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
     }
 
     const walletAddress = credsRow.wallet_address;
@@ -55,14 +49,17 @@ serve(async (req) => {
     const apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
 
     if (!apiKey || !apiSecret || !apiPassphrase) {
-      return out({ 
-        problem: 'Incomplete credentials',
-        ready: false,
-        tradingEnabled: false,
-        hasKey: !!apiKey,
-        hasSecret: !!apiSecret,
-        hasPassphrase: !!apiPassphrase,
-      }, 400);
+      return new Response(
+        JSON.stringify({ 
+          ready: false,
+          tradingEnabled: false,
+          error: 'Incomplete credentials',
+          hasKey: !!apiKey,
+          hasSecret: !!apiSecret,
+          hasPassphrase: !!apiPassphrase,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
     }
 
     const ownerAddress = walletAddress?.toLowerCase();
@@ -81,7 +78,7 @@ serve(async (req) => {
     const requestPath = '/auth/ban-status/closed-only';
     const preimage = `${method}${requestPath}${timestamp}`;
 
-    const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<{ r: Response; diag: any }> => {
+    const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
       // Detect if secret is base64 (Polymarket returns base64 secrets)
       const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
       const encoder = new TextEncoder();
@@ -106,78 +103,63 @@ serve(async (req) => {
         ['sign']
       );
 
+      // Fresh timestamp and preimage per attempt
       const ts = Math.floor(Date.now() / 1000);
-      const preimage = `${method}${requestPath}${ts}`;
-      
-      // Store preimage in globalThis for diagnostics
-      (globalThis as any).__PREIMAGE = preimage;
+      const preimageLocal = `${method}${requestPath}${ts}`;
 
-      const messageData = encoder.encode(preimage);
+      const messageData = encoder.encode(preimageLocal);
       const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
       const signatureArray = Array.from(new Uint8Array(signature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
+      // Validate standard base64 format
       if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
         throw new Error('POLY_SIGNATURE is not standard base64');
       }
 
-      const headers = {
-        'Accept': 'application/json',
-        'POLY_ADDRESS': ownerAddress,
-        'POLY_SIGNATURE': signatureBase64,
-        'POLY_TIMESTAMP': ts.toString(),
-        'POLY_API_KEY': key,
-        'POLY_PASSPHRASE': pass,
-      };
-
-      const url = 'https://clob.polymarket.com/auth/ban-status/closed-only';
-
       console.log('L2 sanity check attempt:', { 
         eoa: ownerAddress,
-        keySuffix: suffix(key),
-        passSuffix: suffix(pass),
+        ownerAddress, 
+        polyAddress: ownerAddress,
+        keySuffix: key.slice(-6),
+        passSuffix: pass.slice(-4),
         ts,
-        preimageFirst120: preimage.slice(0, 120),
-        sigB64First12: signatureBase64.slice(0, 12),
+        preimageFirst120: preimageLocal.substring(0, 120),
+        sigB64First12: signatureBase64.substring(0, 12),
+        method,
+        requestPath
       });
 
-      const r = await fetch(url, { method: 'GET', headers });
-      const text = await r.text();
-      const upstream = safeJson(text);
-      
-      const cf = {
-        "cf-ray": r.headers.get("cf-ray") || "",
-        "cf-cache-status": r.headers.get("cf-cache-status") || "",
-        "server": r.headers.get("server") || "",
-        "content-type": r.headers.get("content-type") || ""
-      };
-
-      const diag = {
-        url, method: 'GET',
-        sent: {
-          POLY_ADDRESS: headers.POLY_ADDRESS,
-          POLY_API_KEY_suffix: suffix(key),
-          POLY_PASSPHRASE_suffix: suffix(pass),
-          POLY_TIMESTAMP: headers.POLY_TIMESTAMP,
-          POLY_SIGNATURE_b64_first12: signatureBase64.slice(0, 12),
-          preimage_first120: preimage.slice(0, 120)
+      return await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'POLY_ADDRESS': ownerAddress,
+          'POLY_SIGNATURE': signatureBase64,
+          'POLY_TIMESTAMP': ts.toString(),
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': pass,
         },
-        status: r.status, 
-        statusText: r.statusText, 
-        cf, 
-        upstream
-      };
-
-      return { r, diag };
+      });
     };
 
-    const attempts: any[] = [];
-    let result = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase);
-    attempts.push(result.diag);
-    let sanityResponse = result.r;
+    let sanityResponse = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase);
 
     if (!sanityResponse.ok) {
-      console.error('L2 sanity check failed:', result.diag);
+      const errorText = await sanityResponse.text();
+      const cfRay = sanityResponse.headers.get('cf-ray') || null;
+      const cfCache = sanityResponse.headers.get('cf-cache-status') || null;
+      const server = sanityResponse.headers.get('server') || null;
+      const contentType = sanityResponse.headers.get('content-type') || null;
+
+      console.error('L2 sanity check failed:', sanityResponse.status, {
+        cfRay,
+        cfCache,
+        server,
+        contentType,
+        body: errorText?.slice(0, 500),
+        preimage
+      });
 
       // If 401, credentials are invalid - signal auto-recovery needed
       if (sanityResponse.status === 401) {
@@ -217,12 +199,11 @@ serve(async (req) => {
                 const newApiPassphrase = deriveData.passphrase;
                 
                 console.log('Retrying sanity check with derived credentials...');
-                const retryResult = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase);
-                attempts.push(retryResult.diag);
-                sanityResponse = retryResult.r;
+                sanityResponse = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase);
                 
+                // If retry succeeds, continue to success handler below
                 if (sanityResponse.ok) {
-                  const sanityData = safeJson(await sanityResponse.text());
+                  const sanityData = await sanityResponse.json();
                   console.log('✓ L2 sanity check response (after derive):', JSON.stringify(sanityData, null, 2));
                   
                   const closedOnly = sanityData?.closed_only === true;
@@ -232,19 +213,21 @@ serve(async (req) => {
                     console.warn('⚠️ Account is in closed-only mode - trading blocked');
                   }
 
-                  return out({
-                    ready: true,
-                    tradingEnabled,
-                    status: 200,
-                    ownerAddress,
-                    hasKey: true,
-                    hasSecret: true,
-                    hasPassphrase: true,
-                    l2SanityPassed: true,
-                    closedOnly,
-                    l2Body: sanityData,
-                    attempts,
-                  }, 200);
+                  return new Response(
+                    JSON.stringify({
+                      ready: true,
+                      tradingEnabled,
+                      status: 200,
+                      ownerAddress,
+                      hasKey: true,
+                      hasSecret: true,
+                      hasPassphrase: true,
+                      l2SanityPassed: true,
+                      closedOnly,
+                      l2Body: sanityData,
+                    }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                  );
                 }
               }
             }
@@ -256,25 +239,57 @@ serve(async (req) => {
           console.error('Auto-recovery failed:', deriveErr);
         }
 
-        return out({ 
-          problem: 'Invalid credentials',
-          ready: false,
-          tradingEnabled: false,
-          status: 401,
-          action: 'derive_failed',
-          details: 'L2 credentials are invalid and auto-recovery failed. Please reconnect.',
-          ownerAddress,
-          hasKey: true,
-          hasSecret: true,
-          hasPassphrase: true,
-          attempts,
-        }, 401);
+        // If we're still here, derive failed or retry failed
+        return new Response(
+          JSON.stringify({ 
+            ready: false,
+            tradingEnabled: false,
+            error: 'Invalid credentials',
+            status: 401,
+            action: 'derive_failed',
+            details: 'L2 credentials are invalid and auto-recovery failed. Please reconnect.',
+            ownerAddress,
+            hasKey: true,
+            hasSecret: true,
+            hasPassphrase: true,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
       }
 
-      return out(attempts.length > 0 ? { ...result.diag, attempts } : result.diag, sanityResponse.status);
+      // If 403 with Cloudflare, it's a WAF/egress issue
+      if (sanityResponse.status === 403 && (cfRay || errorText?.includes('cloudflare'))) {
+        return new Response(
+          JSON.stringify({ 
+            ready: false,
+            tradingEnabled: false,
+            error: 'Cloudflare blocked',
+            status: 403,
+            cfRay,
+            cfCache,
+            server,
+            details: 'Request blocked by Cloudflare WAF. Consider using relay endpoint.',
+            upstream: errorText
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          ready: false,
+          tradingEnabled: false,
+          error: 'L2 check failed',
+          status: sanityResponse.status,
+          ownerAddress,
+          preimage,
+          upstream: errorText
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: sanityResponse.status }
+      );
     }
 
-    const sanityData = safeJson(await sanityResponse.text());
+    const sanityData = await sanityResponse.json();
     console.log('✓ L2 sanity check response:', JSON.stringify(sanityData, null, 2));
 
     // Extract closed_only flag from response
@@ -324,28 +339,34 @@ serve(async (req) => {
       console.warn('⚠️ Account has access restrictions:', accessStatus);
     }
 
-    return out({
-      ready: true,
-      tradingEnabled,
-      status: 200,
-      ownerAddress,
-      hasKey: true,
-      hasSecret: true,
-      hasPassphrase: true,
-      l2SanityPassed: true,
-      closedOnly,
-      accessStatus,
-      l2Body: sanityData,
-      attempts: attempts.length > 1 ? attempts : undefined,
-    }, 200);
+    return new Response(
+      JSON.stringify({
+        ready: true,
+        tradingEnabled,
+        status: 200,
+        ownerAddress,
+        hasKey: true,
+        hasSecret: true,
+        hasPassphrase: true,
+        l2SanityPassed: true,
+        closedOnly,
+        accessStatus, // Include full access-status response
+        l2Body: sanityData, // Include full L2 response for diagnostics
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+    );
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in polymarket-orders-active:', error);
-    return out({ 
-      ok: false, 
-      error: "EdgeCrash", 
-      message: error?.message, 
-      stack: error?.stack 
-    }, 500);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(
+      JSON.stringify({ 
+        ready: false,
+        tradingEnabled: false,
+        error: 'Check failed',
+        details: errorMessage 
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    );
   }
 });
