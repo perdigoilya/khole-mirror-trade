@@ -28,6 +28,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const [isLoading, setIsLoading] = useState(false);
   const [validationFailed, setValidationFailed] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [proxyAddress, setProxyAddress] = useState("");
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
@@ -155,26 +156,37 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       });
 
       // Create/derive API key using the signature
-      const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
-        body: {
-          walletAddress: address,
-          signature,
-          timestamp,
-          nonce: 0,
-        }
-      });
+      let apiCredentials = null;
+      try {
+        const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
+          body: {
+            walletAddress: address,
+            signature,
+            timestamp,
+            nonce: 0,
+          }
+        });
 
-      if (apiKeyResponse.error) {
-        throw new Error(apiKeyResponse.error.message || 'Failed to create API credentials');
+        if (!apiKeyResponse.error) {
+          apiCredentials = apiKeyResponse.data;
+          console.log('API credentials created successfully');
+        } else {
+          console.log('API key creation failed, proceeding without credentials');
+        }
+      } catch (err) {
+        console.log('API key creation error (continuing):', err);
       }
 
-      const apiCredentials = apiKeyResponse.data;
-      console.log('API credentials created successfully');
+      // Use manual proxy address if provided, otherwise use what we got from API
+      const funderAddress = proxyAddress || apiCredentials?.funderAddress || address;
 
       await connectPolymarket({ 
         walletAddress: address,
         apiKey: apiKey || undefined,
-        apiCredentials: apiCredentials 
+        apiCredentials: apiCredentials ? {
+          ...apiCredentials,
+          funderAddress
+        } : undefined
       });
       
       toast({
@@ -211,9 +223,16 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
       // For unregistered wallets, just connect without API credentials
       // They can register on polymarket.com later
+      const funderAddress = proxyAddress || address;
       await connectPolymarket({ 
         walletAddress: address,
         apiKey: apiKey || undefined,
+        apiCredentials: proxyAddress ? {
+          apiKey: '',
+          secret: '',
+          passphrase: '',
+          funderAddress
+        } : undefined
       });
       
       toast({
@@ -361,6 +380,21 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 />
                 <p className="text-xs text-muted-foreground">
                   You can trade without an API key using wallet signatures. API keys are only needed for certain advanced features.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="proxyAddress">Proxy/Funder Address (Optional)</Label>
+                <Input
+                  id="proxyAddress"
+                  type="text"
+                  placeholder="0x... (leave empty to use connected wallet)"
+                  value={proxyAddress}
+                  onChange={(e) => setProxyAddress(e.target.value)}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  If you trade through a proxy wallet on Polymarket, enter your proxy address here. This is the wallet that holds your USDC and positions.
                 </p>
               </div>
               
