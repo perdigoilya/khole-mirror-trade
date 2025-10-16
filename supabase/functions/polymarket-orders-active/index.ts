@@ -91,7 +91,7 @@ serve(async (req) => {
 
     const key = await crypto.subtle.importKey(
       'raw',
-      secretBytes,
+      secretBytes as BufferSource,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
