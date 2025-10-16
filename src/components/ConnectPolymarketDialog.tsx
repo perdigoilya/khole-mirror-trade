@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Wallet } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ConnectPolymarketDialogProps {
   open: boolean;
@@ -44,23 +45,24 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
     setIsLoading(true);
     try {
-      // Validate that the wallet is registered on Polymarket
-      const balanceResponse = await fetch(
-        `https://clob.polymarket.com/balances/${address}`
-      );
+      // Validate wallet through edge function to avoid CORS issues
+      const { data, error } = await supabase.functions.invoke('polymarket-validate', {
+        body: { walletAddress: address }
+      });
 
-      if (!balanceResponse.ok) {
+      if (error) throw error;
+
+      if (data.error) {
         toast({
-          title: "Wallet Not Registered on Polymarket",
-          description: "This wallet hasn't been used on Polymarket yet. Please create a Polymarket account first by depositing funds at polymarket.com",
+          title: data.error,
+          description: data.details || "Failed to validate wallet",
           variant: "destructive",
         });
         setIsLoading(false);
         return;
       }
 
-      const balanceData = await balanceResponse.json();
-      const balance = parseFloat(balanceData.balance || '0');
+      const balance = data.balance || 0;
 
       if (balance === 0) {
         toast({
