@@ -38,6 +38,9 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     tradingEnabled?: boolean;
     funderHasBalance?: boolean;
     funderBalance?: number;
+    eoaBalance?: number;
+    proxyBalance?: number;
+    detectedProxy?: string;
     ownerAddress?: string;
     connectedEOA?: string;
     closedOnly?: boolean;
@@ -258,29 +261,48 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         connectedEOA: address.toLowerCase(),
       }));
 
-      // Step 1.5: Check funder balance
-      console.log('Checking funder balance...');
+      // Step 1.5: Check balances for both EOA and detected proxy
+      console.log('Checking balances...');
+      let eoaBalance = 0;
+      let proxyBalance = 0;
+      
       try {
-        const balanceResponse = await fetch(`https://data-api.polymarket.com/value?user=${funderAddress}`);
-        if (balanceResponse.ok) {
-          const balanceData = await balanceResponse.json();
-          const balance = balanceData?.[0]?.value || 0;
-          const hasBalance = balance > 0;
-          
-          console.log(`Funder ${funderAddress} balance: $${balance}`);
-          setDiagnostics(prev => ({ 
-            ...prev, 
-            funderHasBalance: hasBalance,
-            funderBalance: balance,
-            fundsReady: hasBalance
-          }));
-
-          if (!hasBalance) {
-            console.warn('⚠️ Funder has no balance - orders may fail with NOT_ENOUGH_BALANCE');
+        // Check EOA balance
+        const eoaBalanceResponse = await fetch(`https://data-api.polymarket.com/value?user=${address}`);
+        if (eoaBalanceResponse.ok) {
+          const eoaBalanceData = await eoaBalanceResponse.json();
+          eoaBalance = eoaBalanceData?.[0]?.value || 0;
+          console.log(`EOA ${address} balance: $${eoaBalance}`);
+        }
+        
+        // Check proxy balance if detected
+        if (detectedFunder && detectedFunder.toLowerCase() !== address.toLowerCase()) {
+          const proxyBalanceResponse = await fetch(`https://data-api.polymarket.com/value?user=${detectedFunder}`);
+          if (proxyBalanceResponse.ok) {
+            const proxyBalanceData = await proxyBalanceResponse.json();
+            proxyBalance = proxyBalanceData?.[0]?.value || 0;
+            console.log(`Proxy ${detectedFunder} balance: $${proxyBalance}`);
           }
         }
+        
+        const activeFunderBalance = useEoaAsFunder ? eoaBalance : (proxyBalance || eoaBalance);
+        const hasBalance = activeFunderBalance > 0;
+        
+        setDiagnostics(prev => ({ 
+          ...prev, 
+          funderHasBalance: hasBalance,
+          funderBalance: activeFunderBalance,
+          eoaBalance,
+          proxyBalance,
+          detectedProxy: detectedFunder !== address ? detectedFunder : undefined,
+          fundsReady: hasBalance
+        }));
+
+        if (!hasBalance) {
+          console.warn('⚠️ Active funder has no balance - orders may fail with NOT_ENOUGH_BALANCE');
+        }
       } catch (e) {
-        console.warn('Could not check funder balance:', e);
+        console.warn('Could not check balances:', e);
       }
 
       // Step 2: Run L2 sanity check (GET /auth/ban-status/closed-only)
@@ -440,8 +462,31 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       <>
                         <div className="flex items-center gap-2">
                           <Info className="h-3.5 w-3.5 text-blue-500" />
-                          <span>Funder: {diagnostics.funderResolved.slice(0, 8)}...{diagnostics.funderResolved.slice(-6)}</span>
+                          <span>Active Funder: {diagnostics.funderResolved.slice(0, 8)}...{diagnostics.funderResolved.slice(-6)}</span>
                         </div>
+                        
+                        {diagnostics.eoaBalance !== undefined && (
+                          <div className="flex items-center gap-2">
+                            {diagnostics.eoaBalance > 0 ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                            )}
+                            <span>EOA balance: ${diagnostics.eoaBalance.toFixed(2)}</span>
+                          </div>
+                        )}
+                        
+                        {diagnostics.detectedProxy && diagnostics.proxyBalance !== undefined && (
+                          <div className="flex items-center gap-2">
+                            {diagnostics.proxyBalance > 0 ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                            )}
+                            <span>Proxy balance: ${diagnostics.proxyBalance.toFixed(2)}</span>
+                          </div>
+                        )}
+                        
                         {diagnostics.funderBalance !== undefined && (
                           <div className="flex items-center gap-2">
                             {diagnostics.funderHasBalance ? (
@@ -449,7 +494,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                             ) : (
                               <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                             )}
-                            <span>Funder balance: ${diagnostics.funderBalance.toFixed(2)}</span>
+                            <span className="font-semibold">Active funder balance: ${diagnostics.funderBalance.toFixed(2)}</span>
                           </div>
                         )}
                       </>
@@ -664,7 +709,22 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 <Switch
                   id="use-eoa"
                   checked={useEoaAsFunder}
-                  onCheckedChange={setUseEoaAsFunder}
+                  onCheckedChange={(checked) => {
+                    setUseEoaAsFunder(checked);
+                    // Update active funder balance based on toggle
+                    if (diagnostics.eoaBalance !== undefined) {
+                      const newFunderBalance = checked 
+                        ? diagnostics.eoaBalance 
+                        : (diagnostics.proxyBalance || diagnostics.eoaBalance);
+                      setDiagnostics(prev => ({
+                        ...prev,
+                        funderBalance: newFunderBalance,
+                        funderHasBalance: newFunderBalance > 0,
+                        fundsReady: newFunderBalance > 0,
+                        funderResolved: checked ? address : (prev.detectedProxy || address),
+                      }));
+                    }
+                  }}
                 />
               </div>
               
