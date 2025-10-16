@@ -116,12 +116,20 @@ serve(async (req) => {
     let closed_only = false;
 
     try {
-      // Base64-decode the secret for HMAC
+      // Detect if secret is base64 (Polymarket returns base64 secrets)
+      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(apiSecret);
       const encoder = new TextEncoder();
-      const secretRaw = atob(apiSecret);
-      const secretBytes = new Uint8Array(secretRaw.length);
-      for (let i = 0; i < secretRaw.length; i++) {
-        secretBytes[i] = secretRaw.charCodeAt(i);
+      
+      // Decode secret from base64 if needed, otherwise use utf8
+      let secretBytes: Uint8Array;
+      if (isB64) {
+        const secretRaw = atob(apiSecret);
+        secretBytes = new Uint8Array(secretRaw.length);
+        for (let i = 0; i < secretRaw.length; i++) {
+          secretBytes[i] = secretRaw.charCodeAt(i);
+        }
+      } else {
+        secretBytes = encoder.encode(apiSecret);
       }
 
       const key = await crypto.subtle.importKey(
@@ -137,14 +145,20 @@ serve(async (req) => {
       const signatureArray = Array.from(new Uint8Array(signature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
+      // Validate standard base64 format
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
+        throw new Error('POLY_SIGNATURE is not standard base64');
+      }
+
       console.log('L2 ban-status auth:', {
         ownerAddress,
         polyAddress: ownerAddress,
         timestamp,
         method,
         requestPath,
-        preimage,
-        signaturePreview: signatureBase64.substring(0, 10) + '...',
+        preimage: preimage.substring(0, 120),
+        signaturePreview: signatureBase64.substring(0, 12) + '...',
+        polyTimestamp: timestamp.toString(),
       });
 
       const banStatusResponse = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {

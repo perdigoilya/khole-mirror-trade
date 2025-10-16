@@ -66,18 +66,27 @@ serve(async (req) => {
 
     // Sanity check: GET /auth/ban-status/closed-only with L2 auth (read-only, no state change)
     console.log('Sanity check: GET /auth/ban-status/closed-only with L2 auth');
+    
+    // HMAC preimage: timestamp + method + path (no body for GET)
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'GET';
     const requestPath = '/auth/ban-status/closed-only';
-    
-    // HMAC preimage: method + path + timestamp (no body for GET)
     const preimage = `${timestamp}${method}${requestPath}`;
+    
+    // Detect if secret is base64 (Polymarket returns base64 secrets)
+    const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(apiSecret);
     const encoder = new TextEncoder();
-    // Base64-decode the API secret to raw bytes for HMAC key
-    const secretRaw = atob(apiSecret);
-    const secretBytes = new Uint8Array(secretRaw.length);
-    for (let i = 0; i < secretRaw.length; i++) {
-      secretBytes[i] = secretRaw.charCodeAt(i);
+    
+    // Decode secret from base64 if needed, otherwise use utf8
+    let secretBytes: Uint8Array;
+    if (isB64) {
+      const secretRaw = atob(apiSecret);
+      secretBytes = new Uint8Array(secretRaw.length);
+      for (let i = 0; i < secretRaw.length; i++) {
+        secretBytes[i] = secretRaw.charCodeAt(i);
+      }
+    } else {
+      secretBytes = encoder.encode(apiSecret);
     }
 
     const key = await crypto.subtle.importKey(
@@ -93,13 +102,19 @@ serve(async (req) => {
     const signatureArray = Array.from(new Uint8Array(signature));
     const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
+    // Validate standard base64 format
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
+      throw new Error('POLY_SIGNATURE is not standard base64');
+    }
+
     console.log('L2 sanity check auth:', { 
       ownerAddress, 
       polyAddress: ownerAddress,
       hasSecret: true, 
       timestamp, 
-      preimage,
-      signaturePreview: signatureBase64.substring(0, 10) + '...',
+      preimage: preimage.substring(0, 120),
+      signaturePreview: signatureBase64.substring(0, 12) + '...',
+      polyTimestamp: timestamp.toString(),
       method,
       requestPath
     });
