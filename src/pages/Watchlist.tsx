@@ -280,6 +280,24 @@ const Watchlist = () => {
             throw new Error('Missing Polymarket API credentials. Open Connect and set up trading first.');
           }
 
+          // Check L2 sanity and closed_only status before trading
+          console.log('Checking L2 credentials and closed_only status...');
+          const { data: sanityData, error: sanityError } = await supabase.functions.invoke('polymarket-orders-active');
+          
+          if (sanityError || !sanityData?.ready) {
+            console.error('L2 sanity check failed:', sanityError || sanityData);
+            throw new Error('Trading not available. Please reconnect in Settings.');
+          }
+
+          if (sanityData.closedOnly === true) {
+            toast({
+              title: "Account in Closed-Only Mode",
+              description: "Your Polymarket account can't open new positions. Visit polymarket.com to resolve.",
+              variant: "destructive",
+            });
+            return;
+          }
+
           // Submit order via backend (requires L2 API credentials held server-side)
           const { data, error } = await supabase.functions.invoke('polymarket-trade', {
             body: {
