@@ -36,11 +36,12 @@ serve(async (req) => {
       console.error('Wallet not registered on Polymarket:', balanceResponse.status);
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Wallet Not Registered on Polymarket',
           details: 'This wallet hasn\'t been used on Polymarket yet. Please create a Polymarket account first by depositing funds at polymarket.com',
           notRegistered: true
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
       );
     }
 

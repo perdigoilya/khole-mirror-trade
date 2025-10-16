@@ -52,9 +52,9 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
       if (error) throw error;
 
-      if (data.error) {
+      if (!data.success || data.error) {
         toast({
-          title: data.error,
+          title: data.error || "Validation Failed",
           description: data.details || "Failed to validate wallet",
           variant: "destructive",
         });
