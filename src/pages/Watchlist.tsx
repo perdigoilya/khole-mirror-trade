@@ -17,16 +17,20 @@ import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { ClobClient } from "@polymarket/clob-client";
-import * as ethers from "ethers";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount, useSignTypedData } from "wagmi";
+import { 
+  buildPolymarketOrder, 
+  formatSignedOrder, 
+  POLYMARKET_ORDER_DOMAIN, 
+  POLYMARKET_ORDER_TYPES 
+} from "@/lib/polymarket-orders";
 
 const Watchlist = () => {
   const { user, kalshiCredentials, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
+  const { signTypedDataAsync } = useSignTypedData();
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
   const [watchedMarkets, setWatchedMarkets] = useState<any[]>([]);
@@ -164,7 +168,7 @@ const Watchlist = () => {
 
       if (market.provider === 'polymarket') {
         // Polymarket trading
-        if (!polymarketCredentials?.walletAddress || !isConnected || !walletClient) {
+        if (!polymarketCredentials?.walletAddress || !isConnected || !address) {
           toast({
             title: "Wallet Not Connected",
             description: "Please connect your Polymarket wallet first",
@@ -201,44 +205,62 @@ const Watchlist = () => {
         }
 
         try {
-          // Create ethers v5 provider from wallet client
-          const provider = new ethers.providers.Web3Provider(walletClient as any);
-          const signer = provider.getSigner();
-
-          // Initialize Polymarket CLOB client
-          const clobClient = new ClobClient(
-            "https://clob.polymarket.com",
-            137, // Polygon chain ID
-            signer
-          );
-
           // Convert price to proper format (0-1 range)
           const price = currentTrade.price / 100;
-          
-          // Create order parameters
           const side = currentTrade.side === 'yes' ? 'BUY' : 'SELL';
           
-          console.log('Placing order:', {
+          console.log('Building order:', {
             tokenId,
             price,
             size: shares,
-            side
+            side,
+            walletAddress: address
           });
 
-          // Place the order
-          const order = await clobClient.createOrder({
-            tokenID: tokenId,
-            price: price,
+          // Build the order structure
+          const order = buildPolymarketOrder({
+            tokenId,
+            price,
             size: shares,
-            side: side as any,
-            feeRateBps: 0, // Fee rate in basis points
+            side,
+            walletAddress: address,
           });
 
-          await clobClient.postOrder(order);
+          // Sign the order with the user's wallet
+          console.log('Requesting signature...');
+          const signature = await signTypedDataAsync({
+            account: address,
+            domain: POLYMARKET_ORDER_DOMAIN,
+            types: POLYMARKET_ORDER_TYPES,
+            primaryType: 'Order',
+            message: order,
+          });
+
+          // Format the signed order for API submission
+          const signedOrder = formatSignedOrder(order, signature);
+
+          console.log('Submitting order to Polymarket...');
+          
+          // Submit the order to Polymarket CLOB API
+          const response = await fetch('https://clob.polymarket.com/order', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(signedOrder),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Order submission failed: ${response.statusText}`);
+          }
+
+          const result = await response.json();
+          console.log('Order placed successfully:', result);
 
           toast({
             title: "Trade Executed Successfully! ✅",
-            description: `Your ${currentTrade.side.toUpperCase()} order for ${shares} shares at $${price.toFixed(2)} has been placed.`,
+            description: `Your ${currentTrade.side.toUpperCase()} order for ${shares} shares at $${(price * 100).toFixed(2)}¢ has been placed.`,
           });
 
           setTradeDialogOpen(false);
@@ -248,13 +270,13 @@ const Watchlist = () => {
         } catch (error: any) {
           console.error('Polymarket trade error:', error);
           
-          if (error.message?.includes('insufficient')) {
+          if (error.message?.includes('insufficient') || error.message?.includes('balance')) {
             toast({
               title: "Insufficient Funds ❌",
               description: "Your wallet doesn't have enough USDC to complete this trade. Please deposit funds to your Polymarket wallet.",
               variant: "destructive",
             });
-          } else if (error.message?.includes('User rejected')) {
+          } else if (error.message?.includes('User rejected') || error.message?.includes('denied')) {
             toast({
               title: "Transaction Cancelled",
               description: "You cancelled the transaction in your wallet.",
