@@ -35,11 +35,11 @@ interface PortfolioSummary {
 }
 
 const SUPPORTED_CHAINS = [
-  { id: polygon.id, name: 'Polygon', chain: polygon, symbol: 'MATIC' },
-  { id: mainnet.id, name: 'Ethereum', chain: mainnet, symbol: 'ETH' },
-  { id: base.id, name: 'Base', chain: base, symbol: 'ETH' },
-  { id: arbitrum.id, name: 'Arbitrum', chain: arbitrum, symbol: 'ETH' },
-  { id: optimism.id, name: 'Optimism', chain: optimism, symbol: 'ETH' },
+  { id: polygon.id, name: 'Polygon USDC', chain: polygon, symbol: 'USDC', tokenAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}` }, // Native USDC on Polygon
+  { id: mainnet.id, name: 'Ethereum', chain: mainnet, symbol: 'ETH', tokenAddress: undefined },
+  { id: base.id, name: 'Base', chain: base, symbol: 'ETH', tokenAddress: undefined },
+  { id: arbitrum.id, name: 'Arbitrum', chain: arbitrum, symbol: 'ETH', tokenAddress: undefined },
+  { id: optimism.id, name: 'Optimism', chain: optimism, symbol: 'ETH', tokenAddress: undefined },
 ];
 
 const Portfolio = () => {
@@ -56,10 +56,14 @@ const Portfolio = () => {
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
 
-  // Get balance for selected chain
+  // Get the selected chain config
+  const selectedChainConfig = SUPPORTED_CHAINS.find(c => c.id === selectedChain);
+
+  // Get balance for selected chain (USDC for Polygon, native token for others)
   const { data: balance, refetch: refetchBalance } = useBalance({
     address: address,
     chainId: selectedChain,
+    token: selectedChainConfig?.tokenAddress, // Use USDC token for Polygon, undefined for native tokens
   });
 
   const fetchPortfolio = async () => {
