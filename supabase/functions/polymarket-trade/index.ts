@@ -11,17 +11,14 @@ serve(async (req) => {
   }
 
   try {
-    const { 
-      walletAddress, 
-      tokenId, 
-      side, 
-      price, 
-      size, 
+    const {
+      walletAddress,
+      tokenId,
+      side,
+      price,
+      size,
       signedOrder,
-      apiKey,
-      apiSecret,
-      apiPassphrase,
-      funderAddress 
+      funderAddress,
     } = await req.json();
 
     console.log('Trade request:', { walletAddress, tokenId, side, price, size, funderAddress });
@@ -32,6 +29,51 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
+
+    // Load L2 API credentials securely from the backend for the authenticated user
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const authHeader = req.headers.get('Authorization') || '';
+
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !authData?.user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized', details: authErr?.message || 'No user' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    const userId = authData.user.id;
+    const { data: credsRow, error: credsErr } = await supabase
+      .from('user_polymarket_credentials')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (credsErr || !credsRow) {
+      return new Response(
+        JSON.stringify({ error: 'Missing L2 credentials', details: 'No Polymarket credentials stored for this user', action: 'create_api_key' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    // Ensure the wallet matches the stored one
+    if (credsRow.wallet_address?.toLowerCase() !== String(walletAddress).toLowerCase()) {
+      return new Response(
+        JSON.stringify({ error: 'Wallet mismatch', details: 'Order signer does not match stored Polymarket wallet' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
+    const apiSecret: string | null = credsRow.api_credentials_secret || null;
+    const apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
+
 
     // Require L2 API credentials for private endpoints per Polymarket docs
     if (!apiKey || !apiSecret || !apiPassphrase) {

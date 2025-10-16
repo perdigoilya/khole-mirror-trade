@@ -20,7 +20,6 @@ import {
   POLYMARKET_ORDER_DOMAIN, 
   POLYMARKET_ORDER_TYPES 
 } from "@/lib/polymarket-orders";
-import { generatePolymarketHeaders } from "@/lib/polymarket-auth";
 import { useEnsurePolymarketCredentials } from "@/hooks/usePolymarketCredentials";
 
 interface Market {
@@ -279,35 +278,23 @@ const MarketDetail = () => {
             throw new Error('Missing Polymarket API credentials. Open Connect and set up trading first.');
           }
 
-          // Submit order directly to CLOB from the browser (avoids server CF blocks)
-          const payload = {
-            order: signedOrder,
-            owner: apiCreds.apiKey,
-            orderType: 'GTC',
-          } as const;
-
-          const headers = await generatePolymarketHeaders(
-            address.toLowerCase(),
-            apiCreds.apiKey,
-            apiCreds.secret,
-            apiCreds.passphrase,
-            'POST',
-            '/order',
-            payload
-          );
-
-          const resp = await fetch('https://clob.polymarket.com/order', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(payload),
+          // Submit order via backend (requires L2 API credentials held server-side)
+          const { data, error } = await supabase.functions.invoke('polymarket-trade', {
+            body: {
+              walletAddress: address,
+              tokenId,
+              side,
+              price,
+              size: shares,
+              signedOrder,
+              funderAddress,
+            }
           });
 
-          if (!resp.ok) {
-            const errText = await resp.text();
-            throw new Error(errText);
+          if (error || !data?.success) {
+            throw new Error((data as any)?.error || error?.message || 'Trade failed');
           }
 
-          const data = await resp.json();
 
           console.log('Order placed successfully:', data);
 
