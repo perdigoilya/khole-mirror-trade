@@ -73,11 +73,16 @@ serve(async (req) => {
     // HMAC preimage: method + path + timestamp (no body for GET)
     const preimage = `${timestamp}${method}${requestPath}`;
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(apiSecret);
+    // Base64-decode the API secret to raw bytes for HMAC key
+    const secretRaw = atob(apiSecret);
+    const secretBytes = new Uint8Array(secretRaw.length);
+    for (let i = 0; i < secretRaw.length; i++) {
+      secretBytes[i] = secretRaw.charCodeAt(i);
+    }
 
     const key = await crypto.subtle.importKey(
       'raw',
-      keyData,
+      secretBytes,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
