@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Wallet, AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { useAccount, useConnect, useDisconnect, useSignTypedData } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSignTypedData, useSwitchChain } from "wagmi";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
+import { polygon } from "wagmi/chains";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ConnectPolymarketDialogProps {
@@ -27,10 +28,11 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const [isLoading, setIsLoading] = useState(false);
   const [validationFailed, setValidationFailed] = useState(false);
   const [apiKey, setApiKey] = useState("");
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
   const { signTypedDataAsync } = useSignTypedData();
+  const { switchChainAsync } = useSwitchChain();
 
   const isPolymarketConnected = !!polymarketCredentials;
 
@@ -75,6 +77,15 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     setIsLoading(true);
     setValidationFailed(false);
     try {
+      // Switch to Polygon if not already on it
+      if (chainId !== polygon.id) {
+        toast({
+          title: "Switching to Polygon",
+          description: "Please approve the network switch in your wallet",
+        });
+        await switchChainAsync({ chainId: polygon.id });
+      }
+
       // Validate wallet through edge function to avoid CORS issues
       const { data, error } = await supabase.functions.invoke('polymarket-validate', {
         body: { walletAddress: address }
@@ -187,6 +198,15 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     
     setIsLoading(true);
     try {
+      // Switch to Polygon if not already on it
+      if (chainId !== polygon.id) {
+        toast({
+          title: "Switching to Polygon",
+          description: "Please approve the network switch in your wallet",
+        });
+        await switchChainAsync({ chainId: polygon.id });
+      }
+
       // Create API credentials for authenticated trading
       toast({
         title: "Setting up API credentials...",
