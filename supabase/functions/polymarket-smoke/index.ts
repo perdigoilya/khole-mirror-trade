@@ -5,99 +5,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function createOrDeriveApiKey({
-  walletAddress,
-  signature,
-  timestamp,
-  nonce,
-}: {
-  walletAddress: string;
-  signature: string;
-  timestamp: number | string;
-  nonce: number | string;
-}) {
-  // Try create first (POST /auth/api-key)
-  const createResp = await fetch("https://clob.polymarket.com/auth/api-key", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      POLY_ADDRESS: walletAddress,
-      POLY_SIGNATURE: signature,
-      POLY_TIMESTAMP: String(timestamp),
-      POLY_NONCE: String(nonce),
-    },
-    body: JSON.stringify({}),
+const out = (obj: any, status = 200, extra: Record<string, string> = {}) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: { "content-type": "application/json", ...corsHeaders, ...extra },
   });
 
-  let createBody: any = null;
+const safeJson = (t: string) => {
   try {
-    const txt = await createResp.text();
-    createBody = txt ? JSON.parse(txt) : null;
-  } catch (_) {
-    // leave as text
+    return JSON.parse(t);
+  } catch {
+    return t;
   }
+};
 
-  if (createResp.ok) {
-    return { step: "create", status: createResp.status, body: createBody };
-  }
-
-  // Fallback to derive (GET /auth/derive-api-key)
-  const deriveResp = await fetch(`https://clob.polymarket.com/auth/derive-api-key?nonce=${String(nonce)}`, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      POLY_ADDRESS: walletAddress,
-      POLY_SIGNATURE: signature,
-      POLY_TIMESTAMP: String(timestamp),
-      POLY_NONCE: String(nonce),
-    },
-  });
-
-  let deriveBody: any = null;
-  try {
-    const txt = await deriveResp.text();
-    deriveBody = txt ? JSON.parse(txt) : null;
-  } catch (_) {}
-
-  if (deriveResp.ok) {
-    return { step: "derive", status: deriveResp.status, body: deriveBody };
-  }
-
-  // Access status (public) to see why
-  const accessResp = await fetch(
-    `https://clob.polymarket.com/auth/access-status?address=${walletAddress}`
-  );
-  let accessBody: any = null;
-  try {
-    const txt = await accessResp.text();
-    accessBody = txt ? JSON.parse(txt) : null;
-  } catch (_) {}
-
-  return {
-    step: "access-status",
-    status: deriveResp.status,
-    body: {
-      create: { status: createResp.status, body: createBody },
-      derive: { status: deriveResp.status, body: deriveBody },
-      access: { status: accessResp.status, body: accessBody },
-    },
-  } as const;
-}
-
-async function hmac(headersSecret: string, message: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(headersSecret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
-  const b = Array.from(new Uint8Array(sig));
-  return btoa(String.fromCharCode(...b));
-}
+const suffix = (v: any) => (typeof v === "string" && v.length > 6 ? v.slice(-6) : v || "");
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -105,22 +27,45 @@ serve(async (req) => {
   }
 
   try {
-    const {
-      walletAddress,
-      signature, // EIP-712 (L1)
-      timestamp, // seconds
-      nonce = 0,
-      runHmacTest = true,
-    } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const walletAddress: string = body.walletAddress || body.address || "";
+    const signature: string = body.signature || ""; // EIP-712 (L1), NOT HMAC
+    const timestampRaw: string | number = body.timestamp ?? body.timestampSeconds;
+    const nonceRaw: string | number = body.nonce ?? 0;
 
-    if (!walletAddress || !signature || !timestamp) {
-      return new Response(
-        JSON.stringify({ error: "Missing walletAddress, signature, or timestamp" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    // Hard assertions (fail with 400 JSON, don’t throw)
+    if (!walletAddress || !signature || timestampRaw === undefined || timestampRaw === null) {
+      return out(
+        {
+          problem: "MissingParams",
+          details: { walletAddress: !!walletAddress, signature: !!signature, timestamp: timestampRaw },
+        },
+        400
       );
     }
 
-    // Auth the user and load creds (or create/derive them if absent)
+    const timestampSeconds = String(timestampRaw);
+    if (!/^\d{10}$/.test(timestampSeconds)) {
+      return out(
+        {
+          problem: "InvalidTimestamp",
+          details: { timestampSeconds, note: "Must be epoch seconds (10 digits)" },
+        },
+        400
+      );
+    }
+
+    const nonce = String(nonceRaw ?? 0);
+
+    // L1 EIP-712 domain + message (echo back; no HMAC here)
+    const L1 = {
+      domain: { name: "ClobAuthDomain", version: "1", chainId: 137 },
+      message: "This message attests that I control the given wallet",
+      timestampSeconds,
+      nonce,
+    } as const;
+
+    // Authenticate user (needed to persist on success)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
@@ -128,102 +73,160 @@ serve(async (req) => {
       global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
     });
 
-    const { data: auth, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !auth?.user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized", details: authErr?.message }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !authData?.user) {
+      return out({ problem: "Unauthorized", details: authErr?.message || "No user" }, 401);
     }
 
-    const userId = auth.user.id;
+    const userId = authData.user.id;
 
-    // Load creds
-    const { data: credRow } = await supabase
-      .from("user_polymarket_credentials")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
+    // Step 1: POST /auth/api-key with explicit empty body and L1 headers (no HMAC)
+    const createUrl = "https://clob.polymarket.com/auth/api-key";
+    const createHeaders = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      POLY_ADDRESS: walletAddress,
+      POLY_SIGNATURE: signature,
+      POLY_TIMESTAMP: timestampSeconds,
+      POLY_NONCE: nonce,
+    } as const;
 
-    let apiKey: string | null = credRow?.api_credentials_key || credRow?.api_key || null;
-    let apiSecret: string | null = credRow?.api_credentials_secret || null;
-    let apiPassphrase: string | null = credRow?.api_credentials_passphrase || null;
+    const createResp = await fetch(createUrl, {
+      method: "POST",
+      headers: createHeaders,
+      body: JSON.stringify({}), // explicit empty JSON
+    });
+    const createTxt = await createResp.text();
+    const createUpstream = safeJson(createTxt);
+    const createCf = {
+      "cf-ray": createResp.headers.get("cf-ray") || "",
+      "cf-cache-status": createResp.headers.get("cf-cache-status") || "",
+      server: createResp.headers.get("server") || "",
+      "content-type": createResp.headers.get("content-type") || "",
+    };
 
-    // If missing creds, attempt create/derive
-    let l1Result: any = null;
-    if (!apiKey || !apiSecret || !apiPassphrase) {
-      l1Result = await createOrDeriveApiKey({ walletAddress, signature, timestamp, nonce });
-      if (l1Result?.body?.key && l1Result?.body?.secret && l1Result?.body?.passphrase) {
-        apiKey = l1Result.body.key;
-        apiSecret = l1Result.body.secret;
-        apiPassphrase = l1Result.body.passphrase;
-        // Persist
-        await supabase.from("user_polymarket_credentials").upsert({
-          user_id: userId,
-          wallet_address: walletAddress,
-          api_credentials_key: apiKey,
-          api_credentials_secret: apiSecret,
-          api_credentials_passphrase: apiPassphrase,
-        });
+    let deriveStatus = 0;
+    let deriveUpstream: any = null;
+    let cf = createCf; // top-level cf echo (last attempt)
+    let ready = false;
+    let key: string | undefined;
+    let secret: string | undefined;
+    let passphrase: string | undefined;
+
+    // If create non-2xx → call GET /auth/derive-api-key with the same L1 headers (reusing signature/timestamp/nonce)
+    if (!createResp.ok) {
+      const deriveUrl = `https://clob.polymarket.com/auth/derive-api-key?nonce=${encodeURIComponent(nonce)}`;
+      const deriveHeaders = {
+        Accept: "application/json",
+        POLY_ADDRESS: walletAddress,
+        POLY_SIGNATURE: signature,
+        POLY_TIMESTAMP: timestampSeconds,
+        POLY_NONCE: nonce,
+      } as const;
+
+      const deriveResp = await fetch(deriveUrl, { method: "GET", headers: deriveHeaders });
+      const deriveTxt = await deriveResp.text();
+      deriveUpstream = safeJson(deriveTxt);
+      deriveStatus = deriveResp.status;
+      cf = {
+        "cf-ray": deriveResp.headers.get("cf-ray") || "",
+        "cf-cache-status": deriveResp.headers.get("cf-cache-status") || "",
+        server: deriveResp.headers.get("server") || "",
+        "content-type": deriveResp.headers.get("content-type") || "",
+      };
+
+      if (deriveResp.ok && deriveUpstream?.apiKey && deriveUpstream?.secret && deriveUpstream?.passphrase) {
+        key = deriveUpstream.apiKey;
+        secret = deriveUpstream.secret;
+        passphrase = deriveUpstream.passphrase;
+        // Persist creds for this user
+        const { error: upErr } = await supabase
+          .from("user_polymarket_credentials")
+          .upsert(
+            {
+              user_id: userId,
+              wallet_address: walletAddress.toLowerCase(),
+              api_credentials_key: key,
+              api_credentials_secret: secret,
+              api_credentials_passphrase: passphrase,
+            },
+            { onConflict: "user_id" }
+          );
+        if (upErr) {
+          // Do not hide persistence error; return as part of diagnostics
+          return out({
+            EOA: walletAddress,
+            L1,
+            createApiKey: { status: createResp.status, upstream: createUpstream },
+            deriveApiKey: { status: deriveStatus, upstream: deriveUpstream },
+            accessStatus: null,
+            cf,
+            ready: true,
+            persistence: { problem: "UpsertFailed", details: upErr.message },
+          });
+        }
+        ready = true;
+      }
+    } else {
+      // Create returned something; try to read tuple from upstream if present and persist
+      if (createUpstream?.apiKey && createUpstream?.secret && createUpstream?.passphrase) {
+        key = createUpstream.apiKey;
+        secret = createUpstream.secret;
+        passphrase = createUpstream.passphrase;
+        const { error: upErr } = await supabase
+          .from("user_polymarket_credentials")
+          .upsert(
+            {
+              user_id: userId,
+              wallet_address: walletAddress.toLowerCase(),
+              api_credentials_key: key,
+              api_credentials_secret: secret,
+              api_credentials_passphrase: passphrase,
+            },
+            { onConflict: "user_id" }
+          );
+        if (upErr) {
+          return out({
+            EOA: walletAddress,
+            L1,
+            createApiKey: { status: createResp.status, upstream: createUpstream },
+            deriveApiKey: { status: deriveStatus, upstream: deriveUpstream },
+            accessStatus: null,
+            cf,
+            ready: true,
+            persistence: { problem: "UpsertFailed", details: upErr.message },
+          });
+        }
+        ready = true;
       }
     }
 
-    const credsPresent = Boolean(apiKey && apiSecret && apiPassphrase);
-
-    // If requested, perform an L2 HMAC test using a safe GET
-    let hmacTest: any = null;
-    if (runHmacTest && credsPresent) {
-      const ts = Math.floor(Date.now() / 1000);
-      const method = "GET";
-      const path = "/auth/ban-status/closed-only"; // documented L2 endpoint
-      const body = ""; // GET => empty string
-      const preimage = `${ts}${method}${path}${body}`;
-      const sig = await hmac(apiSecret!, preimage);
-
-      const testResp = await fetch(`https://clob.polymarket.com${path}`, {
-        method,
-        headers: {
-          Accept: "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          Referer: "https://polymarket.com/",
-          Origin: "https://polymarket.com",
-          POLY_ADDRESS: walletAddress.toLowerCase(),
-          POLY_SIGNATURE: sig,
-          POLY_TIMESTAMP: String(ts),
-          POLY_API_KEY: apiKey!,
-          POLY_PASSPHRASE: apiPassphrase!,
-        },
-      });
-
-      let upstream: any = null;
-      try {
-        const txt = await testResp.text();
-        upstream = txt ? JSON.parse(txt) : txt;
-      } catch (_) {
-        upstream = null;
-      }
-      hmacTest = {
-        status: testResp.status,
-        ok: testResp.ok,
-        upstream,
-        preimage,
+    // If still not ready → surface access-status (onboarding/region/cert)
+    let accessStatus = null as any;
+    if (!ready) {
+      const accUrl = `https://clob.polymarket.com/auth/access-status?address=${encodeURIComponent(walletAddress)}`;
+      const accResp = await fetch(accUrl, { method: "GET" });
+      const accTxt = await accResp.text();
+      accessStatus = { status: accResp.status, body: safeJson(accTxt) };
+      cf = {
+        "cf-ray": accResp.headers.get("cf-ray") || cf["cf-ray"],
+        "cf-cache-status": accResp.headers.get("cf-cache-status") || cf["cf-cache-status"],
+        server: accResp.headers.get("server") || cf["server"],
+        "content-type": accResp.headers.get("content-type") || cf["content-type"],
       };
     }
 
-    return new Response(
-      JSON.stringify({
-        ok: true,
-        l1Result,
-        credsPresent,
-        hmacTest,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    // Return diagnostics verbatim; never hide upstream
+    return out({
+      EOA: walletAddress,
+      L1,
+      createApiKey: { status: createResp.status, upstream: createUpstream },
+      deriveApiKey: { status: deriveStatus || 0, upstream: deriveUpstream },
+      accessStatus,
+      cf,
+      ready,
+    });
   } catch (e: any) {
-    return new Response(
-      JSON.stringify({ error: e?.message || "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return out({ ok: false, error: "EdgeCrash", message: e?.message, stack: e?.stack }, 500);
   }
 });
