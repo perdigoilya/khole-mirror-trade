@@ -264,8 +264,11 @@ const Watchlist = () => {
 
           console.log('Submitting order to Polymarket...');
           
-          // Submit order via backend (API keys are optional)
+          // Submit order via backend (requires L2 API credentials)
           const apiCreds = polymarketCredentials?.apiCredentials;
+          if (!apiCreds?.apiKey || !apiCreds?.secret || !apiCreds?.passphrase) {
+            throw new Error('Missing Polymarket API credentials. Open Connect and set up trading first.');
+          }
 
           const { data, error } = await supabase.functions.invoke('polymarket-trade', {
             body: {
@@ -276,10 +279,9 @@ const Watchlist = () => {
               size: shares,
               signedOrder,
               funderAddress,
-              // API credentials are optional - if not provided, order is submitted with wallet signature only
-              apiKey: apiCreds?.apiKey,
-              apiSecret: apiCreds?.secret,
-              apiPassphrase: apiCreds?.passphrase,
+              apiKey: apiCreds.apiKey,
+              apiSecret: apiCreds.secret,
+              apiPassphrase: apiCreds.passphrase,
             }
           });
 

@@ -176,7 +176,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         message,
       });
 
-      // Try to create API key (optional - not required for trading)
+      // Create/derive API key (REQUIRED for trading)
       let apiCredentials = null;
       try {
         const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
@@ -190,28 +190,27 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
         if (!apiKeyResponse.error) {
           apiCredentials = apiKeyResponse.data;
-          console.log('API credentials created (optional enhancement)');
+          console.log('API credentials created');
         } else {
-          console.log('No API key - will use wallet signatures for trading');
+          throw new Error(apiKeyResponse.error.message || 'Failed to create Polymarket API key');
         }
       } catch (err) {
-        console.log('API key not available - wallet signatures will be used:', err);
+        console.error('API key creation failed:', err);
+        throw err;
       }
 
       // Priority: manual input > auto-detected > API-provided > EOA
       const funderAddress = proxyAddress || detectedFunder || apiCredentials?.funderAddress || address;
 
+      if (!apiCredentials?.apiKey || !apiCredentials?.secret || !apiCredentials?.passphrase) {
+        throw new Error('Missing API credentials after creation.');
+      }
+
       await connectPolymarket({ 
         walletAddress: address,
         apiKey: apiKey || undefined,
-        apiCredentials: apiCredentials ? {
+        apiCredentials: {
           ...apiCredentials,
-          funderAddress
-        } : {
-          // Even without API keys, store the funder address
-          apiKey: '',
-          secret: '',
-          passphrase: '',
           funderAddress
         }
       });
@@ -417,7 +416,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   className="font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  You can trade without an API key using wallet signatures. API keys are only needed for certain advanced features.
+                  API keys are required for placing orders and are created automatically when you sign.
                 </p>
               </div>
 
