@@ -371,51 +371,29 @@ console.log('[L2-VERIFY] ✓ Credentials verified, safe to persist');
     if (authData?.user) {
       const userId = authData.user.id;
       
-      // Check if row exists
-      const { data: existing } = await supabase
+      // Delete any existing row first to avoid duplicate key errors
+      await supabase
         .from('user_polymarket_credentials')
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
+        .delete()
+        .eq('user_id', userId);
 
-      if (existing) {
-        // Update existing row
-        const { error: updateErr } = await supabase
-          .from('user_polymarket_credentials')
-          .update({
-            wallet_address: eoa.toLowerCase(),
-            api_credentials_key: key,
-            api_credentials_secret: secret,
-            api_credentials_passphrase: passphrase,
-            funder_address: funderAddress,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('user_id', userId);
+      // Insert new credentials
+      const { error: insertErr } = await supabase
+        .from('user_polymarket_credentials')
+        .insert({
+          user_id: userId,
+          wallet_address: eoa.toLowerCase(),
+          api_credentials_key: key,
+          api_credentials_secret: secret,
+          api_credentials_passphrase: passphrase,
+          funder_address: funderAddress,
+        });
 
-        if (updateErr) {
-          console.error('[DB-UPDATE-ERROR]', updateErr);
-          return out({ error: 'Failed to update credentials', details: updateErr.message }, 500);
-        }
-        console.log('[DB-UPDATED] Credentials updated for user', userId);
-      } else {
-        // Insert new row
-        const { error: insertErr } = await supabase
-          .from('user_polymarket_credentials')
-          .insert({
-            user_id: userId,
-            wallet_address: eoa.toLowerCase(),
-            api_credentials_key: key,
-            api_credentials_secret: secret,
-            api_credentials_passphrase: passphrase,
-            funder_address: funderAddress,
-          });
-
-        if (insertErr) {
-          console.error('[DB-INSERT-ERROR]', insertErr);
-          return out({ error: 'Failed to insert credentials', details: insertErr.message }, 500);
-        }
-        console.log('[DB-INSERTED] Credentials saved for user', userId);
+      if (insertErr) {
+        console.error('[DB-INSERT-ERROR]', insertErr);
+        return out({ error: 'Failed to save credentials', details: insertErr.message }, 500);
       }
+      console.log('[DB-SAVED] Credentials saved for user', userId);
     }
 
     return out({
