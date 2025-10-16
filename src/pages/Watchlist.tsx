@@ -17,7 +17,8 @@ import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { useAccount, useSignTypedData } from "wagmi";
+import { useAccount, useSignTypedData, useSwitchChain } from "wagmi";
+import { polygon } from "wagmi/chains";
 import { 
   buildPolymarketOrder, 
   formatSignedOrder, 
@@ -29,8 +30,9 @@ const Watchlist = () => {
   const { user, kalshiCredentials, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
+  const { switchChainAsync } = useSwitchChain();
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
   const [watchedMarkets, setWatchedMarkets] = useState<any[]>([]);
@@ -205,6 +207,21 @@ const Watchlist = () => {
         }
 
         try {
+          // Check if wallet is on Polygon network
+          if (chain?.id !== polygon.id) {
+            console.log('Switching to Polygon network...');
+            try {
+              await switchChainAsync({ chainId: polygon.id });
+            } catch (switchError: any) {
+              toast({
+                title: "Network Switch Required",
+                description: "Please switch to Polygon network in your wallet to place trades on Polymarket.",
+                variant: "destructive",
+              });
+              return;
+            }
+          }
+
           // Convert price to proper format (0-1 range)
           const price = currentTrade.price / 100;
           const side = currentTrade.side === 'yes' ? 'BUY' : 'SELL';
