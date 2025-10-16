@@ -333,15 +333,21 @@ const MarketDetail = () => {
             const errorData = data as any;
             
             // Log comprehensive diagnostics
-            console.error('Polymarket trade error:', {
+            const diagnostics = {
               status: errorData?.status,
-              error: errorData?.error,
-              upstream: errorData?.upstream,
+              statusText: errorData?.error || 'Unknown',
+              upstreamJSON: errorData?.upstream,
+              polyAddress: address,
+              polyTimestamp: 'server-generated',
+              funder: funderAddress,
+              signatureType: 2, // browser wallet
               cfRay: errorData?.cfRay,
               cfCache: errorData?.cfCache,
               server: errorData?.server,
               contentType: errorData?.contentType,
-            });
+            };
+            
+            console.error('Polymarket trade error - Full Diagnostics:', diagnostics);
             
             // Check for session expiry (401)
             if (errorData?.action === 'reconnect_required' || errorData?.status === 401) {
@@ -355,10 +361,17 @@ const MarketDetail = () => {
             
             // Check for Cloudflare block (403)
             if (errorData?.status === 403 && errorData?.cfRay) {
+              const diagnosticMsg = `Cloudflare blocked (Ray: ${errorData.cfRay})\nServer: ${errorData.server || 'unknown'}\nCache: ${errorData.cfCache || 'unknown'}`;
               toast({
                 title: "Request Blocked",
-                description: `Cloudflare blocked the request (Ray ID: ${errorData.cfRay}). This may be an egress IP issue.`,
+                description: diagnosticMsg,
                 variant: "destructive",
+              });
+              console.error('Cloudflare 403 diagnostics:', {
+                cfRay: errorData.cfRay,
+                cfCache: errorData.cfCache,
+                server: errorData.server,
+                upstream: errorData.upstream,
               });
               throw new Error('Cloudflare 403 - egress blocked');
             }
@@ -374,25 +387,39 @@ const MarketDetail = () => {
               }
             }
             
-            // Check for specific business errors
+            // Check for specific business errors from CLOB
             if (upstreamError?.error) {
               const errorMsg = upstreamError.error;
+              console.error('CLOB Business Error:', errorMsg);
+              
               if (errorMsg.includes('INVALID_ORDER_MIN_TICK_SIZE')) {
                 toast({
-                  title: "Invalid Order",
+                  title: "Invalid Order - Min Tick Size",
                   description: "Price increment too small. Try rounding to 2 decimal places.",
                   variant: "destructive",
                 });
-              } else if (errorMsg.includes('NOT_ENOUGH_BALANCE')) {
+              } else if (errorMsg.includes('INVALID_ORDER_MIN_SIZE')) {
+                toast({
+                  title: "Invalid Order - Min Size",
+                  description: "Order size too small. Minimum is typically 1 share.",
+                  variant: "destructive",
+                });
+              } else if (errorMsg.includes('NOT_ENOUGH_BALANCE') || errorMsg.includes('INVALID_ORDER_NOT_ENOUGH_BALANCE')) {
                 toast({
                   title: "Insufficient Balance",
-                  description: "Your proxy/wallet doesn't have enough USDC for this trade.",
+                  description: `Your proxy/wallet doesn't have enough USDC for this trade.\nFunder: ${funderAddress.slice(0, 8)}...${funderAddress.slice(-6)}`,
                   variant: "destructive",
                 });
               } else if (errorMsg.includes('MARKET_CLOSED')) {
                 toast({
                   title: "Market Closed",
                   description: "This market is no longer accepting orders.",
+                  variant: "destructive",
+                });
+              } else if (errorMsg.includes('CLOSED_ONLY')) {
+                toast({
+                  title: "Market Closing",
+                  description: "This market only accepts orders that close positions.",
                   variant: "destructive",
                 });
               } else {
@@ -405,22 +432,34 @@ const MarketDetail = () => {
               throw new Error(errorMsg);
             }
             
-            // Generic error with full diagnostics
-            const diagnosticMsg = `Status: ${errorData?.status}\nError: ${errorData?.error}\nUpstream: ${JSON.stringify(upstreamError).slice(0, 100)}`;
+            // Generic error with diagnostics
+            const diagnosticSummary = `Status: ${errorData?.status}\nPOLY_ADDRESS: ${address}\nFunder: ${funderAddress}\nError: ${errorData?.error || 'Unknown'}`;
             toast({
               title: "Order Submission Failed",
-              description: diagnosticMsg,
+              description: diagnosticSummary,
               variant: "destructive",
             });
+            
+            // Log full diagnostics for debugging
+            console.error('Full diagnostic object:', diagnostics);
             throw new Error(errorData?.error || error?.message || 'Trade failed');
           }
 
 
           console.log('Order placed successfully:', data);
+          
+          // Log success diagnostics
+          console.log('✓ Trade Success Diagnostics:', {
+            orderId: data.orderId,
+            polyAddress: address,
+            funder: funderAddress,
+            signatureType: 2,
+            status: 'success',
+          });
 
           toast({
-            title: "Trade Executed Successfully! ✅",
-            description: `Your ${currentTrade.side.toUpperCase()} order for ${shares} shares at $${(price * 100).toFixed(2)}¢ has been placed.`,
+            title: "Order Placed Successfully",
+            description: `Order ID: ${data.orderId}\nYour ${currentTrade.side.toUpperCase()} order has been submitted.`,
           });
 
           setTradeDialogOpen(false);

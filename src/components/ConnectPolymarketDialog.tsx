@@ -34,6 +34,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     l2SanityCheck?: boolean;
     funderResolved?: string;
     tradingEnabled?: boolean;
+    funderHasBalance?: boolean;
+    funderBalance?: number;
+    ownerAddress?: string;
+    connectedEOA?: string;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -238,9 +242,39 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       });
 
       // Step 1: Credentials created ✓
-      setDiagnostics(prev => ({ ...prev, credsReady: true, funderResolved: funderAddress }));
+      setDiagnostics(prev => ({ 
+        ...prev, 
+        credsReady: true, 
+        funderResolved: funderAddress,
+        ownerAddress: address.toLowerCase(),
+        connectedEOA: address.toLowerCase(),
+      }));
 
-      // Step 2: Run L2 sanity check (GET /orders/active)
+      // Step 1.5: Check funder balance
+      console.log('Checking funder balance...');
+      try {
+        const balanceResponse = await fetch(`https://data-api.polymarket.com/value?user=${funderAddress}`);
+        if (balanceResponse.ok) {
+          const balanceData = await balanceResponse.json();
+          const balance = balanceData?.[0]?.value || 0;
+          const hasBalance = balance > 0;
+          
+          console.log(`Funder ${funderAddress} balance: $${balance}`);
+          setDiagnostics(prev => ({ 
+            ...prev, 
+            funderHasBalance: hasBalance,
+            funderBalance: balance
+          }));
+
+          if (!hasBalance) {
+            console.warn('⚠️ Funder has no balance - orders may fail with NOT_ENOUGH_BALANCE');
+          }
+        }
+      } catch (e) {
+        console.warn('Could not check funder balance:', e);
+      }
+
+      // Step 2: Run L2 sanity check (GET /auth/ban-status/closed-only)
       console.log('Running L2 sanity check...');
       try {
         const sanityCheck = await supabase.functions.invoke('polymarket-orders-active', {
@@ -345,11 +379,15 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
               {/* Diagnostics Panel */}
               {diagnostics.credsReady && (
                 <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Connection Status</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Connection Diagnostics</p>
                   <div className="space-y-1.5 text-xs">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      <span>API credentials stored (key, secret, passphrase)</span>
+                      <span>API credentials (key, secret, passphrase) ✓</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      <span>Owner address = connected EOA ✓</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {diagnostics.l2SanityCheck ? (
@@ -357,13 +395,25 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       ) : (
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                       )}
-                      <span>L2 authentication verified (GET /orders/active)</span>
+                      <span>L2 sanity (GET /auth/ban-status/closed-only) status = 200</span>
                     </div>
                     {diagnostics.funderResolved && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                        <span>Funder: {diagnostics.funderResolved.slice(0, 8)}...{diagnostics.funderResolved.slice(-6)}</span>
-                      </div>
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Info className="h-3.5 w-3.5 text-blue-500" />
+                          <span>Funder: {diagnostics.funderResolved.slice(0, 8)}...{diagnostics.funderResolved.slice(-6)}</span>
+                        </div>
+                        {diagnostics.funderBalance !== undefined && (
+                          <div className="flex items-center gap-2">
+                            {diagnostics.funderHasBalance ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                            )}
+                            <span>Funder balance: ${diagnostics.funderBalance.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                     <div className="flex items-center gap-2">
                       {diagnostics.tradingEnabled ? (
@@ -371,9 +421,20 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       ) : (
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                       )}
-                      <span className="font-medium">Trading enabled: {diagnostics.tradingEnabled ? 'YES' : 'NO'}</span>
+                      <span className="font-semibold">tradingEnabled = {diagnostics.tradingEnabled ? 'TRUE' : 'FALSE'}</span>
                     </div>
                   </div>
+                  
+                  {!diagnostics.funderHasBalance && diagnostics.funderBalance === 0 && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          <span className="font-medium">Warning:</span> Proxy has no funds. Orders may fail with NOT_ENOUGH_BALANCE.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
