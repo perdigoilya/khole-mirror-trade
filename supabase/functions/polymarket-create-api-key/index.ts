@@ -154,61 +154,108 @@ serve(async (req) => {
       return out({ error: 'Invalid credentials from upstream', details: { key, secret, passphrase } }, 500);
     }
 
-    // INLINE VERIFY: call GET /auth/api-keys with L2 headers BEFORE storing
-    console.log('[L2-VERIFY] Testing credentials inline before persisting...');
-    const ts2 = Math.floor(Date.now() / 1000);
-    const method = 'GET';
-    const path = '/auth/api-keys';
-    const preimage = `${method}${path}${ts2}`;
-    (globalThis as any).__PREIMAGE = preimage;
+// INLINE VERIFY: call GET /auth/api-keys with L2 headers BEFORE storing
+console.log('[L2-VERIFY] Testing credentials inline before persisting...');
+const method = 'GET';
+const path = '/auth/api-keys';
 
-    const sig = await hmacBase64(secret, preimage);
-    const hdrs = {
-      'Accept': 'application/json',
-      'POLY_ADDRESS': eoa,
-      'POLY_API_KEY': key,
-      'POLY_PASSPHRASE': passphrase,
-      'POLY_TIMESTAMP': ts2.toString(),
-      'POLY_SIGNATURE': sig,
-    };
+const eoaLower = eoa.toLowerCase();
 
-    console.log('[L2-VERIFY] Headers:', {
-      eoa,
-      keySuffix: suffix(hdrs.POLY_API_KEY),
-      passSuffix: passphrase.slice(-4),
-      ts: ts2,
-      preimageFirst120: preimage.slice(0, 120),
-      sigB64First12: sig.slice(0, 12),
-      dbKey: `polymarket:${ENV}:${eoa.toLowerCase()}`
-    });
+// Attempt 1: preimage = method + path + timestamp
+const ts1 = Math.floor(Date.now() / 1000);
+let preimage = `${method}${path}${ts1}`;
+(globalThis as any).__PREIMAGE = preimage;
+let sig = await hmacBase64(secret, preimage);
+let hdrs = {
+  'Accept': 'application/json',
+  'POLY_ADDRESS': eoaLower,
+  'POLY_API_KEY': key,
+  'POLY_PASSPHRASE': passphrase,
+  'POLY_TIMESTAMP': ts1.toString(),
+  'POLY_SIGNATURE': sig,
+};
 
-    const verifyResp = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
-    const verifyText = await verifyResp.text();
-    const upstream = tryJson(verifyText);
+console.log('[L2-VERIFY:A1] Headers:', {
+  eoa: eoaLower,
+  keySuffix: suffix(hdrs.POLY_API_KEY),
+  passSuffix: passphrase.slice(-4),
+  ts: ts1,
+  preimageFirst120: preimage.slice(0, 120),
+  sigB64First12: sig.slice(0, 12),
+  dbKey: `polymarket:${ENV}:${eoaLower}`
+});
 
-    if (!verifyResp.ok) {
-      console.error('[L2-VERIFY] FAILED:', verifyResp.status, upstream);
-      return out({
-        url: `${CLOB}${path}`,
-        method,
-        sent: {
-          POLY_ADDRESS: eoa,
-          POLY_API_KEY_suffix: suffix(hdrs.POLY_API_KEY),
-          POLY_PASSPHRASE_suffix: suffix(hdrs.POLY_PASSPHRASE),
-          POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
-          POLY_SIGNATURE_b64_first12: sig.slice(0, 12),
-          preimage_first120: preimage.slice(0, 120)
+let verifyResp = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
+let verifyText = await verifyResp.text();
+let upstream = tryJson(verifyText);
+
+if (!verifyResp.ok) {
+  console.warn('[L2-VERIFY:A1] FAILED:', verifyResp.status, upstream);
+  // Attempt 2: preimage = timestamp + method + path
+  const ts2 = Math.floor(Date.now() / 1000);
+  const preimage2 = `${ts2}${method}${path}`;
+  (globalThis as any).__PREIMAGE = preimage2;
+  const sig2 = await hmacBase64(secret, preimage2);
+  const hdrs2 = {
+    'Accept': 'application/json',
+    'POLY_ADDRESS': eoaLower,
+    'POLY_API_KEY': key,
+    'POLY_PASSPHRASE': passphrase,
+    'POLY_TIMESTAMP': ts2.toString(),
+    'POLY_SIGNATURE': sig2,
+  };
+  console.log('[L2-VERIFY:A2] Trying alt preimage order (ts+method+path)...', {
+    eoa: eoaLower,
+    keySuffix: suffix(hdrs2.POLY_API_KEY),
+    passSuffix: passphrase.slice(-4),
+    ts: ts2,
+    preimageFirst120: preimage2.slice(0, 120),
+    sigB64First12: sig2.slice(0, 12),
+  });
+  const resp2 = await fetch(`${CLOB}${path}`, { method, headers: hdrs2 });
+  const text2 = await resp2.text();
+  const up2 = tryJson(text2);
+  if (!resp2.ok) {
+    return out({
+      url: `${CLOB}${path}`,
+      method,
+      attempts: [
+        {
+          status: verifyResp.status,
+          sent: {
+            POLY_ADDRESS: eoaLower,
+            POLY_API_KEY_suffix: suffix(hdrs.POLY_API_KEY),
+            POLY_PASSPHRASE_suffix: suffix(hdrs.POLY_PASSPHRASE),
+            POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
+            POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
+            preimage_first120: preimage.slice(0, 120)
+          },
+          upstream
         },
-        status: verifyResp.status,
-        statusText: verifyResp.statusText,
-        cf: {
-          'cf-ray': verifyResp.headers.get('cf-ray') || '',
-          'server': verifyResp.headers.get('server') || '',
-          'cf-cache-status': verifyResp.headers.get('cf-cache-status') || ''
-        },
-        upstream
-      }, verifyResp.status);
-    }
+        {
+          status: resp2.status,
+          sent: {
+            POLY_ADDRESS: eoaLower,
+            POLY_API_KEY_suffix: suffix(hdrs2.POLY_API_KEY),
+            POLY_PASSPHRASE_suffix: suffix(hdrs2.POLY_PASSPHRASE),
+            POLY_TIMESTAMP: hdrs2.POLY_TIMESTAMP,
+            POLY_SIGNATURE_b64_first12: hdrs2.POLY_SIGNATURE.slice(0, 12),
+            preimage_first120: preimage2.slice(0, 120)
+          },
+          upstream: up2
+        }
+      ]
+    }, resp2.status);
+  }
+  // Success on alt ordering → rebind to alt and continue
+  verifyResp = resp2;
+  upstream = up2;
+  preimage = preimage2;
+  sig = sig2;
+  hdrs = hdrs2 as any;
+}
+
+console.log('[L2-VERIFY] ✓ Credentials verified, safe to persist');
 
     console.log('[L2-VERIFY] ✓ Credentials verified, safe to persist');
 
