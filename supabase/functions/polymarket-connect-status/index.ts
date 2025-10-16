@@ -5,6 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const out = (obj: any, status = 200, extra: Record<string, string> = {}) =>
+  new Response(JSON.stringify(obj), { 
+    status, 
+    headers: { "content-type": "application/json", ...corsHeaders, ...extra }
+  });
+
+const safeJson = (t: string) => { try { return JSON.parse(t); } catch { return t; } };
+const suffix = (v: any) => typeof v === "string" && v.length > 6 ? v.slice(-6) : v || "";
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -23,10 +32,7 @@ serve(async (req) => {
     // Get authenticated user
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: authErr?.message || 'No user' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
+      return out({ problem: 'Unauthorized', details: authErr?.message || 'No user' }, 401);
     }
 
     const userId = authData.user.id;
@@ -35,6 +41,9 @@ serve(async (req) => {
     const { connectedEOA } = await req.json().catch(() => ({ connectedEOA: null }));
 
     // Read credentials from DB
+    const dbKey = `polymarket:${Deno.env.get('DENO_REGION') || 'unknown'}:${userId}`;
+    console.log('DB key for creds:', dbKey);
+    
     const { data: credsRow, error: credsErr } = await supabase
       .from('user_polymarket_credentials')
       .select('*')
@@ -127,13 +136,12 @@ serve(async (req) => {
     let l2SanityPassed = false;
     let l2Debug: any = null;
 
-    const attemptBanStatusCheck = async (key: string, secret: string, pass: string): Promise<boolean> => {
+    const attemptBanStatusCheck = async (key: string, secret: string, pass: string): Promise<{ ok: boolean; diag: any }> => {
       try {
         // Detect if secret is base64 (Polymarket returns base64 secrets)
         const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
         const encoder = new TextEncoder();
         
-        // Decode secret from base64 if needed, otherwise use utf8
         let secretBytes: Uint8Array;
         if (isB64) {
           const secretRaw = atob(secret);
@@ -153,79 +161,103 @@ serve(async (req) => {
           ['sign']
         );
 
-        // Fresh timestamp and preimage per attempt
         const ts = Math.floor(Date.now() / 1000);
+        const method = 'GET';
+        const requestPath = '/auth/ban-status/closed-only';
         const preimage = `${method}${requestPath}${ts}`;
+        
+        // Store preimage in globalThis for diagnostics
+        (globalThis as any).__PREIMAGE = preimage;
 
         const messageData = encoder.encode(preimage);
         const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
         const signatureArray = Array.from(new Uint8Array(signature));
         const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-        // Validate standard base64 format
         if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-          throw new Error('POLY_SIGNATURE is not standard base64');
+          return { 
+            ok: false, 
+            diag: { problem: 'Invalid POLY_SIGNATURE format', details: 'Not standard base64' } 
+          };
         }
 
-        l2Debug = {
-          eoa: ownerAddress,
-          polyAddress: ownerAddress,
-          preimageFirst120: preimage.substring(0, 120),
-          url: 'https://clob.polymarket.com/auth/ban-status/closed-only',
-          sigB64First12: signatureBase64.substring(0, 12),
-          polyTimestamp: ts.toString(),
-          method,
-          requestPath,
-          keySuffix: key.slice(-6),
-          passSuffix: pass.slice(-4),
+        const headers = {
+          'Accept': 'application/json',
+          'POLY_ADDRESS': ownerAddress,
+          'POLY_SIGNATURE': signatureBase64,
+          'POLY_TIMESTAMP': ts.toString(),
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': pass,
         };
+
+        const url = 'https://clob.polymarket.com/auth/ban-status/closed-only';
 
         console.log('L2 ban-status attempt:', {
           eoa: ownerAddress,
-          ownerAddress,
-          polyAddress: ownerAddress,
-          keySuffix: key.slice(-6),
-          passSuffix: pass.slice(-4),
+          keySuffix: suffix(key),
+          passSuffix: suffix(pass),
           ts,
-          preimageFirst120: preimage.substring(0, 120),
-          sigB64First12: signatureBase64.substring(0, 12),
+          preimageFirst120: preimage.slice(0, 120),
+          sigB64First12: signatureBase64.slice(0, 12),
         });
 
-        const response = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'POLY_ADDRESS': ownerAddress,
-            'POLY_SIGNATURE': signatureBase64,
-            'POLY_TIMESTAMP': ts.toString(),
-            'POLY_API_KEY': key,
-            'POLY_PASSPHRASE': pass,
+        const r = await fetch(url, { method, headers });
+        const text = await r.text();
+        const upstream = safeJson(text);
+        
+        const cf = {
+          "cf-ray": r.headers.get("cf-ray") || "",
+          "cf-cache-status": r.headers.get("cf-cache-status") || "",
+          "server": r.headers.get("server") || "",
+          "content-type": r.headers.get("content-type") || ""
+        };
+
+        const diag = {
+          url, method,
+          sent: {
+            POLY_ADDRESS: headers?.POLY_ADDRESS,
+            POLY_API_KEY_suffix: suffix(key),
+            POLY_PASSPHRASE_suffix: suffix(pass),
+            POLY_TIMESTAMP: headers?.POLY_TIMESTAMP,
+            POLY_SIGNATURE_b64_first12: signatureBase64.slice(0, 12),
+            preimage_first120: preimage.slice(0, 120)
           },
-        });
+          status: r.status, 
+          statusText: r.statusText, 
+          cf, 
+          upstream
+        };
 
-        if (response.ok) {
-          banStatusBody = await response.json();
+        if (r.ok) {
+          banStatusBody = upstream;
           console.log('✓ Ban status response:', JSON.stringify(banStatusBody, null, 2));
           closed_only = banStatusBody?.closed_only === true || banStatusBody?.closedOnly === true;
-          return true;
+          return { ok: true, diag };
         } else {
-          const errorText = await response.text();
-          console.error('Ban status call failed:', response.status, errorText);
-          banStatusBody = { error: errorText, status: response.status };
-          return false;
+          console.error('Ban status call failed:', diag);
+          banStatusBody = { error: text, status: r.status };
+          return { ok: false, diag };
         }
       } catch (error) {
         console.error('HMAC signing error:', error);
+        const diag = { 
+          problem: 'EdgeCrash', 
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        };
         banStatusBody = { error: 'HMAC signing failed', details: error instanceof Error ? error.message : String(error) };
-        return false;
+        return { ok: false, diag };
       }
     };
 
     // First attempt
-    l2SanityPassed = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
+    const attempts: any[] = [];
+    let result = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
+    attempts.push(result.diag);
+    l2SanityPassed = result.ok;
 
     // On 401, try to derive new credentials and retry once
-    if (!l2SanityPassed && banStatusBody?.status === 401) {
+    if (!result.ok && result.diag?.status === 401) {
       console.log('L2 401 detected - attempting auto-recovery via derive-api-key...');
       
       try {
@@ -257,13 +289,15 @@ serve(async (req) => {
             if (updateError) {
               console.error('Failed to update derived credentials:', updateError);
             } else {
-              // Retry ban-status check with new credentials
+              // Atomically rebind locals and retry
               apiKey = deriveData.apiKey;
               apiSecret = deriveData.secret;
               apiPassphrase = deriveData.passphrase;
               
               console.log('Retrying ban-status with derived credentials...');
-              l2SanityPassed = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
+              const retryResult = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
+              attempts.push(retryResult.diag);
+              l2SanityPassed = retryResult.ok;
             }
           }
         } else {
@@ -278,31 +312,27 @@ serve(async (req) => {
     // Trading enabled ONLY if L2 sanity passed (200 response) and not in closed-only mode
     const tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && l2SanityPassed && !closed_only;
 
-    return new Response(
-      JSON.stringify({
-        hasKey: hasKey,
-        hasSecret: hasSecret,
-        hasPassphrase: hasPassphrase,
-        ownerAddress: ownerAddress,
-        connectedEOA: eoaAddress,
-        ownerMatch: ownerMatch,
-        closed_only: closed_only,
-        banStatusRaw: banStatusBody,
-        tradingEnabled: tradingEnabled,
-        l2Debug: l2Debug,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
+    return out({
+      hasKey: hasKey,
+      hasSecret: hasSecret,
+      hasPassphrase: hasPassphrase,
+      ownerAddress: ownerAddress,
+      connectedEOA: eoaAddress,
+      ownerMatch: ownerMatch,
+      closed_only: closed_only,
+      banStatusRaw: banStatusBody,
+      tradingEnabled: tradingEnabled,
+      attempts: attempts.length > 1 ? attempts : undefined,
+      l2Debug: l2Debug,
+    }, 200);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in polymarket-connect-status:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ 
-        error: 'Status check failed',
-        details: errorMessage 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+    return out({ 
+      ok: false, 
+      error: "EdgeCrash", 
+      message: error?.message, 
+      stack: error?.stack 
+    }, 500);
   }
 });

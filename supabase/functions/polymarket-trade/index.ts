@@ -5,6 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const out = (obj: any, status = 200, extra: Record<string, string> = {}) =>
+  new Response(JSON.stringify(obj), { 
+    status, 
+    headers: { "content-type": "application/json", ...corsHeaders, ...extra }
+  });
+
+const safeJson = (t: string) => { try { return JSON.parse(t); } catch { return t; } };
+const suffix = (v: any) => typeof v === "string" && v.length > 6 ? v.slice(-6) : v || "";
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -24,10 +33,7 @@ serve(async (req) => {
     console.log('Trade request:', { walletAddress, tokenId, side, price, size, funderAddress });
 
     if (!walletAddress || !tokenId || !side || !price || !size || !signedOrder) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required parameters' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ problem: 'Missing required parameters' }, 400);
     }
 
     // Load L2 API credentials securely from the backend for the authenticated user
@@ -42,13 +48,13 @@ serve(async (req) => {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: authErr?.message || 'No user' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
+      return out({ problem: 'Unauthorized', details: authErr?.message || 'No user' }, 401);
     }
 
     const userId = authData.user.id;
+    const dbKey = `polymarket:${Deno.env.get('DENO_REGION') || 'unknown'}:${userId}`;
+    console.log('DB key for creds:', dbKey);
+    
     const { data: credsRow, error: credsErr } = await supabase
       .from('user_polymarket_credentials')
       .select('*')
@@ -56,48 +62,33 @@ serve(async (req) => {
       .maybeSingle();
 
     if (credsErr || !credsRow) {
-      return new Response(
-        JSON.stringify({ error: 'Missing L2 credentials', details: 'No Polymarket credentials stored for this user', action: 'create_api_key' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ problem: 'Missing L2 credentials', details: 'No Polymarket credentials stored for this user', action: 'create_api_key' }, 400);
     }
 
-    // Ensure the wallet matches the stored one (ownerAddress validation)
     const storedWallet = credsRow.wallet_address?.toLowerCase();
     const requestWallet = String(walletAddress).toLowerCase();
     if (storedWallet !== requestWallet) {
       console.error('Wallet mismatch:', { storedWallet, requestWallet });
-      return new Response(
-        JSON.stringify({ 
-          error: 'Wallet mismatch', 
-          details: `POLY_ADDRESS (${requestWallet}) must match stored wallet (${storedWallet}). Switch wallets or reconnect.`
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ 
+        problem: 'Wallet mismatch', 
+        details: `POLY_ADDRESS (${requestWallet}) must match stored wallet (${storedWallet}). Switch wallets or reconnect.`
+      }, 400);
     }
 
     let apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
     let apiSecret: string | null = credsRow.api_credentials_secret || null;
     let apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
 
-    // Assert all 3 credentials present
     if (!apiKey || !apiSecret || !apiPassphrase) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Missing L2 credentials',
-          details: 'Polymarket requires API key auth (L2) for placing orders. Please connect and create API keys first.',
-          action: 'create_api_key'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ 
+        problem: 'Missing L2 credentials',
+        details: 'Polymarket requires API key auth (L2) for placing orders. Please connect and create API keys first.',
+        action: 'create_api_key'
+      }, 400);
     }
 
-    // Validate price and size
     if (price <= 0 || price > 1 || size <= 0) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid price or size. Price must be between 0 and 1, size must be positive.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ problem: 'Invalid price or size', details: 'Price must be between 0 and 1, size must be positive.' }, 400);
     }
 
     // Removed deprecated balance check that caused 404s.
@@ -121,13 +112,16 @@ serve(async (req) => {
     const method = 'POST';
     const requestPath = '/order';
     
-    const attemptOrderSubmission = async (key: string, secret: string, pass: string): Promise<Response> => {
-      // Fresh timestamp and preimage per attempt
+    const attemptOrderSubmission = async (key: string, secret: string, pass: string): Promise<{ r: Response; diag: any }> => {
       const ts = Math.floor(Date.now() / 1000);
       if (!Number.isInteger(ts) || ts.toString().length > 10) {
         throw new Error('Invalid timestamp format - must be epoch seconds');
       }
       const preimage = `${method}${requestPath}${ts}${rawBody}`;
+      
+      // Store preimage in globalThis for diagnostics
+      (globalThis as any).__PREIMAGE = preimage;
+      
       // Detect if secret is base64 (Polymarket returns base64 secrets)
       const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
       const encoder = new TextEncoder();
@@ -157,57 +151,71 @@ serve(async (req) => {
       const signatureArray = Array.from(new Uint8Array(signature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
       
-      // Validate standard base64 format
       if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
         throw new Error('POLY_SIGNATURE is not standard base64');
       }
       
-      // Log every /order attempt
+      const headers = {
+        'content-type': 'application/json',
+        'accept': 'application/json',
+        'POLY_ADDRESS': requestWallet,
+        'POLY_SIGNATURE': signatureBase64,
+        'POLY_TIMESTAMP': ts.toString(),
+        'POLY_API_KEY': key,
+        'POLY_PASSPHRASE': pass,
+      };
+
+      const url = 'https://clob.polymarket.com/order';
+
       console.log('L2 /order attempt:', { 
         eoa: requestWallet,
-        ownerAddress: ownerAddress,
-        POLY_ADDRESS: requestWallet,
-        keySuffix: key.slice(-6),
-        passSuffix: pass.slice(-4),
+        keySuffix: suffix(key),
+        passSuffix: suffix(pass),
         ts,
-        preimageFirst120: preimage.substring(0, 120),
-        sigB64First12: signatureBase64.substring(0, 12),
+        preimageFirst120: preimage.slice(0, 120),
+        sigB64First12: signatureBase64.slice(0, 12),
         funderAddress: funderAddress || 'not_specified',
         bodyLength: rawBody.length
       });
 
-      return await fetch('https://clob.polymarket.com/order', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'accept': 'application/json',
-          'POLY_ADDRESS': requestWallet,
-          'POLY_SIGNATURE': signatureBase64,
-          'POLY_TIMESTAMP': ts.toString(),
-          'POLY_API_KEY': key,
-          'POLY_PASSPHRASE': pass,
+      const r = await fetch(url, { method, headers, body: rawBody });
+      const text = await r.text();
+      const upstream = safeJson(text);
+      
+      const cf = {
+        "cf-ray": r.headers.get("cf-ray") || "",
+        "cf-cache-status": r.headers.get("cf-cache-status") || "",
+        "server": r.headers.get("server") || "",
+        "content-type": r.headers.get("content-type") || ""
+      };
+
+      const diag = {
+        url, method,
+        sent: {
+          POLY_ADDRESS: headers.POLY_ADDRESS,
+          POLY_API_KEY_suffix: suffix(key),
+          POLY_PASSPHRASE_suffix: suffix(pass),
+          POLY_TIMESTAMP: headers.POLY_TIMESTAMP,
+          POLY_SIGNATURE_b64_first12: signatureBase64.slice(0, 12),
+          preimage_first120: preimage.slice(0, 120)
         },
-        body: rawBody, // Use SAME rawBody for signing and sending
-      });
+        status: r.status, 
+        statusText: r.statusText, 
+        cf, 
+        upstream
+      };
+
+      return { r, diag };
     };
 
     console.log('Submitting order to CLOB...');
-    let orderResponse = await attemptOrderSubmission(apiKey, apiSecret, apiPassphrase);
+    const attempts: any[] = [];
+    let result = await attemptOrderSubmission(apiKey, apiSecret, apiPassphrase);
+    attempts.push(result.diag);
+    let orderResponse = result.r;
 
     if (!orderResponse.ok) {
-      const errorText = await orderResponse.text();
-      const cfRay = orderResponse.headers.get('cf-ray') || null;
-      const cfCache = orderResponse.headers.get('cf-cache-status') || null;
-      const server = orderResponse.headers.get('server') || null;
-      const contentType = orderResponse.headers.get('content-type') || null;
-
-      console.error('Order submission failed:', orderResponse.status, {
-        cfRay,
-        cfCache,
-        server,
-        contentType,
-        body: errorText?.slice(0, 2000)
-      });
+      console.error('Order submission failed:', result.diag);
 
       // Auto-recovery on 401: derive new credentials and retry once
       if (orderResponse.status === 401) {
@@ -241,32 +249,29 @@ serve(async (req) => {
               if (updateError) {
                 console.error('Failed to update derived credentials:', updateError);
               } else {
-                // Update local vars and retry once
+                // Atomically rebind locals and retry
                 const newApiKey = deriveData.apiKey;
                 const newApiSecret = deriveData.secret;
                 const newApiPassphrase = deriveData.passphrase;
                 
                 console.log('Retrying order with derived credentials...');
-                orderResponse = await attemptOrderSubmission(newApiKey, newApiSecret, newApiPassphrase);
+                const retryResult = await attemptOrderSubmission(newApiKey, newApiSecret, newApiPassphrase);
+                attempts.push(retryResult.diag);
+                orderResponse = retryResult.r;
                 
-                // If retry succeeds, continue to success handler below
                 if (orderResponse.ok) {
-                  const orderData = await orderResponse.json();
+                  const orderData = safeJson(await orderResponse.text());
                   console.log('✓ Order submitted successfully after derive:', orderData);
 
-                  return new Response(
-                    JSON.stringify({
-                      success: true,
-                      orderId: orderData.orderID,
-                      order: orderData
-                    }),
-                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                  );
+                  return out({
+                    success: true,
+                    orderId: orderData.orderID,
+                    order: orderData,
+                    attempts,
+                  }, 200);
                 }
                 
-                // If retry also fails, continue to error handler below
-                const retryError = await orderResponse.text();
-                console.error('Order retry also failed:', orderResponse.status, retryError);
+                console.error('Order retry also failed:', retryResult.diag);
               }
             }
           } else {
@@ -278,41 +283,26 @@ serve(async (req) => {
         }
       }
 
-      return new Response(
-        JSON.stringify({ 
-          error: 'Order Submission Failed',
-          status: orderResponse.status,
-          cfRay,
-          cfCache,
-          server,
-          contentType,
-          upstream: errorText
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: orderResponse.status }
-      );
+      return out(attempts.length > 0 ? { ...result.diag, attempts } : result.diag, orderResponse.status);
     }
 
-    const orderData = await orderResponse.json();
+    const orderData = safeJson(await orderResponse.text());
     console.log('Order submitted successfully:', orderData);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        orderId: orderData.orderID,
-        order: orderData
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
+    return out({
+      success: true,
+      orderId: orderData.orderID,
+      order: orderData,
+      attempts: attempts.length > 1 ? attempts : undefined,
+    }, 200);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Trade error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(
-      JSON.stringify({ 
-        error: 'Trade failed',
-        details: errorMessage 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+    return out({ 
+      ok: false, 
+      error: "EdgeCrash", 
+      message: error?.message, 
+      stack: error?.stack 
+    }, 500);
   }
 });
