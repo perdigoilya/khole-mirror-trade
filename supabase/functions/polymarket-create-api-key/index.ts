@@ -56,8 +56,21 @@ serve(async (req) => {
         }
 
         const deriveData = await deriveResponse.json();
+        
+        // Fetch proxy address for derived key too
+        let funderAddress = walletAddress;
+        try {
+          const proxyResp = await fetch(`https://data-api.polymarket.com/address_details?address=${walletAddress}`);
+          if (proxyResp.ok) {
+            const proxyData = await proxyResp.json();
+            funderAddress = proxyData?.proxy || walletAddress;
+          }
+        } catch (e) {
+          console.warn('Could not fetch proxy address:', e);
+        }
+
         return new Response(
-          JSON.stringify(deriveData),
+          JSON.stringify({ ...deriveData, funderAddress }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -68,8 +81,22 @@ serve(async (req) => {
     const data = await response.json();
     console.log('API key created successfully');
 
+    // Also fetch the proxy (funder) address for this wallet
+    let funderAddress = walletAddress; // fallback to EOA
+    try {
+      const proxyResp = await fetch(`https://data-api.polymarket.com/address_details?address=${walletAddress}`);
+      if (proxyResp.ok) {
+        const proxyData = await proxyResp.json();
+        // Use the proxy if available, otherwise fall back to EOA
+        funderAddress = proxyData?.proxy || walletAddress;
+        console.log('Resolved funder address:', funderAddress);
+      }
+    } catch (e) {
+      console.warn('Could not fetch proxy address, using EOA:', e);
+    }
+
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify({ ...data, funderAddress }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

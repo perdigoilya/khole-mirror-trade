@@ -236,12 +236,15 @@ const MarketDetail = () => {
           });
 
           // Build the order structure
+          const funderAddress = polymarketCredentials?.apiCredentials?.funderAddress || address;
           const order = buildPolymarketOrder({
             tokenId,
             price,
             size: shares,
             side,
             walletAddress: address,
+            funderAddress,
+            signatureType: 2, // Browser wallet
           });
 
           // Sign the order with the user's wallet

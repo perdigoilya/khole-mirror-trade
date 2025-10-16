@@ -29,6 +29,8 @@ export interface PolymarketOrderParams {
   size: number;
   side: 'BUY' | 'SELL';
   walletAddress: string;
+  funderAddress?: string; // The proxy wallet that holds funds
+  signatureType?: number; // 1 = email/magic, 2 = browser wallet
 }
 
 export interface SignedPolymarketOrder {
@@ -61,7 +63,12 @@ export function buildPolymarketOrder(params: PolymarketOrderParams): {
   side: number;
   signatureType: number;
 } {
-  const { tokenId, price, size, side, walletAddress } = params;
+  const { tokenId, price, size, side, walletAddress, funderAddress, signatureType } = params;
+  
+  // Use funder (proxy) as maker if provided, otherwise use EOA
+  const makerAddress = (funderAddress || walletAddress) as `0x${string}`;
+  // Signer is always the EOA that signs the order
+  const signerAddress = walletAddress as `0x${string}`;
 
   // Generate random salt
   const salt = BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
@@ -85,8 +92,8 @@ export function buildPolymarketOrder(params: PolymarketOrderParams): {
 
   return {
     salt,
-    maker: walletAddress as `0x${string}`,
-    signer: walletAddress as `0x${string}`,
+    maker: makerAddress, // Proxy wallet that holds funds
+    signer: signerAddress, // EOA that signs the order
     taker: "0x0000000000000000000000000000000000000000",
     tokenId: BigInt(tokenId),
     makerAmount,
@@ -95,7 +102,7 @@ export function buildPolymarketOrder(params: PolymarketOrderParams): {
     nonce: BigInt(Date.now()),
     feeRateBps: BigInt(0), // 0 basis points fee
     side: isBuy ? 0 : 1, // 0 = BUY, 1 = SELL
-    signatureType: 0, // 0 = EOA signature, 1 = Poly Proxy, 2 = EIP1271
+    signatureType: signatureType ?? 2, // Default to 2 (browser wallet)
   };
 }
 

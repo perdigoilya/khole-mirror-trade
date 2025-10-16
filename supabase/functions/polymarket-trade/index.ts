@@ -11,11 +11,22 @@ serve(async (req) => {
   }
 
   try {
-    const { walletAddress, tokenId, side, price, size } = await req.json();
+    const { 
+      walletAddress, 
+      tokenId, 
+      side, 
+      price, 
+      size, 
+      signedOrder,
+      apiKey,
+      apiSecret,
+      apiPassphrase,
+      funderAddress 
+    } = await req.json();
 
-    console.log('Trade request:', { walletAddress, tokenId, side, price, size });
+    console.log('Trade request:', { walletAddress, tokenId, side, price, size, funderAddress });
 
-    if (!walletAddress || !tokenId || !side || !price || !size) {
+    if (!walletAddress || !tokenId || !side || !price || !size || !signedOrder || !apiKey || !apiSecret || !apiPassphrase) {
       return new Response(
         JSON.stringify({ error: 'Missing required parameters' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -30,10 +41,11 @@ serve(async (req) => {
       );
     }
 
-    // Check wallet balance by fetching from Polymarket API
-    console.log('Checking wallet balance...');
+    // Check funder (proxy) balance
+    const checkAddress = funderAddress || walletAddress;
+    console.log('Checking balance for:', checkAddress);
     const balanceResponse = await fetch(
-      `https://clob.polymarket.com/balances/${walletAddress}`,
+      `https://clob.polymarket.com/balances/${checkAddress}`,
       {
         headers: {
           'Accept': 'application/json',
@@ -86,25 +98,66 @@ serve(async (req) => {
       );
     }
 
-    // NOTE: Actual order placement would require:
-    // 1. Private key signing (cannot be done securely from server)
-    // 2. Client-side transaction signing using Web3
-    // 3. ClobClient initialization with proper signature type
+    // Submit the order using L2 HMAC authentication
+    console.log('Submitting order to CLOB...');
+    const timestamp = Math.floor(Date.now() / 1000);
+    const method = 'POST';
+    const requestPath = '/order';
+    const bodyString = JSON.stringify(signedOrder);
     
-    // For now, we return a validation success with instructions
+    // Generate HMAC signature
+    const message = `${timestamp}${method}${requestPath}${bodyString}`;
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(apiSecret);
+    
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const messageData = encoder.encode(message);
+    const signature = await crypto.subtle.sign('HMAC', key, messageData);
+    const signatureArray = Array.from(new Uint8Array(signature));
+    const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+
+    // Submit order with L2 headers
+    const orderResponse = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'POLY_ADDRESS': walletAddress,
+        'POLY_SIGNATURE': signatureBase64,
+        'POLY_TIMESTAMP': timestamp.toString(),
+        'POLY_API_KEY': apiKey,
+        'POLY_PASSPHRASE': apiPassphrase,
+      },
+      body: bodyString,
+    });
+
+    if (!orderResponse.ok) {
+      const errorText = await orderResponse.text();
+      console.error('Order submission failed:', orderResponse.status, errorText);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Order Submission Failed',
+          details: errorText,
+          status: orderResponse.status
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: orderResponse.status }
+      );
+    }
+
+    const orderData = await orderResponse.json();
+    console.log('Order submitted successfully:', orderData);
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Validation passed. Ready to execute trade.',
-        validated: {
-          walletAddress,
-          balance: availableBalance,
-          requiredAmount,
-          canTrade: true
-        },
-        // In a real implementation, this would be handled client-side with wallet signing
-        requiresClientSigning: true,
-        instructions: 'Trade must be signed and submitted from client with wallet private key'
+        orderId: orderData.orderID,
+        order: orderData
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );

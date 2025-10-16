@@ -14,6 +14,7 @@ interface PolymarketCredentials {
     apiKey: string;
     secret: string;
     passphrase: string;
+    funderAddress?: string;
   };
 }
 
@@ -114,6 +115,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
             apiKey: polymarketData.api_credentials_key,
             secret: polymarketData.api_credentials_secret,
             passphrase: polymarketData.api_credentials_passphrase,
+            funderAddress: polymarketData.funder_address,
           } : undefined,
         });
       }
@@ -160,6 +162,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         api_credentials_key: creds.apiCredentials?.apiKey,
         api_credentials_secret: creds.apiCredentials?.secret,
         api_credentials_passphrase: creds.apiCredentials?.passphrase,
+        funder_address: creds.apiCredentials?.funderAddress,
       });
 
     if (error) throw error;

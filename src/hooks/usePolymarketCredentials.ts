@@ -7,6 +7,7 @@ export interface ApiCredentials {
   apiKey: string;
   secret: string;
   passphrase: string;
+  funderAddress?: string;
 }
 
 export function useEnsurePolymarketCredentials() {
@@ -70,12 +71,16 @@ export function useEnsurePolymarketCredentials() {
     }
 
     const apiCredentials = apiKeyResponse.data as ApiCredentials;
+    const funderAddress = apiCredentials.funderAddress || address;
 
     // Persist to backend and context
     await connectPolymarket({ 
       walletAddress: address,
       apiKey: apiKey || undefined,
-      apiCredentials
+      apiCredentials: {
+        ...apiCredentials,
+        funderAddress
+      }
     });
 
     toast({
