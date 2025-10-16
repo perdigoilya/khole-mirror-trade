@@ -55,11 +55,11 @@ serve(async (req) => {
       );
     }
 
-    // Sanity check: GET /orders/active with L2 auth
-    console.log('Sanity check: GET /orders/active with L2 auth');
+    // Sanity check: GET /data/orders with L2 auth
+    console.log('Sanity check: GET /data/orders with L2 auth');
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'GET';
-    const requestPath = '/orders/active';
+    const requestPath = '/data/orders';
     const body = '';
 
     // Generate HMAC
@@ -82,7 +82,7 @@ serve(async (req) => {
 
     console.log('L2 sanity check preimage:', { walletAddress, timestamp, method, requestPath });
 
-    const activeOrdersResponse = await fetch('https://clob.polymarket.com/orders/active', {
+    const activeOrdersResponse = await fetch('https://clob.polymarket.com/data/orders', {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
