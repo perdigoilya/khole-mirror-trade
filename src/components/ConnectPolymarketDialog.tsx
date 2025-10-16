@@ -26,7 +26,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const { connectPolymarket, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [validationFailed, setValidationFailed] = useState(false);
+  const [registrationRequired, setRegistrationRequired] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [proxyAddress, setProxyAddress] = useState("");
   const { address, isConnected, chainId } = useAccount();
@@ -38,9 +38,12 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const isPolymarketConnected = !!polymarketCredentials;
 
   const handleDialogClose = (newOpen: boolean) => {
-    // Clean up wallet connection state when dialog is closed
-    if (!newOpen && !address) {
-      disconnect();
+    // Clean up state when dialog is closed
+    if (!newOpen) {
+      setRegistrationRequired(false);
+      if (!address) {
+        disconnect();
+      }
     }
     onOpenChange(newOpen);
   };
@@ -50,7 +53,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       try {
         // Open WalletConnect modal
         setIsLoading(true);
-        setValidationFailed(false);
+        setRegistrationRequired(false);
         await openWalletModal();
         // Note: Connection happens asynchronously, modal closing doesn't mean success/failure
       } catch (error: any) {
@@ -76,7 +79,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     }
 
     setIsLoading(true);
-    setValidationFailed(false);
+    setRegistrationRequired(false);
     try {
       // Switch to Polygon if not already on it
       if (chainId !== polygon.id) {
@@ -188,13 +191,26 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           }
         });
 
-        if (!apiKeyResponse.error) {
-          apiCredentials = apiKeyResponse.data;
-          console.log('API credentials created');
-        } else {
-          throw new Error(apiKeyResponse.error.message || 'Failed to create Polymarket API key');
+        if (apiKeyResponse.error) {
+          const errorData = apiKeyResponse.error as any;
+          
+          // Check if this is a registration-required error
+          if (errorData.cert_required || errorData.status === 'not_registered') {
+            setRegistrationRequired(true);
+            toast({
+              title: "Registration Required",
+              description: "Please visit polymarket.com to complete your registration first",
+              variant: "destructive",
+            });
+            return;
+          }
+          
+          throw new Error(errorData.message || 'Failed to create Polymarket API key');
         }
-      } catch (err) {
+
+        apiCredentials = apiKeyResponse.data;
+        console.log('API credentials created');
+      } catch (err: any) {
         console.error('API key creation failed:', err);
         throw err;
       }
@@ -233,57 +249,12 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           variant: "destructive",
         });
       } else {
-        setValidationFailed(true);
         toast({
           title: "Connection Failed",
           description: error.message || "Failed to connect to Polymarket",
           variant: "destructive",
         });
       }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleConnectAnyway = async () => {
-    if (!address) return;
-    
-    setIsLoading(true);
-    try {
-      // Switch to Polygon if not already on it
-      if (chainId !== polygon.id) {
-        toast({
-          title: "Switching to Polygon",
-          description: "Please approve the network switch in your wallet",
-        });
-        await switchChainAsync({ chainId: polygon.id });
-      }
-
-      // For unregistered wallets, use manual proxy or fallback to EOA
-      const funderAddress = proxyAddress || address;
-      await connectPolymarket({ 
-        walletAddress: address,
-        apiKey: apiKey || undefined,
-        apiCredentials: {
-          apiKey: '',
-          secret: '',
-          passphrase: '',
-          funderAddress
-        }
-      });
-      
-      toast({
-        title: "Wallet Connected",
-        description: `Connected ${address.slice(0, 6)}...${address.slice(-4)}. You can trade once registered on polymarket.com.`,
-      });
-      
-      onOpenChange(false);
-    } catch (error: any) {
-      toast({
-        title: "Connection failed",
-        description: error.message || "Failed to connect wallet",
-        variant: "destructive",
-      });
     } finally {
       setIsLoading(false);
     }
@@ -318,7 +289,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 </div>
               </div>
             </div>
-          ) : validationFailed && isConnected && address ? (
+            ) : registrationRequired && isConnected && address ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
                 <div className="flex items-start gap-3">
@@ -326,7 +297,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   <div className="flex-1 space-y-3">
                     <div>
                       <p className="text-sm font-medium text-amber-500">
-                        Wallet Uses Proxy Trading
+                        Registration Required
                       </p>
                       <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
                         {address}
@@ -341,29 +312,20 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
                   <div className="space-y-3 text-sm">
                     <div>
-                      <p className="font-medium text-blue-500">What's Happening?</p>
+                      <p className="font-medium text-blue-500">Complete Your Polymarket Setup</p>
                       <p className="text-muted-foreground mt-1">
-                        When you trade on Polymarket.com, it uses a <strong>proxy wallet</strong> (smart contract) 
-                        instead of your EOA directly. This proxy holds your positions and USDC. 
-                        Our platform can't verify proxy setups, but <strong>you can still connect</strong>.
+                        Your wallet needs to be registered on Polymarket before you can trade. 
+                        This one-time setup creates your proxy wallet and enables trading.
                       </p>
                     </div>
                     
                     <div>
-                      <p className="font-medium text-foreground">Two Options:</p>
+                      <p className="font-medium text-foreground">Steps:</p>
                       <ol className="list-decimal list-inside space-y-1.5 ml-2 mt-2 text-muted-foreground">
-                        <li><strong>Connect Anyway</strong> (Recommended) - Use your current wallet as-is</li>
-                        <li><strong>Advanced:</strong> Set up direct EOA trading via the{" "}
-                          <a 
-                            href="https://docs.polymarket.com/developers/CLOB/authentication" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline"
-                          >
-                            CLOB API
-                          </a>
-                          {" "}for on-chain verification
-                        </li>
+                        <li>Visit <strong>polymarket.com</strong></li>
+                        <li>Connect this wallet (<span className="font-mono text-xs">{address.slice(0, 6)}...{address.slice(-4)}</span>)</li>
+                        <li>Complete the registration process</li>
+                        <li>Return here and click <strong>Retry Connection</strong></li>
                       </ol>
                     </div>
 
@@ -378,17 +340,20 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       </Button>
                       <Button
                         size="sm"
-                        onClick={handleConnectAnyway}
+                        onClick={() => {
+                          setRegistrationRequired(false);
+                          handleWalletConnect();
+                        }}
                         disabled={isLoading}
                         className="text-xs bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
                       >
                         {isLoading ? (
                           <>
                             <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                            Connecting...
+                            Retrying...
                           </>
                         ) : (
-                          'Connect Anyway'
+                          'Retry Connection'
                         )}
                       </Button>
                     </div>

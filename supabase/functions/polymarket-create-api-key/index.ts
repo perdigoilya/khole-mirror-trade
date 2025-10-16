@@ -55,6 +55,30 @@ serve(async (req) => {
         });
 
         if (!deriveResponse.ok) {
+          // Both create and derive failed - check if user needs to register
+          console.log('Derive also failed, checking access status...');
+          try {
+            const accessResponse = await fetch(
+              `https://clob.polymarket.com/auth/access-status?address=${walletAddress}`
+            );
+            if (accessResponse.ok) {
+              const accessData = await accessResponse.json();
+              if (accessData?.cert_required === true) {
+                return new Response(
+                  JSON.stringify({ 
+                    error: 'Registration Required',
+                    details: 'This wallet is not registered on Polymarket. Please visit polymarket.com to complete registration first.',
+                    cert_required: true,
+                    status: 'not_registered'
+                  }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+                );
+              }
+            }
+          } catch (accessErr) {
+            console.warn('Could not check access status:', accessErr);
+          }
+          
           throw new Error(`Failed to derive API key: ${await deriveResponse.text()}`);
         }
 
