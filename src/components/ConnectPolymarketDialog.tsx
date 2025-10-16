@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useTrading } from "@/contexts/TradingContext";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +26,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [validationFailed, setValidationFailed] = useState(false);
+  const [apiKey, setApiKey] = useState("");
   const { address, isConnected } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
@@ -98,7 +101,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         });
       }
 
-      await connectPolymarket({ walletAddress: address });
+      await connectPolymarket({ 
+        walletAddress: address,
+        apiKey: apiKey || undefined 
+      });
       
       toast({
         title: "Connected Successfully",
@@ -123,7 +129,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     
     setIsLoading(true);
     try {
-      await connectPolymarket({ walletAddress: address });
+      await connectPolymarket({ 
+        walletAddress: address,
+        apiKey: apiKey || undefined 
+      });
       
       toast({
         title: "Wallet Connected",
@@ -249,7 +258,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 </div>
               </div>
             </div>
-          ) : isConnected && address ? (
+           ) : isConnected && address ? (
             <div className="space-y-3">
               <div className="rounded-lg bg-muted p-4">
                 <p className="text-sm font-semibold mb-1">Connected Wallet</p>
@@ -257,10 +266,33 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   {address}
                 </p>
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">Polymarket API Key (Required for Trading)</Label>
+                <Input
+                  id="apiKey"
+                  type="password"
+                  placeholder="Enter your Polymarket API key"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Get your API key from{" "}
+                  <a 
+                    href="https://polymarket.com/settings/api" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Polymarket Settings
+                  </a>
+                </p>
+              </div>
               
               <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm">
                 <p className="text-green-900 dark:text-green-300">
-                  ✓ Wallet connected! Click "Save Connection" to verify with Polymarket.
+                  ✓ Wallet connected! Add your API key and click "Save Connection".
                 </p>
               </div>
             </div>

@@ -256,11 +256,22 @@ const MarketDetail = () => {
 
           console.log('Submitting order to Polymarket...');
           
+          // Check if API key is available
+          if (!polymarketCredentials?.apiKey) {
+            toast({
+              title: "API Key Required",
+              description: "Please reconnect your Polymarket wallet and add your API key to place trades.",
+              variant: "destructive",
+            });
+            return;
+          }
+
           // Submit the order to Polymarket CLOB API
           const response = await fetch('https://clob.polymarket.com/order', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Authorization': `Bearer ${polymarketCredentials.apiKey}`,
             },
             body: JSON.stringify(signedOrder),
           });

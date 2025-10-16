@@ -9,6 +9,7 @@ interface KalshiCredentials {
 
 interface PolymarketCredentials {
   walletAddress: string;
+  apiKey?: string;
 }
 
 type Provider = 'kalshi' | 'polymarket' | null;
@@ -99,6 +100,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (polymarketData) {
         setPolymarketCredentials({
           walletAddress: polymarketData.wallet_address,
+          apiKey: polymarketData.api_key,
         });
       }
     } catch (error) {
@@ -140,6 +142,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .upsert({
         user_id: user.id,
         wallet_address: creds.walletAddress,
+        api_key: creds.apiKey,
       });
 
     if (error) throw error;
