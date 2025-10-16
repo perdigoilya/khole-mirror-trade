@@ -208,22 +208,49 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
           // First, try to get from the main market directly
           clobTokenId = mainMarket.clobTokenIds?.[0] || mainMarket.clob_token_ids?.[0] || '';
           
-          // If not found, try from tokens array
+          // If not found, try from tokens array - prioritize YES token for binary markets
           if (!clobTokenId && tokens.length > 0) {
-            const yesToken = tokens.find((t: any) => 
-              String(t?.outcome ?? t?.label ?? '').toLowerCase().includes('yes')
-            ) || tokens[0];
-            clobTokenId = yesToken?.token_id || yesToken?.tokenId || yesToken?.id || '';
+            // Look for YES token first
+            let yesToken = tokens.find((t: any) => {
+              const outcome = String(t?.outcome ?? t?.label ?? t?.name ?? '').toLowerCase();
+              return outcome === 'yes' || outcome.includes('yes');
+            });
+            
+            // If no YES token found, use first token
+            const targetToken = yesToken || tokens[0];
+            
+            // Extract token ID from various possible field names
+            clobTokenId = String(
+              targetToken?.token_id || 
+              targetToken?.tokenId || 
+              targetToken?.id || 
+              ''
+            );
+            
+            console.log(`Extracted token ID from tokens array: ${clobTokenId}`);
           }
           
-          // Fallback: use condition ID as token ID if nothing else works
+          // If still no token ID, try from simplified market data
+          if (!clobTokenId && simp) {
+            const simpTokens = Array.isArray(simp.tokens) ? simp.tokens : [];
+            if (simpTokens.length > 0) {
+              const yesToken = simpTokens.find((t: any) => 
+                String(t?.outcome ?? '').toLowerCase() === 'yes'
+              ) || simpTokens[0];
+              clobTokenId = String(yesToken?.token_id || yesToken?.tokenId || '');
+              console.log(`Extracted token ID from simplified market: ${clobTokenId}`);
+            }
+          }
+          
+          // Fallback: use condition ID (will be resolved by price-history function)
           if (!clobTokenId && cid) {
             clobTokenId = cid;
+            console.log(`Using condition ID as fallback: ${clobTokenId}`);
           }
           
-          // Only add markets with valid condition IDs
-          if (cid) {
-            relevantMarkets.push({
+          // Only add markets with valid condition IDs and token IDs for pricing
+          if (cid && clobTokenId) {
+            const marketData = {
               id: cid,
               title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
               description: event.description || mainMarket.description || '',
@@ -239,7 +266,12 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
               liquidityRaw: liq,
               clobTokenId: clobTokenId,
               image: event.image || event.icon || mainMarket.image,
-            });
+            };
+            
+            console.log(`Adding market: ${marketData.title.substring(0, 50)}... with tokenId: ${clobTokenId}`);
+            relevantMarkets.push(marketData);
+          } else {
+            console.warn(`Skipping market "${event.title}" - missing ${!cid ? 'condition ID' : 'token ID'}`);
           }
         }
       }

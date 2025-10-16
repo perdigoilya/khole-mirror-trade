@@ -200,9 +200,13 @@ const Feed = () => {
     // Ensure all required fields are present to prevent refetch
     const completeMarket = {
       ...market,
+      // Ensure we have a valid clobTokenId for pricing
       clobTokenId: market.clobTokenId || market.id,
       endDate: market.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      status: market.status || 'active'
+      status: market.status || 'active',
+      // Ensure pricing is available even if undefined
+      yesPrice: market.yesPrice !== undefined ? market.yesPrice : 50,
+      noPrice: market.noPrice !== undefined ? market.noPrice : 50,
     };
     
     navigate(`/market/${market.id}`, { 
