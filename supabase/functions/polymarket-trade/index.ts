@@ -96,6 +96,10 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // Set a browser-like UA and referer to avoid Cloudflare bot blocks
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': 'https://polymarket.com/',
         'POLY_ADDRESS': walletAddress,
         'POLY_SIGNATURE': signatureBase64,
         'POLY_TIMESTAMP': timestamp.toString(),
