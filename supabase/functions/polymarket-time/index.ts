@@ -20,10 +20,22 @@ serve(async (req) => {
       );
     }
     const data = await resp.json();
-    // Expecting { timestamp: "..." } or similar; normalize to string
-    const ts = typeof data?.timestamp === 'string' ? data.timestamp : String(data?.timestamp ?? '');
+
+    // Try multiple known keys and normalize to unix seconds
+    let tsCandidate: unknown =
+      (data && (data.timestamp ?? data.ts ?? data.time ?? data.serverTime ?? data.epoch ?? data.unix)) ?? null;
+
+    let tsNumber = Number(
+      typeof tsCandidate === 'string' ? tsCandidate.trim() : tsCandidate
+    );
+
+    if (!Number.isFinite(tsNumber) || tsNumber <= 0) {
+      // Fallback to local time in seconds if upstream format changes
+      tsNumber = Math.floor(Date.now() / 1000);
+    }
+
     return new Response(
-      JSON.stringify({ timestamp: ts }),
+      JSON.stringify({ timestamp: String(tsNumber) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e: any) {

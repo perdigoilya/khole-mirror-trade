@@ -15,10 +15,14 @@ export function useEnsurePolymarketCredentials() {
   const { toast } = useToast();
 
   const ensureApiCreds = async (address: `0x${string}`, apiKey?: string): Promise<ApiCredentials> => {
-    // Get server time from our proxy function (required by Polymarket)
     const timeRes = await supabase.functions.invoke('polymarket-time');
     if (timeRes.error) throw new Error(timeRes.error.message || 'Failed to fetch server time');
-    const timestamp = parseInt(timeRes.data?.timestamp, 10);
+
+    const tsRaw = timeRes.data?.timestamp;
+    let timestamp = Number(typeof tsRaw === 'string' ? tsRaw.trim() : tsRaw);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) {
+      timestamp = Math.floor(Date.now() / 1000);
+    }
 
     const domain = {
       name: "ClobAuthDomain",
