@@ -8,7 +8,6 @@ const corsHeaders = {
 const CLOB = 'https://clob.polymarket.com';
 const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
 
-// Helper: HMAC-SHA256 -> standard base64
 async function hmacBase64(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
   const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
@@ -34,8 +33,12 @@ async function hmacBase64(secret: string, message: string): Promise<string> {
   return btoa(String.fromCharCode(...arr));
 }
 
-function suffix(v: any): string {
-  return typeof v === 'string' && v.length > 6 ? v.slice(-6) : v || '';
+function suffix(v?: string): string {
+  return v ? (v.length > 6 ? v.slice(-6) : v) : '';
+}
+
+function tryJson(t: string): any {
+  try { return JSON.parse(t); } catch { return t; }
 }
 
 serve(async (req) => {
@@ -53,18 +56,18 @@ serve(async (req) => {
     const { walletAddress, signature, timestamp, nonce = 0 } = await req.json();
 
     if (!walletAddress || !signature || !timestamp) {
-      return out({ problem: 'Missing required parameters', details: { walletAddress, signature, timestamp } }, 400);
+      return out({ error: 'Missing required parameters', details: { walletAddress, signature, timestamp } }, 400);
     }
 
     const eoa = walletAddress;
     const now = Math.floor(Date.now() / 1000);
     const ts = Number(timestamp);
     if (!Number.isFinite(ts) || ts <= 0) {
-      return out({ problem: 'Invalid timestamp format - must be epoch seconds', details: { ts } }, 400);
+      return out({ error: 'Invalid timestamp format - must be epoch seconds', details: { ts } }, 400);
     }
     if (Math.abs(now - ts) > 60) {
       return out({ 
-        problem: 'Timestamp drift too large',
+        error: 'Timestamp drift too large',
         details: { serverTime: now, yourTimestamp: ts }
       }, 400);
     }
@@ -172,20 +175,35 @@ serve(async (req) => {
       ts: ts2,
       preimageFirst120: preimage.slice(0, 120),
       sigB64First12: sig.slice(0, 12),
+      dbKey: `polymarket:${ENV}:${eoa.toLowerCase()}`
     });
 
     const verifyResp = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
     const verifyText = await verifyResp.text();
-    const upstream = verifyText ? JSON.parse(verifyText) : null;
+    const upstream = tryJson(verifyText);
 
     if (!verifyResp.ok) {
       console.error('[L2-VERIFY] FAILED:', verifyResp.status, upstream);
       return out({
-        error: 'Derived credentials verification failed',
+        url: `${CLOB}${path}`,
+        method,
+        sent: {
+          POLY_ADDRESS: eoa,
+          POLY_API_KEY_suffix: suffix(hdrs.POLY_API_KEY),
+          POLY_PASSPHRASE_suffix: suffix(hdrs.POLY_PASSPHRASE),
+          POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
+          POLY_SIGNATURE_b64_first12: sig.slice(0, 12),
+          preimage_first120: preimage.slice(0, 120)
+        },
         status: verifyResp.status,
-        details: 'Derived credentials failed inline test. Do not save.',
+        statusText: verifyResp.statusText,
+        cf: {
+          'cf-ray': verifyResp.headers.get('cf-ray') || '',
+          'server': verifyResp.headers.get('server') || '',
+          'cf-cache-status': verifyResp.headers.get('cf-cache-status') || ''
+        },
         upstream
-      }, 401);
+      }, verifyResp.status);
     }
 
     console.log('[L2-VERIFY] ✓ Credentials verified, safe to persist');

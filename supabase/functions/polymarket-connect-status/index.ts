@@ -33,8 +33,12 @@ async function hmacBase64(secret: string, message: string): Promise<string> {
   return btoa(String.fromCharCode(...arr));
 }
 
-function suffix(v: any): string {
-  return typeof v === 'string' && v.length > 6 ? v.slice(-6) : v || '';
+function suffix(v?: string): string {
+  return v ? (v.length > 6 ? v.slice(-6) : v) : '';
+}
+
+function tryJson(t: string): any {
+  try { return JSON.parse(t); } catch { return t; }
 }
 
 serve(async (req) => {
@@ -122,11 +126,11 @@ serve(async (req) => {
     let passphrase = credsRow.api_credentials_passphrase;
 
     if (!key || !secret || !passphrase) {
-      return out({ problem: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
+      return out({ error: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
     }
 
     if (ownerAddress !== eoaLower) {
-      console.error('[OWNER-MISMATCH]', { ownerAddress, eoaLower });
+      return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
     }
 
     // L2 sanity check: GET /auth/ban-status/closed-only
@@ -149,7 +153,7 @@ serve(async (req) => {
     console.log('[L2-SANITY] Before fetch:', {
       eoa: ownerAddress,
       keySuffix: suffix(key),
-      passSuffix: passphrase.slice(-4),
+      passSuffix: suffix(passphrase),
       ts,
       preimageFirst120: preimage.slice(0, 120),
       sigB64First12: sig.slice(0, 12),
@@ -158,7 +162,7 @@ serve(async (req) => {
 
     let r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
     const text = await r.text();
-    let upstream = text ? JSON.parse(text) : null;
+    let upstream = tryJson(text);
     const cf = {
       'cf-ray': r.headers.get('cf-ray') || '',
       'cf-cache-status': r.headers.get('cf-cache-status') || '',
@@ -210,7 +214,7 @@ serve(async (req) => {
       console.log('[L2-RETRY] After derive:', {
         eoa: ownerAddress,
         keySuffix: suffix(key),
-        passSuffix: passphrase.slice(-4),
+        passSuffix: suffix(passphrase),
         ts: ts2,
         preimageFirst120: pre2.slice(0, 120),
         sigB64First12: sig2.slice(0, 12),
@@ -218,7 +222,7 @@ serve(async (req) => {
 
       r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
       const text2 = await r.text();
-      upstream = text2 ? JSON.parse(text2) : null;
+      upstream = tryJson(text2);
 
       if (r.ok) {
         // Persist new tuple atomically
@@ -252,16 +256,20 @@ serve(async (req) => {
       ownerMatch,
       closed_only,
       tradingEnabled,
-      upstream,
-      cf,
+      url: `${CLOB}${path}`,
+      method,
       sent: {
         POLY_ADDRESS: ownerAddress,
         POLY_API_KEY_suffix: suffix(key),
-        POLY_PASSPHRASE_suffix: passphrase.slice(-4),
+        POLY_PASSPHRASE_suffix: suffix(passphrase),
         POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
         POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
         preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
-      }
+      },
+      status: r.status,
+      statusText: r.statusText,
+      cf,
+      upstream
     });
 
   } catch (e: any) {

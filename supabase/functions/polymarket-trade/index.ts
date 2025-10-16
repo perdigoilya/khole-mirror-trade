@@ -33,8 +33,12 @@ async function hmacBase64(secret: string, message: string): Promise<string> {
   return btoa(String.fromCharCode(...arr));
 }
 
-function suffix(v: any): string {
-  return typeof v === 'string' && v.length > 6 ? v.slice(-6) : v || '';
+function suffix(v?: string): string {
+  return v ? (v.length > 6 ? v.slice(-6) : v) : '';
+}
+
+function tryJson(t: string): any {
+  try { return JSON.parse(t); } catch { return t; }
 }
 
 serve(async (req) => {
@@ -60,12 +64,11 @@ serve(async (req) => {
     } = await req.json();
 
     const eoaLower = String(walletAddress).toLowerCase();
-    const dbKey = `polymarket:${ENV}:${eoaLower}`;
 
-    console.log(`[TRADE] eoa=${eoaLower} tokenId=${tokenId} side=${side} dbKey=${dbKey}`);
+    console.log(`[TRADE] eoa=${eoaLower} tokenId=${tokenId} side=${side}`);
 
     if (!walletAddress || !tokenId || !side || !price || !size || !signedOrder) {
-      return out({ problem: 'Missing required parameters', details: { walletAddress, tokenId, side, price, size, signedOrder } }, 400);
+      return out({ error: 'Missing required parameters', details: { walletAddress, tokenId, side, price, size, signedOrder } }, 400);
     }
 
     // Load L2 API credentials securely from the backend for the authenticated user
@@ -91,28 +94,27 @@ serve(async (req) => {
       .maybeSingle();
 
     if (credsErr || !credsRow) {
-      return out({ error: 'Missing L2 credentials', details: 'No Polymarket credentials stored for this user', action: 'create_api_key' }, 400);
+      return out({ error: 'No Polymarket credentials found' }, 400);
     }
 
-    const storedWallet = credsRow.wallet_address?.toLowerCase();
-    if (storedWallet !== eoaLower) {
-      console.error('[WALLET-MISMATCH]', { storedWallet, eoaLower });
-      return out({
-        error: 'Wallet mismatch',
-        details: `POLY_ADDRESS (${eoaLower}) must match stored wallet (${storedWallet}). Switch wallets or reconnect.`
-      }, 400);
-    }
+    let key = credsRow.api_credentials_key || credsRow.api_key;
+    let secret = credsRow.api_credentials_secret;
+    let passphrase = credsRow.api_credentials_passphrase;
+    const ownerAddress = credsRow.wallet_address?.toLowerCase() || '';
+    const dbKey = `polymarket:${ENV}:${ownerAddress}`;
 
-    let key: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
-    let secret: string | null = credsRow.api_credentials_secret || null;
-    let passphrase: string | null = credsRow.api_credentials_passphrase || null;
+    console.log('[TRADE] DB key used:', dbKey);
 
     if (!key || !secret || !passphrase) {
-      return out({ problem: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase }, action: 'create_api_key' }, 400);
+      return out({ error: 'Missing L2 header(s)', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
+    }
+
+    if (ownerAddress !== eoaLower) {
+      return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
     }
 
     if (price <= 0 || price > 1 || size <= 0) {
-      return out({ problem: 'Invalid price or size', details: { price, size } }, 400);
+      return out({ error: 'Invalid price or size', details: { price, size } }, 400);
     }
 
     const orderPayload = {
@@ -124,6 +126,7 @@ serve(async (req) => {
 
     const method = 'POST';
     const path = '/order';
+    const url = `${CLOB}${path}`;
     const ts = Math.floor(Date.now() / 1000);
     const preimage = `${method}${path}${ts}${rawBody}`;
     (globalThis as any).__PREIMAGE = preimage;
@@ -132,28 +135,26 @@ serve(async (req) => {
     const hdrs: Record<string, string> = {
       'content-type': 'application/json',
       'accept': 'application/json',
-      'POLY_ADDRESS': eoaLower,
+      'POLY_ADDRESS': ownerAddress,
       'POLY_API_KEY': key,
       'POLY_PASSPHRASE': passphrase,
       'POLY_TIMESTAMP': ts.toString(),
       'POLY_SIGNATURE': sig,
     };
 
-    console.log('[L2-ORDER] Before fetch:', {
-      eoa: eoaLower,
+    console.log('[TRADE] Before fetch:', {
+      eoa: ownerAddress,
       keySuffix: suffix(key),
-      passSuffix: passphrase.slice(-4),
+      passSuffix: suffix(passphrase),
       ts,
       preimageFirst120: preimage.slice(0, 120),
       sigB64First12: sig.slice(0, 12),
-      funderAddress: funderAddress || 'not_specified',
-      bodyLength: rawBody.length,
       dbKey
     });
 
-    let r = await fetch(`${CLOB}${path}`, { method, headers: hdrs, body: rawBody });
+    let r = await fetch(url, { method, headers: hdrs, body: rawBody });
     const text = await r.text();
-    let upstream = text ? JSON.parse(text) : null;
+    let upstream = tryJson(text);
     const cf = {
       'cf-ray': r.headers.get('cf-ray') || '',
       'cf-cache-status': r.headers.get('cf-cache-status') || '',
@@ -163,17 +164,27 @@ serve(async (req) => {
 
     // On 401: derive → REBIND → retry ONCE
     if (r.status === 401) {
-      console.log('[L2-401] Attempting derive → rebind → retry...');
+      console.log('[TRADE-401] Attempting derive → rebind → retry...');
       const d = await fetch(`${CLOB}/auth/derive-api-key`, {
         method: 'GET',
-        headers: { 'Accept': 'application/json', 'POLY_ADDRESS': eoaLower },
+        headers: { 'Accept': 'application/json', 'POLY_ADDRESS': ownerAddress },
       });
       const dUp = await d.json();
       if (!d.ok || !dUp.apiKey || !dUp.secret || !dUp.passphrase) {
         console.error('[DERIVE-FAILED]', d.status, dUp);
         return out({
-          error: 'Order Submission Failed',
+          url,
+          method,
+          sent: {
+            POLY_ADDRESS: ownerAddress,
+            POLY_API_KEY_suffix: suffix(key),
+            POLY_PASSPHRASE_suffix: suffix(passphrase),
+            POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
+            POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
+            preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
+          },
           status: r.status,
+          statusText: r.statusText,
           cf,
           upstream,
           attempts: [{ status: r.status, upstream, cf }, { deriveError: dUp }]
@@ -188,25 +199,25 @@ serve(async (req) => {
       const ts2 = Math.floor(Date.now() / 1000);
       const pre2 = `${method}${path}${ts2}${rawBody}`;
       (globalThis as any).__PREIMAGE = pre2;
-      const sig2 = await hmacBase64(secret!, pre2);
+      const sig2 = await hmacBase64(secret, pre2);
 
-      hdrs['POLY_API_KEY'] = key!;
-      hdrs['POLY_PASSPHRASE'] = passphrase!;
+      hdrs['POLY_API_KEY'] = key;
+      hdrs['POLY_PASSPHRASE'] = passphrase;
       hdrs['POLY_TIMESTAMP'] = ts2.toString();
       hdrs['POLY_SIGNATURE'] = sig2;
 
-      console.log('[L2-RETRY] After derive:', {
-        eoa: eoaLower,
+      console.log('[TRADE-RETRY] After derive:', {
+        eoa: ownerAddress,
         keySuffix: suffix(key),
-        passSuffix: passphrase!.slice(-4),
+        passSuffix: suffix(passphrase),
         ts: ts2,
         preimageFirst120: pre2.slice(0, 120),
         sigB64First12: sig2.slice(0, 12),
       });
 
-      r = await fetch(`${CLOB}${path}`, { method, headers: hdrs, body: rawBody });
+      r = await fetch(url, { method, headers: hdrs, body: rawBody });
       const text2 = await r.text();
-      upstream = text2 ? JSON.parse(text2) : null;
+      upstream = tryJson(text2);
 
       if (r.ok) {
         // Persist new tuple atomically
@@ -216,7 +227,7 @@ serve(async (req) => {
             api_credentials_key: key,
             api_credentials_secret: secret,
             api_credentials_passphrase: passphrase,
-            wallet_address: eoaLower,
+            wallet_address: ownerAddress,
           })
           .eq('user_id', userId);
         console.log('[DB-UPDATED] Persisted derived credentials');
@@ -224,20 +235,27 @@ serve(async (req) => {
     }
 
     if (!r.ok) {
-      console.error('[L2-ORDER] FAILED:', r.status, upstream);
-      return out({
-        error: 'Order Submission Failed',
-        status: r.status,
-        cf,
-        upstream
-      }, r.status);
+      console.error('[TRADE] FAILED:', r.status, upstream);
+    } else {
+      console.log('[TRADE] ✓ Success:', upstream);
     }
 
-    console.log('[L2-ORDER] ✓ Success:', upstream);
     return out({
-      success: true,
-      orderId: upstream.orderID,
-      order: upstream
+      success: r.ok,
+      url,
+      method,
+      sent: {
+        POLY_ADDRESS: ownerAddress,
+        POLY_API_KEY_suffix: suffix(key),
+        POLY_PASSPHRASE_suffix: suffix(passphrase),
+        POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
+        POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
+        preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
+      },
+      status: r.status,
+      statusText: r.statusText,
+      cf,
+      upstream
     });
 
   } catch (e: any) {
