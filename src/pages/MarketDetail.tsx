@@ -507,9 +507,8 @@ const MarketDetail = () => {
               
             </div>
 
-            <div className="grid lg:grid-cols-[1fr,380px] gap-4">
-              {/* Left Column - Charts and Outcomes */}
-              <div className="space-y-4">
+            <div className="space-y-4">
+              {/* Charts and Outcomes */}
                 {/* Outcomes with Individual Charts */}
                 <div className="space-y-2">
                   
@@ -704,102 +703,6 @@ const MarketDetail = () => {
                       </div>
                     </TabsContent>
                   </Tabs>
-                </Card>
-              </div>
-
-              {/* Right Column - Trading Panel */}
-              <div className="space-y-4">
-                {/* Trading Panel */}
-                <Card className="p-4 sticky top-20">
-                  <div className="flex items-center gap-2 mb-4">
-                    {(selectedSubMarket || market).image ? (
-                      <img 
-                        src={(selectedSubMarket || market).image} 
-                        alt={(selectedSubMarket || market).title}
-                        className="w-10 h-10 rounded object-cover"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center">
-                        <span className="font-bold text-primary text-xs">
-                          {(selectedSubMarket || market).title.slice(0, 3).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <span className="font-semibold text-sm line-clamp-2">{(selectedSubMarket || market).title}</span>
-                    </div>
-                  </div>
-
-                  <Tabs value={tradeSide} onValueChange={(v) => setTradeSide(v as 'buy' | 'sell')} className="mb-4">
-                    <TabsList className="w-full">
-                      <TabsTrigger value="buy" className="flex-1">Buy</TabsTrigger>
-                      <TabsTrigger value="sell" className="flex-1">Sell</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button 
-                        className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 h-12"
-                        onClick={() => {
-                          setSelectedOutcome('yes');
-                          const targetMarket = selectedSubMarket || market;
-                          handleTrade(targetMarket.title, 'yes', targetMarket.yesPrice || 50);
-                        }}
-                      >
-                        Yes {(selectedSubMarket || market).yesPrice || 50}¢
-                      </Button>
-                      <Button 
-                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 h-12"
-                        onClick={() => {
-                          setSelectedOutcome('no');
-                          const targetMarket = selectedSubMarket || market;
-                          handleTrade(targetMarket.title, 'no', targetMarket.noPrice || 50);
-                        }}
-                      >
-                        No {(selectedSubMarket || market).noPrice || 50}¢
-                      </Button>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-muted-foreground">Amount</span>
-                        <span className="text-sm text-muted-foreground">Balance $3.00</span>
-                      </div>
-                      <Input 
-                        type="number"
-                        value={tradeAmount}
-                        onChange={(e) => setTradeAmount(e.target.value)}
-                        placeholder="0"
-                        className="text-2xl font-bold h-14 mb-2"
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setTradeAmount('3')}
-                        >
-                          Max
-                        </Button>
-                      </div>
-                    </div>
-
-                    <Button 
-                      className="w-full h-12 bg-primary hover:bg-primary/90"
-                      disabled={!selectedOutcome || parseFloat(tradeAmount) === 0}
-                      onClick={() => {
-                        if (currentTrade) {
-                          executeTrade();
-                        }
-                      }}
-                    >
-                      Confirm {currentTrade ? `${currentTrade.side.toUpperCase()} Trade` : 'Trade'}
-                    </Button>
-
-                    <p className="text-xs text-muted-foreground text-center">
-                      By trading, you agree to the Terms of Use.
-                    </p>
-                  </div>
                 </Card>
               </div>
             </div>
