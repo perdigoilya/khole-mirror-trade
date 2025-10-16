@@ -330,89 +330,78 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       // Small delay to allow credentials to propagate before L2 sanity check
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Step 2: Run L2 sanity check (GET /auth/ban-status/closed-only)
-      console.log('Running L2 sanity check...');
+      // Step 2: Call server-side /connect/status to get authoritative flags
+      console.log('Fetching authoritative connection status...');
       try {
-        const sanityCheck = await supabase.functions.invoke('polymarket-orders-active', {
-          body: {}
+        const { data: statusData, error: statusError } = await supabase.functions.invoke('polymarket-connect-status', {
+          body: { connectedEOA: address }
         });
+
+        if (statusError || !statusData) {
+          console.error('Connect status error:', statusError || 'No data');
+          throw new Error('Failed to fetch connection status');
+        }
+
+        const {
+          hasKey: serverHasKey,
+          hasSecret: serverHasSecret,
+          hasPassphrase: serverHasPassphrase,
+          ownerAddress: serverOwnerAddress,
+          connectedEOA: serverConnectedEOA,
+          ownerMatch: serverOwnerMatch,
+          closed_only: serverClosedOnly,
+          tradingEnabled: serverTradingEnabled,
+          raw,
+        } = statusData;
+
+        console.log('Server connection status:', {
+          hasKey: serverHasKey,
+          hasSecret: serverHasSecret,
+          hasPassphrase: serverHasPassphrase,
+          ownerAddress: serverOwnerAddress,
+          connectedEOA: serverConnectedEOA,
+          ownerMatch: serverOwnerMatch,
+          closed_only: serverClosedOnly,
+          tradingEnabled: serverTradingEnabled,
+          raw,
+        });
+
+        // Update diagnostics with server-computed values
+        setDiagnostics(prev => ({ 
+          ...prev, 
+          l2SanityCheck: true, 
+          tradingEnabled: serverTradingEnabled,
+          closedOnly: serverClosedOnly,
+          l2Body: raw?.banStatus,
+          accessStatus: undefined, // not used anymore
+          ownerAddress: serverOwnerAddress,
+          connectedEOA: serverConnectedEOA,
+          hasKey: serverHasKey,
+          hasSecret: serverHasSecret,
+          hasPassphrase: serverHasPassphrase,
+          ownerMatches: serverOwnerMatch,
+        } as any));
         
-        if (sanityCheck.data?.status === 200) {
-          const closedOnly = sanityCheck.data?.closedOnly === true;
-          const ownerAddr = (sanityCheck.data?.ownerAddress || '').toLowerCase();
-          const eoaAddr = (address || '').toLowerCase();
-          const hasKey = sanityCheck.data?.hasKey === true;
-          const hasSecret = sanityCheck.data?.hasSecret === true;
-          const hasPassphrase = sanityCheck.data?.hasPassphrase === true;
-          const ownerMatches = ownerAddr && eoaAddr && ownerAddr === eoaAddr;
-
-          const tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatches && !closedOnly;
-
-          console.log('L2 sanity check response:', {
-            status: sanityCheck.data?.status,
-            closedOnly,
-            tradingEnabled,
-            ownerAddr,
-            eoaAddr,
-            hasKey,
-            hasSecret,
-            hasPassphrase,
-            ownerMatches,
-            l2Body: sanityCheck.data?.l2Body
-          });
-          
-          setDiagnostics(prev => ({ 
-            ...prev, 
-            l2SanityCheck: true, 
-            tradingEnabled,
-            closedOnly,
-            l2Body: sanityCheck.data?.l2Body,
-            accessStatus: sanityCheck.data?.accessStatus,
-            ownerAddress: ownerAddr,
-            connectedEOA: eoaAddr,
-            hasKey,
-            hasSecret,
-            hasPassphrase,
-            ownerMatches,
-          } as any));
-          
-          if (tradingEnabled) {
-            toast({
-              title: "Trading Ready",
-              description: `✓ Credentials verified\n✓ L2 auth working\n✓ Funder: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`,
-            });
-          } else if (closedOnly) {
-            toast({
-              title: "Account in Closed-Only Mode",
-              description: "Your Polymarket account can't open new positions. Visit Polymarket to resolve restrictions.",
-              variant: "destructive",
-            });
-          }
-        } else if (sanityCheck.data?.action === 'derive_required') {
-          // Auto-recovery: L2 401, need to derive new credentials
-          console.log('L2 401 detected - auto-recovery not implemented yet, user must reconnect');
-          setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
-          
+        if (serverTradingEnabled) {
           toast({
-            title: "Session Expired",
-            description: "Your Polymarket session expired. Please disconnect and reconnect.",
+            title: "Trading Ready",
+            description: `✓ Credentials verified\n✓ L2 auth working\n✓ Funder: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`,
+          });
+        } else if (serverClosedOnly) {
+          toast({
+            title: "Account in Closed-Only Mode",
+            description: "Your Polymarket account can't open new positions. Visit Polymarket to resolve restrictions.",
             variant: "destructive",
           });
-          throw new Error('Session expired - please reconnect');
-        } else {
-          console.error('L2 sanity check failed:', sanityCheck.data || sanityCheck.error);
-          setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
-          
-          const errorMsg = sanityCheck.data?.details || sanityCheck.data?.error || 'L2 sanity check failed';
-          throw new Error(errorMsg);
         }
+
       } catch (e: any) {
-        console.error('L2 sanity check error:', e);
+        console.error('Connect status check error:', e);
         setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
         
         toast({
-          title: "L2 Verification Failed",
-          description: "Credentials created but L2 auth check failed. Try disconnecting and reconnecting.",
+          title: "Connection Verification Failed",
+          description: "Could not verify trading status. Try disconnecting and reconnecting.",
           variant: "destructive",
         });
         throw e;
