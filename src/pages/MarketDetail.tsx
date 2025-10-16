@@ -29,6 +29,7 @@ interface Market {
   volumeRaw: number;
   liquidityRaw: number;
   clobTokenId?: string;
+  ticker?: string;
   isMultiOutcome?: boolean;
   subMarkets?: Market[];
 }
@@ -143,21 +144,112 @@ const MarketDetail = () => {
         return;
       }
 
-      const cost = (shares * currentTrade.price / 100).toFixed(2);
-
+      // Show processing toast
       toast({
-        title: "Trade Order Submitted",
-        description: `Buying ${shares} shares of ${currentTrade.side.toUpperCase()} at ${currentTrade.price}¢ (Total: $${cost})`,
+        title: "Processing Trade...",
+        description: "Validating and submitting your order",
       });
+
+      if (market.provider === 'polymarket') {
+        // Polymarket trading
+        if (!polymarketCredentials?.walletAddress) {
+          toast({
+            title: "Wallet Not Connected",
+            description: "Please connect your Polymarket wallet first",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Get the token ID for the market
+        const tokenId = market.clobTokenId;
+        if (!tokenId) {
+          toast({
+            title: "Market Configuration Error",
+            description: "This market is not properly configured for trading",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const response = await supabase.functions.invoke('polymarket-trade', {
+          body: {
+            walletAddress: polymarketCredentials.walletAddress,
+            tokenId,
+            side: currentTrade.side,
+            price: currentTrade.price / 100, // Convert cents to decimal
+            size: shares,
+          },
+        });
+
+        if (response.error) {
+          const errorData = response.error as any;
+          toast({
+            title: errorData.error || "Trade Failed",
+            description: errorData.details || "Could not execute trade. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // For Polymarket, we need client-side wallet signing
+        // This is a limitation - actual trading requires wallet interaction
+        toast({
+          title: "Validation Passed",
+          description: "Your wallet has sufficient funds. Note: Full Polymarket trading requires wallet signature integration.",
+        });
+
+      } else {
+        // Kalshi trading
+        if (!kalshiCredentials) {
+          toast({
+            title: "Kalshi Not Connected",
+            description: "Please connect your Kalshi account first",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const response = await supabase.functions.invoke('kalshi-trade', {
+          body: {
+            apiKeyId: kalshiCredentials.apiKeyId,
+            privateKey: kalshiCredentials.privateKey,
+            ticker: market.ticker,
+            action: 'buy',
+            side: currentTrade.side,
+            count: Math.floor(shares),
+            type: 'limit',
+            yesPrice: currentTrade.side === 'yes' ? currentTrade.price : undefined,
+            noPrice: currentTrade.side === 'no' ? currentTrade.price : undefined,
+          },
+        });
+
+        if (response.error) {
+          const errorData = response.error as any;
+          toast({
+            title: errorData.error || "Trade Failed",
+            description: errorData.details || "Could not execute trade. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const cost = (shares * currentTrade.price / 100).toFixed(2);
+        toast({
+          title: "Order Submitted Successfully! ✅",
+          description: `Bought ${shares} shares of ${currentTrade.side.toUpperCase()} at ${currentTrade.price}¢ (Total: $${cost})`,
+        });
+      }
 
       setTradeDialogOpen(false);
       setTradeAmount('0');
       setCurrentTrade(null);
     } catch (error) {
       console.error('Trade error:', error);
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
       toast({
         title: "Trade Failed",
-        description: "Failed to execute trade. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

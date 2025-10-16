@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.kalshi-portfolio]
 verify_jwt = false
 
+[functions.kalshi-trade]
+verify_jwt = false
+
 [functions.twitter-fetch]
 verify_jwt = false
 
@@ -16,4 +19,13 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.polymarket-portfolio]
+verify_jwt = false
+
+[functions.polymarket-trade]
+verify_jwt = false
+
+[functions.polymarket-price-history]
+verify_jwt = false
+
+[functions.search-related-markets]
 verify_jwt = false
