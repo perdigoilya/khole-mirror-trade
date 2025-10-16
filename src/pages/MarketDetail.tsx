@@ -262,16 +262,8 @@ const MarketDetail = () => {
 
           console.log('Submitting order to Polymarket...');
           
-          // Use server function to submit order (L2 HMAC done server-side)
+          // Submit order via backend (API keys are optional)
           const apiCreds = polymarketCredentials?.apiCredentials;
-          if (!apiCreds) {
-            toast({
-              title: 'Trading Setup Required',
-              description: 'Open Polymarket connection and create API key first.',
-              variant: 'destructive',
-            });
-            return;
-          }
 
           const { data, error } = await supabase.functions.invoke('polymarket-trade', {
             body: {
@@ -281,10 +273,11 @@ const MarketDetail = () => {
               price,
               size: shares,
               signedOrder,
-              apiKey: apiCreds.apiKey,
-              apiSecret: apiCreds.secret,
-              apiPassphrase: apiCreds.passphrase,
               funderAddress,
+              // API credentials are optional - if not provided, order is submitted with wallet signature only
+              apiKey: apiCreds?.apiKey,
+              apiSecret: apiCreds?.secret,
+              apiPassphrase: apiCreds?.passphrase,
             }
           });
 

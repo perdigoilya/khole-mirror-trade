@@ -26,12 +26,14 @@ serve(async (req) => {
 
     console.log('Trade request:', { walletAddress, tokenId, side, price, size, funderAddress });
 
-    if (!walletAddress || !tokenId || !side || !price || !size || !signedOrder || !apiKey || !apiSecret || !apiPassphrase) {
+    if (!walletAddress || !tokenId || !side || !price || !size || !signedOrder) {
       return new Response(
         JSON.stringify({ error: 'Missing required parameters' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
+
+    // API keys are optional - if not provided, we'll submit order without L2 auth
 
     // Validate price and size
     if (price <= 0 || price > 1 || size <= 0) {
@@ -98,44 +100,60 @@ serve(async (req) => {
       );
     }
 
-    // Submit the order using L2 HMAC authentication
+    // Submit the order to CLOB
     console.log('Submitting order to CLOB...');
-    const timestamp = Math.floor(Date.now() / 1000);
-    const method = 'POST';
-    const requestPath = '/order';
     const bodyString = JSON.stringify(signedOrder);
     
-    // Generate HMAC signature
-    const message = `${timestamp}${method}${requestPath}${bodyString}`;
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(apiSecret);
-    
-    const key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    
-    const messageData = encoder.encode(message);
-    const signature = await crypto.subtle.sign('HMAC', key, messageData);
-    const signatureArray = Array.from(new Uint8Array(signature));
-    const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+    let orderResponse: Response;
 
-    // Submit order with L2 headers
-    const orderResponse = await fetch('https://clob.polymarket.com/order', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'POLY_ADDRESS': walletAddress,
-        'POLY_SIGNATURE': signatureBase64,
-        'POLY_TIMESTAMP': timestamp.toString(),
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-      },
-      body: bodyString,
-    });
+    // If we have API keys, use L2 HMAC authentication
+    if (apiKey && apiSecret && apiPassphrase) {
+      console.log('Using L2 HMAC authentication');
+      const timestamp = Math.floor(Date.now() / 1000);
+      const method = 'POST';
+      const requestPath = '/order';
+      
+      // Generate HMAC signature
+      const message = `${timestamp}${method}${requestPath}${bodyString}`;
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(apiSecret);
+      
+      const key = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+      
+      const messageData = encoder.encode(message);
+      const signature = await crypto.subtle.sign('HMAC', key, messageData);
+      const signatureArray = Array.from(new Uint8Array(signature));
+      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+
+      orderResponse = await fetch('https://clob.polymarket.com/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'POLY_ADDRESS': walletAddress,
+          'POLY_SIGNATURE': signatureBase64,
+          'POLY_TIMESTAMP': timestamp.toString(),
+          'POLY_API_KEY': apiKey,
+          'POLY_PASSPHRASE': apiPassphrase,
+        },
+        body: bodyString,
+      });
+    } else {
+      // No API keys - submit signed order directly (wallet signature is in the order)
+      console.log('Submitting wallet-signed order directly');
+      orderResponse = await fetch('https://clob.polymarket.com/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: bodyString,
+      });
+    }
 
     if (!orderResponse.ok) {
       const errorText = await orderResponse.text();

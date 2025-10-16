@@ -176,7 +176,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         message,
       });
 
-      // Create/derive API key using the signature
+      // Try to create API key (optional - not required for trading)
       let apiCredentials = null;
       try {
         const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
@@ -190,12 +190,12 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
         if (!apiKeyResponse.error) {
           apiCredentials = apiKeyResponse.data;
-          console.log('API credentials created successfully');
+          console.log('API credentials created (optional enhancement)');
         } else {
-          console.log('API key creation failed, proceeding without credentials');
+          console.log('No API key - will use wallet signatures for trading');
         }
       } catch (err) {
-        console.log('API key creation error (continuing):', err);
+        console.log('API key not available - wallet signatures will be used:', err);
       }
 
       // Priority: manual input > auto-detected > API-provided > EOA
@@ -207,14 +207,20 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         apiCredentials: apiCredentials ? {
           ...apiCredentials,
           funderAddress
-        } : undefined
+        } : {
+          // Even without API keys, store the funder address
+          apiKey: '',
+          secret: '',
+          passphrase: '',
+          funderAddress
+        }
       });
       
       toast({
         title: "Connected to Polymarket",
         description: detectedFunder 
-          ? `Using proxy: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`
-          : "Your wallet has been connected successfully",
+          ? `Proxy detected: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}. Ready to trade!`
+          : "Wallet connected. You can trade using wallet signatures.",
       });
       
       onOpenChange(false);
