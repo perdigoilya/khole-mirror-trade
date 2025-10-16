@@ -35,3 +35,12 @@ verify_jwt = false
 
 [functions.polymarket-time]
 verify_jwt = false
+
+[functions.polymarket-smoke]
+verify_jwt = false
+
+[functions.polymarket-validate]
+verify_jwt = false
+
+[functions.polymarket-orders-active]
+verify_jwt = false

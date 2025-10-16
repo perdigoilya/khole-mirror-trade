@@ -29,6 +29,12 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const [registrationRequired, setRegistrationRequired] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [proxyAddress, setProxyAddress] = useState("");
+  const [diagnostics, setDiagnostics] = useState<{
+    credsReady?: boolean;
+    l2SanityCheck?: boolean;
+    funderResolved?: string;
+    tradingEnabled?: boolean;
+  }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
@@ -231,28 +237,45 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         }
       });
 
-      // Run server-side smoke test to validate L2 HMAC (no secrets exposed client-side)
+      // Step 1: Credentials created ✓
+      setDiagnostics(prev => ({ ...prev, credsReady: true, funderResolved: funderAddress }));
+
+      // Step 2: Run L2 sanity check (GET /orders/active)
+      console.log('Running L2 sanity check...');
       try {
-        const smoke = await supabase.functions.invoke('polymarket-smoke', {
-          body: {
-            walletAddress: address,
-            signature, // EIP-712 from above
-            timestamp,
-            nonce: 0,
-            runHmacTest: true,
-          },
+        const sanityCheck = await supabase.functions.invoke('polymarket-orders-active', {
+          body: {}
         });
-        console.log('Polymarket smoke test:', smoke.data || smoke.error);
-      } catch (e) {
-        console.warn('Smoke test failed:', e);
+        
+        if (sanityCheck.data?.ready && sanityCheck.data?.status === 200) {
+          console.log('✓ L2 sanity check passed - trading enabled');
+          setDiagnostics(prev => ({ 
+            ...prev, 
+            l2SanityCheck: true, 
+            tradingEnabled: true 
+          }));
+          
+          toast({
+            title: "Trading Ready",
+            description: `✓ Credentials verified\n✓ L2 auth working\n✓ Funder: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`,
+          });
+        } else {
+          console.error('L2 sanity check failed:', sanityCheck.data || sanityCheck.error);
+          setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
+          
+          throw new Error(sanityCheck.data?.error || 'L2 sanity check failed - please reconnect');
+        }
+      } catch (e: any) {
+        console.error('L2 sanity check error:', e);
+        setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
+        
+        toast({
+          title: "L2 Verification Failed",
+          description: "Credentials created but L2 auth check failed. Try disconnecting and reconnecting.",
+          variant: "destructive",
+        });
+        throw e;
       }
-      
-      toast({
-        title: "Connected to Polymarket",
-        description: detectedFunder 
-          ? `Proxy detected: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}. Ready to trade!`
-          : "Wallet connected. You can trade using wallet signatures.",
-      });
       
       onOpenChange(false);
     } catch (error: any) {
@@ -292,19 +315,56 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
         <div className="space-y-4 py-4">
           {isPolymarketConnected && address ? (
-            <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-4">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-green-500">
-                    Connected to Polymarket
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
-                    {address}
-                  </p>
+            <>
+              <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-green-500">
+                      Connected to Polymarket
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
+                      {address}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Diagnostics Panel */}
+              {diagnostics.credsReady && (
+                <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Connection Status</p>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      <span>API credentials stored (key, secret, passphrase)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {diagnostics.l2SanityCheck ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                      )}
+                      <span>L2 authentication verified (GET /orders/active)</span>
+                    </div>
+                    {diagnostics.funderResolved && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        <span>Funder: {diagnostics.funderResolved.slice(0, 8)}...{diagnostics.funderResolved.slice(-6)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      {diagnostics.tradingEnabled ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                      )}
+                      <span className="font-medium">Trading enabled: {diagnostics.tradingEnabled ? 'YES' : 'NO'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
             ) : registrationRequired && isConnected && address ? (
             <div className="space-y-4">
               <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
