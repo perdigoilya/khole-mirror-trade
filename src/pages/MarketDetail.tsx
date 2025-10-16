@@ -132,11 +132,22 @@ const MarketDetail = () => {
     
     // Check if connected to provider - use selectedSubMarket if available
     const targetMarket = selectedSubMarket || market;
-    const hasCredentials = targetMarket?.provider === 'kalshi' 
-      ? kalshiCredentials 
-      : polymarketCredentials;
-      
+    const hasCredentials = targetMarket?.provider === 'kalshi'
+      ? !!kalshiCredentials
+      : !!(
+          polymarketCredentials?.apiCredentials?.apiKey &&
+          polymarketCredentials?.apiCredentials?.secret &&
+          polymarketCredentials?.apiCredentials?.passphrase
+        );
+    
     if (!hasCredentials) {
+      if (targetMarket?.provider === 'polymarket') {
+        toast({
+          title: "Polymarket Setup Required",
+          description: "Open Connect and finish API key setup before trading.",
+          variant: "destructive",
+        });
+      }
       setConnectionDialogOpen(true);
       return;
     }

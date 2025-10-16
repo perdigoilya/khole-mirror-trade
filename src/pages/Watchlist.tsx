@@ -136,10 +136,21 @@ const Watchlist = () => {
 
     // Check if connected to provider
     const hasCredentials = market.provider === 'kalshi' 
-      ? kalshiCredentials 
-      : polymarketCredentials;
-      
+      ? !!kalshiCredentials 
+      : !!(
+          polymarketCredentials?.apiCredentials?.apiKey &&
+          polymarketCredentials?.apiCredentials?.secret &&
+          polymarketCredentials?.apiCredentials?.passphrase
+        );
+        
     if (!hasCredentials) {
+      if (market.provider === 'polymarket') {
+        toast({
+          title: "Polymarket Setup Required",
+          description: "Open Connect and finish API key setup before trading.",
+          variant: "destructive",
+        });
+      }
       setConnectionDialogOpen(true);
       return;
     }
