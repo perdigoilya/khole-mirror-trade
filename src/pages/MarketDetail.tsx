@@ -265,20 +265,11 @@ const MarketDetail = () => {
             try {
               apiCreds = await ensureApiCreds(address as `0x${string}`);
             } catch (err: any) {
-              const msg = err?.message || '';
-              if (msg === 'WALLET_NOT_REGISTERED') {
-                toast({
-                  title: 'Wallet Not Registered',
-                  description: 'Please visit polymarket.com, connect this wallet, and deposit USDC to enable trading.',
-                  variant: 'destructive',
-                });
-              } else {
-                toast({
-                  title: 'Trading Setup Failed',
-                  description: msg || 'Failed to create trading credentials',
-                  variant: 'destructive',
-                });
-              }
+              toast({
+                title: 'Trading Setup Failed',
+                description: err?.message || 'Failed to create trading credentials',
+                variant: 'destructive',
+              });
               return;
             }
           }
