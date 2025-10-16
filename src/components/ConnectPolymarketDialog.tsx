@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Wallet } from "lucide-react";
+import { Loader2, Wallet, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,12 +20,15 @@ interface ConnectPolymarketDialogProps {
 }
 
 export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarketDialogProps) => {
-  const { connectPolymarket } = useTrading();
+  const { connectPolymarket, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [validationFailed, setValidationFailed] = useState(false);
   const { address, isConnected } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
+
+  const isPolymarketConnected = !!polymarketCredentials;
 
   const handleDialogClose = (newOpen: boolean) => {
     // Clean up wallet connection state when dialog is closed
@@ -40,6 +43,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       try {
         // Open WalletConnect modal
         setIsLoading(true);
+        setValidationFailed(false);
         await openWalletModal();
         // Note: Connection happens asynchronously, modal closing doesn't mean success/failure
       } catch (error: any) {
@@ -65,6 +69,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     }
 
     setIsLoading(true);
+    setValidationFailed(false);
     try {
       // Validate wallet through edge function to avoid CORS issues
       const { data, error } = await supabase.functions.invoke('polymarket-validate', {
@@ -74,9 +79,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       if (error) throw error;
 
       if (!data.success || data.error) {
+        setValidationFailed(true);
         toast({
-          title: data.error || "Validation Failed",
-          description: data.details || "Failed to validate wallet",
+          title: "Wallet Not Registered on Polymarket DeFi",
+          description: "See instructions below to enable DeFi mode",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -102,6 +108,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       
       onOpenChange(false);
     } catch (error: any) {
+      setValidationFailed(true);
       toast({
         title: "Connection failed",
         description: error.message || "Failed to connect to Polymarket",
@@ -118,16 +125,103 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Connect to Polymarket</DialogTitle>
           <DialogDescription>
-            Connect your wallet securely using WalletConnect.
+            Connect your wallet and ensure it's registered on Polymarket's DeFi orderbook
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {isConnected && address ? (
+          {isPolymarketConnected && address ? (
+            <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-4">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-500">
+                    Connected to Polymarket
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
+                    {address}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : validationFailed && isConnected && address ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-amber-500">
+                        Wallet Not Registered on Polymarket DeFi
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1 font-mono break-all">
+                        {address}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-blue-500/50 bg-blue-500/10 p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-3 text-sm">
+                    <div>
+                      <p className="font-medium text-blue-500">Why Is This Happening?</p>
+                      <p className="text-muted-foreground mt-1">
+                        Polymarket has two modes: <strong>Native</strong> (default) creates a separate smart contract wallet, 
+                        while <strong>DeFi mode</strong> uses your actual MetaMask/wallet address. 
+                        If you've traded on Polymarket before using Native mode, those funds are in a different address.
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="font-medium text-foreground">How to Fix:</p>
+                      <ol className="list-decimal list-inside space-y-1.5 ml-2 mt-2 text-muted-foreground">
+                        <li>Go to <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">polymarket.com</a></li>
+                        <li>Settings → Enable "DeFi Trading"</li>
+                        <li>Switch to Polygon network when prompted</li>
+                        <li>Sign the onboarding message</li>
+                        <li>Deposit USDC to your wallet on Polygon (even $1 works)</li>
+                        <li>Click "Verify Again" below</li>
+                      </ol>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open('https://polymarket.com', '_blank')}
+                        className="text-xs"
+                      >
+                        Open Polymarket
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleWalletConnect}
+                        disabled={isLoading}
+                        className="text-xs"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          'Verify Again'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : isConnected && address ? (
             <div className="space-y-3">
               <div className="rounded-lg bg-muted p-4">
                 <p className="text-sm font-semibold mb-1">Connected Wallet</p>
@@ -138,7 +232,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
               
               <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm">
                 <p className="text-green-900 dark:text-green-300">
-                  ✓ Wallet connected! Click "Save Connection" to enable trading.
+                  ✓ Wallet connected! Click "Save Connection" to verify with Polymarket.
                 </p>
               </div>
             </div>
