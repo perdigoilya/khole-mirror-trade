@@ -17,11 +17,16 @@ import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { ClobClient } from "@polymarket/clob-client";
+import { providers } from "ethers";
+import { useAccount, useWalletClient } from "wagmi";
 
 const Watchlist = () => {
   const { user, kalshiCredentials, polymarketCredentials } = useTrading();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
   const [watchedMarkets, setWatchedMarkets] = useState<any[]>([]);
@@ -159,7 +164,7 @@ const Watchlist = () => {
 
       if (market.provider === 'polymarket') {
         // Polymarket trading
-        if (!polymarketCredentials?.walletAddress) {
+        if (!polymarketCredentials?.walletAddress || !isConnected || !walletClient) {
           toast({
             title: "Wallet Not Connected",
             description: "Please connect your Polymarket wallet first",
@@ -195,47 +200,75 @@ const Watchlist = () => {
           return;
         }
 
-        const response = await supabase.functions.invoke('polymarket-trade', {
-          body: {
-            walletAddress: polymarketCredentials.walletAddress,
-            tokenId,
-            side: currentTrade.side,
-            price: currentTrade.price / 100, // Convert cents to decimal
-            size: shares,
-          },
-        });
+        try {
+          // Create ethers v5 provider from wallet client
+          const provider = new providers.Web3Provider(walletClient as any);
+          const signer = provider.getSigner();
 
-        if (response.error) {
-          const errorData = response.error as any;
+          // Initialize Polymarket CLOB client
+          const clobClient = new ClobClient(
+            "https://clob.polymarket.com",
+            137, // Polygon chain ID
+            signer
+          );
+
+          // Convert price to proper format (0-1 range)
+          const price = currentTrade.price / 100;
           
-          // Check for specific error types
-          if (errorData.details?.includes('Insufficient funds') || errorData.details?.includes('balance')) {
+          // Create order parameters
+          const side = currentTrade.side === 'yes' ? 'BUY' : 'SELL';
+          
+          console.log('Placing order:', {
+            tokenId,
+            price,
+            size: shares,
+            side
+          });
+
+          // Place the order
+          const order = await clobClient.createOrder({
+            tokenID: tokenId,
+            price: price,
+            size: shares,
+            side: side as any,
+            feeRateBps: 0, // Fee rate in basis points
+          });
+
+          await clobClient.postOrder(order);
+
+          toast({
+            title: "Trade Executed Successfully! ✅",
+            description: `Your ${currentTrade.side.toUpperCase()} order for ${shares} shares at $${price.toFixed(2)} has been placed.`,
+          });
+
+          setTradeDialogOpen(false);
+          setTradeAmount('0');
+          setCurrentTrade(null);
+
+        } catch (error: any) {
+          console.error('Polymarket trade error:', error);
+          
+          if (error.message?.includes('insufficient')) {
             toast({
               title: "Insufficient Funds ❌",
               description: "Your wallet doesn't have enough USDC to complete this trade. Please deposit funds to your Polymarket wallet.",
               variant: "destructive",
             });
-          } else if (errorData.notRegistered) {
+          } else if (error.message?.includes('User rejected')) {
             toast({
-              title: errorData.error || "Wallet Not Registered",
-              description: errorData.details || "Please register your wallet on Polymarket first.",
+              title: "Transaction Cancelled",
+              description: "You cancelled the transaction in your wallet.",
               variant: "destructive",
             });
           } else {
             toast({
-              title: errorData.error || "Trade Failed",
-              description: errorData.details || "Could not execute trade. Please try again.",
+              title: "Trade Failed",
+              description: error.message || "Could not execute trade. Please try again.",
               variant: "destructive",
             });
           }
           return;
         }
-
-        // For Polymarket, we need client-side wallet signing
-        toast({
-          title: "Validation Passed",
-          description: "Your wallet has sufficient funds. Note: Full Polymarket trading requires wallet signature integration.",
-        });
 
       } else {
         // Kalshi trading
