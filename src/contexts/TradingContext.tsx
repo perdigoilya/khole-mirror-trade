@@ -31,6 +31,7 @@ interface TradingContextType {
   polymarketCredentials: PolymarketCredentials | null;
   isPolymarketConnected: boolean;
   connectPolymarket: (credentials: PolymarketCredentials) => Promise<void>;
+  setPolymarketLocal: (credentials: PolymarketCredentials) => void;
   disconnectPolymarket: () => Promise<void>;
   
   // Common
@@ -163,9 +164,13 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         api_credentials_secret: creds.apiCredentials?.secret,
         api_credentials_passphrase: creds.apiCredentials?.passphrase,
         funder_address: creds.apiCredentials?.funderAddress,
-      });
+      }, { onConflict: 'user_id' });
 
     if (error) throw error;
+    setPolymarketCredentials(creds);
+  };
+
+  const setPolymarketLocal = (creds: PolymarketCredentials) => {
     setPolymarketCredentials(creds);
   };
 
@@ -195,6 +200,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         polymarketCredentials,
         isPolymarketConnected: !!polymarketCredentials,
         connectPolymarket,
+        setPolymarketLocal,
         disconnectPolymarket,
         user, 
         session, 

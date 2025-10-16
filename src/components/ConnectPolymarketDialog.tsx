@@ -24,7 +24,7 @@ interface ConnectPolymarketDialogProps {
 }
 
 export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarketDialogProps) => {
-  const { connectPolymarket, polymarketCredentials, user } = useTrading();
+  const { connectPolymarket, setPolymarketLocal, polymarketCredentials, user } = useTrading();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [registrationRequired, setRegistrationRequired] = useState(false);
@@ -279,8 +279,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         throw new Error('Missing API credentials after creation.');
       }
 
-      // Credentials already saved server-side; just update context
-      await connectPolymarket({ 
+      // Credentials already saved server-side; just update context locally
+      setPolymarketLocal({ 
         walletAddress: address,
         apiKey: apiKey || undefined,
         apiCredentials: {
