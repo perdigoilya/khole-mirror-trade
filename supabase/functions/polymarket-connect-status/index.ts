@@ -120,11 +120,12 @@ serve(async (req) => {
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'GET';
     const requestPath = '/auth/ban-status/closed-only';
-    const preimage = `${timestamp}${method}${requestPath}`;
+    const preimage = `${method}${requestPath}${timestamp}`;
 
     let banStatusBody: any = {};
     let closed_only = false;
     let l2SanityPassed = false;
+    let l2Debug: any = null;
 
     const attemptBanStatusCheck = async (key: string, secret: string, pass: string): Promise<boolean> => {
       try {
@@ -161,6 +162,17 @@ serve(async (req) => {
         if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
           throw new Error('POLY_SIGNATURE is not standard base64');
         }
+
+        l2Debug = {
+          eoa: ownerAddress,
+          polyAddress: ownerAddress,
+          preimageFirst120: preimage.substring(0, 120),
+          url: 'https://clob.polymarket.com/auth/ban-status/closed-only',
+          sigB64First12: signatureBase64.substring(0, 12),
+          polyTimestamp: timestamp.toString(),
+          method,
+          requestPath
+        };
 
         console.log('L2 ban-status attempt:', {
           eoa: ownerAddress,
@@ -271,6 +283,7 @@ serve(async (req) => {
         closed_only: closed_only,
         banStatusRaw: banStatusBody,
         tradingEnabled: tradingEnabled,
+        l2Debug: l2Debug,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );

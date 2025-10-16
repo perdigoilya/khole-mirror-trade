@@ -76,7 +76,7 @@ serve(async (req) => {
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'GET';
     const requestPath = '/auth/ban-status/closed-only';
-    const preimage = `${timestamp}${method}${requestPath}`;
+    const preimage = `${method}${requestPath}${timestamp}`;
 
     const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
       // Detect if secret is base64 (Polymarket returns base64 secrets)

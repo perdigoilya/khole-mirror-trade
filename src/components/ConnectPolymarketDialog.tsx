@@ -55,6 +55,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     serverOwnerMatch?: boolean;
     serverClosedOnly?: boolean;
     serverTradingEnabled?: boolean;
+    serverL2Debug?: any;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -382,6 +383,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           closed_only: serverClosedOnly = false,
           tradingEnabled: serverTradingEnabled = false,
           banStatusRaw,
+          l2Debug,
         } = statusData;
 
         console.log('Server connection status (explicit booleans):', {
@@ -410,6 +412,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           serverOwnerMatch,
           serverTradingEnabled,
           serverClosedOnly,
+          serverL2Debug: l2Debug,
         } as any));
         
         if (serverTradingEnabled) {
@@ -694,6 +697,18 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       </div>
                     </div>
                   </div>
+                  
+                  {diagnostics.serverL2Debug && (
+                    <div className="mt-3 pt-3 border-t border-border space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">L2 Debug</p>
+                      <pre className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">{`
+ownerAddress vs POLY_ADDRESS: ${diagnostics.serverOwnerAddress} vs ${diagnostics.serverL2Debug.polyAddress}
+preimage (first 120) + URL: ${diagnostics.serverL2Debug.preimageFirst120} | ${diagnostics.serverL2Debug.url}
+POLY_SIGNATURE (b64) first12 + POLY_TIMESTAMP: ${diagnostics.serverL2Debug.sigB64First12} | ${diagnostics.serverL2Debug.polyTimestamp}
+`}
+                      </pre>
+                    </div>
+                  )}
                   
                   {diagnostics.l2Body && (
                     <div className="mt-3 pt-3 border-t border-border">
