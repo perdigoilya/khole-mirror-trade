@@ -129,10 +129,24 @@ serve(async (req) => {
       requiredAmount = count;
     }
 
+    // Check for zero balance first
+    if (availableBalance === 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'No Funds in Account ❌',
+          details: `Your Kalshi account has $0.00. Please deposit funds to your Kalshi account before trading.\n\n1. Visit kalshi.com\n2. Go to your account settings\n3. Deposit funds\n4. Return here to trade`,
+          required: requiredAmount,
+          available: 0,
+          zeroBalance: true
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
     if (availableBalance < requiredAmount) {
       return new Response(
         JSON.stringify({ 
-          error: 'Insufficient funds',
+          error: 'Insufficient Funds ❌',
           details: `You need $${requiredAmount.toFixed(2)} but only have $${availableBalance.toFixed(2)} in your Kalshi account. Please deposit more funds.`,
           required: requiredAmount,
           available: availableBalance

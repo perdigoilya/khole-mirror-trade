@@ -169,7 +169,23 @@ const Watchlist = () => {
         }
 
         // Get the token ID for the market
-        const tokenId = market.clobTokenId;
+        let tokenId = market.clobTokenId;
+        
+        // Clean up tokenId if it has array brackets or quotes
+        if (tokenId && typeof tokenId === 'string') {
+          // Remove array brackets and extra quotes
+          tokenId = tokenId.replace(/^\["|"\]$/g, '').replace(/^"|"$/g, '').trim();
+          // If it's still an array string, try to parse it
+          if (tokenId.startsWith('[')) {
+            try {
+              const parsed = JSON.parse(tokenId);
+              tokenId = Array.isArray(parsed) ? parsed[0] : tokenId;
+            } catch (e) {
+              console.warn('Could not parse tokenId:', tokenId);
+            }
+          }
+        }
+        
         if (!tokenId) {
           toast({
             title: "Market Configuration Error",
@@ -191,11 +207,27 @@ const Watchlist = () => {
 
         if (response.error) {
           const errorData = response.error as any;
-          toast({
-            title: errorData.error || "Trade Failed",
-            description: errorData.details || "Could not execute trade. Please try again.",
-            variant: "destructive",
-          });
+          
+          // Check for specific error types
+          if (errorData.details?.includes('Insufficient funds') || errorData.details?.includes('balance')) {
+            toast({
+              title: "Insufficient Funds ❌",
+              description: "Your wallet doesn't have enough USDC to complete this trade. Please deposit funds to your Polymarket wallet.",
+              variant: "destructive",
+            });
+          } else if (errorData.notRegistered) {
+            toast({
+              title: errorData.error || "Wallet Not Registered",
+              description: errorData.details || "Please register your wallet on Polymarket first.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: errorData.error || "Trade Failed",
+              description: errorData.details || "Could not execute trade. Please try again.",
+              variant: "destructive",
+            });
+          }
           return;
         }
 
@@ -232,11 +264,21 @@ const Watchlist = () => {
 
         if (response.error) {
           const errorData = response.error as any;
-          toast({
-            title: errorData.error || "Trade Failed",
-            description: errorData.details || "Could not execute trade. Please try again.",
-            variant: "destructive",
-          });
+          
+          // Check for specific error types
+          if (errorData.details?.includes('Insufficient funds') || errorData.details?.includes('balance')) {
+            toast({
+              title: "Insufficient Funds ❌",
+              description: "Your Kalshi account doesn't have enough funds to complete this trade. Please deposit funds to your Kalshi account.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: errorData.error || "Trade Failed",
+              description: errorData.details || "Could not execute trade. Please try again.",
+              variant: "destructive",
+            });
+          }
           return;
         }
 
