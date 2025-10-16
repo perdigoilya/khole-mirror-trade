@@ -178,24 +178,34 @@ serve(async (req) => {
     }
 
     const sanityData = await sanityResponse.json();
-    console.log('✓ L2 sanity check passed:', sanityData);
+    console.log('✓ L2 sanity check response:', JSON.stringify(sanityData, null, 2));
 
+    // Extract closed_only flag from response
+    const closedOnly = sanityData?.closed_only === true;
+    
     // Trading enabled only when ALL conditions met:
     // 1. hasKey && hasSecret && hasPassphrase ✓
     // 2. ownerAddress === connectedEOA (already validated above)
     // 3. L2 sanity status === 200 ✓
-    const tradingEnabled = true;
+    // 4. closed_only === false
+    const tradingEnabled = !closedOnly;
+
+    if (closedOnly) {
+      console.warn('⚠️ Account is in closed-only mode - trading blocked');
+    }
 
     return new Response(
       JSON.stringify({
         ready: true,
-        tradingEnabled: true,
+        tradingEnabled,
         status: 200,
         ownerAddress,
         hasKey: true,
         hasSecret: true,
         hasPassphrase: true,
         l2SanityPassed: true,
+        closedOnly,
+        l2Body: sanityData, // Include full L2 response for diagnostics
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );

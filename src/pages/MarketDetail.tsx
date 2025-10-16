@@ -161,7 +161,13 @@ const MarketDetail = () => {
         if (!sanityCheck.data?.tradingEnabled || sanityCheck.data?.status !== 200) {
           console.error('Trading not enabled:', sanityCheck.data);
           
-          if (sanityCheck.data?.action === 'derive_required') {
+          if (sanityCheck.data?.closedOnly === true) {
+            toast({
+              title: "Account in Closed-Only Mode",
+              description: "Your Polymarket account can't open new positions. Visit Polymarket to resolve restrictions.",
+              variant: "destructive",
+            });
+          } else if (sanityCheck.data?.action === 'derive_required') {
             toast({
               title: "Session Expired",
               description: "Your Polymarket session expired. Please disconnect and reconnect in Portfolio.",

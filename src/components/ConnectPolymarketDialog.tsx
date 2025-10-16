@@ -40,6 +40,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     connectedEOA?: string;
     closedOnly?: boolean;
     fundsReady?: boolean;
+    l2Body?: any;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -284,19 +285,37 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           body: {}
         });
         
-        if (sanityCheck.data?.ready && sanityCheck.data?.tradingEnabled && sanityCheck.data?.status === 200) {
-          console.log('✓ L2 sanity check passed - trading enabled');
+        if (sanityCheck.data?.status === 200) {
+          const closedOnly = sanityCheck.data?.closedOnly === true;
+          const tradingEnabled = sanityCheck.data?.tradingEnabled === true;
+          
+          console.log('L2 sanity check response:', {
+            status: sanityCheck.data?.status,
+            closedOnly,
+            tradingEnabled,
+            l2Body: sanityCheck.data?.l2Body
+          });
+          
           setDiagnostics(prev => ({ 
             ...prev, 
             l2SanityCheck: true, 
-            tradingEnabled: true,
-            closedOnly: sanityCheck.data?.closedOnly || false
+            tradingEnabled,
+            closedOnly,
+            l2Body: sanityCheck.data?.l2Body
           }));
           
-          toast({
-            title: "Trading Ready",
-            description: `✓ Credentials verified\n✓ L2 auth working\n✓ Funder: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`,
-          });
+          if (tradingEnabled) {
+            toast({
+              title: "Trading Ready",
+              description: `✓ Credentials verified\n✓ L2 auth working\n✓ Funder: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`,
+            });
+          } else if (closedOnly) {
+            toast({
+              title: "Account in Closed-Only Mode",
+              description: "Your Polymarket account can't open new positions. Visit Polymarket to resolve restrictions.",
+              variant: "destructive",
+            });
+          }
         } else if (sanityCheck.data?.action === 'derive_required') {
           // Auto-recovery: L2 401, need to derive new credentials
           console.log('L2 401 detected - auto-recovery not implemented yet, user must reconnect');
@@ -441,12 +460,31 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   
                   {diagnostics.closedOnly && (
                     <div className="mt-3 pt-3 border-t border-border">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-red-600 dark:text-red-400">
-                          <span className="font-medium">Trading Blocked:</span> Account is in closed-only mode. You cannot place new orders.
-                        </p>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-red-600 dark:text-red-400">
+                            <span className="font-medium">Trading Blocked:</span> Your Polymarket account is in closed-only mode (can't open new positions).
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+                          onClick={() => window.open('https://polymarket.com', '_blank')}
+                        >
+                          Open Polymarket to Resolve
+                        </Button>
                       </div>
+                    </div>
+                  )}
+                  
+                  {diagnostics.l2Body && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">L2 Response Body:</p>
+                      <pre className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
+                        {JSON.stringify(diagnostics.l2Body, null, 2)}
+                      </pre>
                     </div>
                   )}
                   
