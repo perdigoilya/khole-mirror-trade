@@ -6,7 +6,6 @@ const corsHeaders = {
 };
 
 const CLOB = 'https://clob.polymarket.com';
-const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
 
 async function hmacBase64(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -72,74 +71,29 @@ serve(async (req) => {
     }
 
     const userId = authData.user.id;
-    const { connectedEOA } = await req.json().catch(() => ({ connectedEOA: null }));
-    const eoaLower = (connectedEOA || '').toLowerCase();
-    const dbKey = `polymarket:${ENV}:${eoaLower}`;
-
-    console.log(`[CONNECT-STATUS] user=${userId} eoa=${eoaLower} dbKey=${dbKey}`);
-
     const { data: credsRow, error: credsErr } = await supabase
       .from('user_polymarket_credentials')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (credsErr) {
-      console.error(`[DB-ERROR] user=${userId} reason=error details=${credsErr.message}`);
-      return out({
-        hasKey: false,
-        hasSecret: false,
-        hasPassphrase: false,
-        ownerAddress: '',
-        connectedEOA: eoaLower,
-        ownerMatch: false,
-        closed_only: false,
-        tradingEnabled: false,
-        error: 'Database error',
-        details: credsErr.message
-      });
+    if (credsErr || !credsRow) {
+      return out({ error: 'No credentials found', details: credsErr?.message }, 400);
     }
 
-    const hasKey = !!(credsRow?.api_credentials_key || credsRow?.api_key);
-    const hasSecret = !!credsRow?.api_credentials_secret;
-    const hasPassphrase = !!credsRow?.api_credentials_passphrase;
-    const ownerAddress = (credsRow?.wallet_address || '').toLowerCase();
-    const ownerMatch = !!(ownerAddress && eoaLower && ownerAddress === eoaLower);
-
-    if (!credsRow) {
-      console.log(`[CREDS-MISSING] user=${userId} reason=no_row`);
-    } else {
-      console.log(`[CREDS-READ] user=${userId} hasKey=${hasKey} hasSecret=${hasSecret} hasPassphrase=${hasPassphrase} ownerAddress=${ownerAddress} eoaLower=${eoaLower} ownerMatch=${ownerMatch}`);
-    }
-
-    if (!hasKey || !hasSecret || !hasPassphrase) {
-      return out({
-        hasKey,
-        hasSecret,
-        hasPassphrase,
-        ownerAddress,
-        connectedEOA: eoaLower,
-        ownerMatch,
-        closed_only: false,
-        tradingEnabled: false,
-      });
-    }
-
-    let key = credsRow.api_credentials_key || credsRow.api_key;
-    let secret = credsRow.api_credentials_secret;
-    let passphrase = credsRow.api_credentials_passphrase;
+    const key = credsRow.api_credentials_key || credsRow.api_key;
+    const secret = credsRow.api_credentials_secret;
+    const passphrase = credsRow.api_credentials_passphrase;
+    const ownerAddress = (credsRow.wallet_address || '').toLowerCase();
 
     if (!key || !secret || !passphrase) {
-      return out({ error: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
+      return out({ error: 'Incomplete credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
     }
 
-    if (ownerAddress !== eoaLower) {
-      return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
-    }
+    console.log('[L2-KEYCHECK] Testing stored tuple for user', userId);
 
-    // L2 sanity check: GET /auth/ban-status/closed-only
     const method = 'GET';
-    const path = '/auth/ban-status/closed-only';
+    const path = '/auth/api-keys';
     const ts = Math.floor(Date.now() / 1000);
     const preimage = `${method}${path}${ts}`;
     (globalThis as any).__PREIMAGE = preimage;
@@ -154,19 +108,18 @@ serve(async (req) => {
       'POLY_SIGNATURE': sig,
     };
 
-    console.log('[L2-SANITY] Before fetch:', {
+    console.log('[L2-KEYCHECK] Headers:', {
       eoa: ownerAddress,
       keySuffix: suffix(key),
       passSuffix: suffix(passphrase),
       ts,
       preimageFirst120: preimage.slice(0, 120),
       sigB64First12: sig.slice(0, 12),
-      dbKey
     });
 
-    let r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
+    const r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
     const text = await r.text();
-    let upstream = tryJson(text);
+    const upstream = tryJson(text);
     const cf = {
       'cf-ray': r.headers.get('cf-ray') || '',
       'cf-cache-status': r.headers.get('cf-cache-status') || '',
@@ -174,28 +127,9 @@ serve(async (req) => {
       'content-type': r.headers.get('content-type') || ''
     };
 
-    let closed_only = false;
-    let tradingEnabled = false;
-
-    // NO auto-derive on 401: user should Re-sign L1 via UI
-
-    if (r.ok) {
-      closed_only = upstream?.closed_only === true || upstream?.closedOnly === true;
-      tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && !closed_only;
-      console.log('[L2-SANITY] ✓ Success:', { closed_only, tradingEnabled });
-    } else {
-      console.error('[L2-SANITY] FAILED:', r.status, upstream);
-    }
+    console.log(`[L2-KEYCHECK] ${r.ok ? '✓' : '✗'} status=${r.status}`);
 
     return out({
-      hasKey,
-      hasSecret,
-      hasPassphrase,
-      ownerAddress,
-      connectedEOA: eoaLower,
-      ownerMatch,
-      closed_only,
-      tradingEnabled,
       url: `${CLOB}${path}`,
       method,
       sent: {
@@ -203,17 +137,17 @@ serve(async (req) => {
         POLY_API_KEY_suffix: suffix(key),
         POLY_PASSPHRASE_suffix: suffix(passphrase),
         POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
-        POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
-        preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
+        POLY_SIGNATURE_b64_first12: sig.slice(0, 12),
+        preimage_first120: preimage.slice(0, 120)
       },
       status: r.status,
       statusText: r.statusText,
       cf,
       upstream
-    });
+    }, r.status);
 
   } catch (e: any) {
-    console.error('[ERROR] polymarket-connect-status crashed:', e);
+    console.error('[ERROR] polymarket-l2-keycheck crashed:', e);
     return out({ ok: false, error: 'EdgeCrash', message: e?.message, stack: e?.stack }, 500);
   }
 });

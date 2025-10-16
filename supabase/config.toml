@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.polymarket-orders-active]
 verify_jwt = false
+
+[functions.polymarket-l2-keycheck]
+verify_jwt = false

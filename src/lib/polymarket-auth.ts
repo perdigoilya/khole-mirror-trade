@@ -8,8 +8,8 @@ export async function generatePolymarketHMAC(
   body: string,
   secret: string
 ): Promise<string> {
-  // Create the message to sign: timestamp + method + requestPath + body
-  const message = `${timestamp}${method}${requestPath}${body}`;
+  // Create the message to sign: method + requestPath + timestamp + body
+  const message = `${method}${requestPath}${timestamp}${body}`;
   
   // Convert secret to Uint8Array
   const encoder = new TextEncoder();

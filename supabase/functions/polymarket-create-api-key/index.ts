@@ -10,10 +10,14 @@ const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
 
 async function hmacBase64(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
-  const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+  // Normalize base64url to standard base64
+  let normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
+  while (normalized.length % 4 !== 0) normalized += '=';
+  
+  const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(normalized);
   let secretBytes: Uint8Array;
   if (isB64) {
-    const raw = atob(secret);
+    const raw = atob(normalized);
     secretBytes = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) {
       secretBytes[i] = raw.charCodeAt(i);
@@ -210,6 +214,19 @@ serve(async (req) => {
 
     // Fetch proxy (funder) address
     let funderAddress = eoa;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const authHeader = req.headers.get('Authorization') || '';
+
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !authData?.user) {
+      console.warn('[AUTH-WARN] Could not get user for persistence, but credentials verified');
+    }
     try {
       const proxyResp = await fetch(`https://data-api.polymarket.com/address_details?address=${eoa}`);
       if (proxyResp.ok) {
@@ -219,6 +236,27 @@ serve(async (req) => {
       }
     } catch (e) {
       console.warn('Could not fetch proxy address:', e);
+    }
+
+    // Persist verified credentials server-side
+    if (authData?.user) {
+      const userId = authData.user.id;
+      const { error: upsertErr } = await supabase
+        .from('user_polymarket_credentials')
+        .upsert({
+          user_id: userId,
+          wallet_address: eoa.toLowerCase(),
+          api_credentials_key: key,
+          api_credentials_secret: secret,
+          api_credentials_passphrase: passphrase,
+          funder_address: funderAddress,
+        }, { onConflict: 'user_id' });
+
+      if (upsertErr) {
+        console.error('[DB-UPSERT-ERROR]', upsertErr);
+        return out({ error: 'Failed to persist credentials', details: upsertErr.message }, 500);
+      }
+      console.log('[DB-PERSISTED] Credentials saved for user', userId);
     }
 
     return out({

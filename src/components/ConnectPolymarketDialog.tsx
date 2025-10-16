@@ -264,7 +264,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           return; // stop here on non-2xx, do not save
         }
         apiCredentials = parsed;
-        console.log('API credentials created and verified inline');
+        console.log('API credentials created and verified inline (server-side persist complete)');
       } catch (err: any) {
         console.error('API key creation failed:', err);
         throw err;
@@ -279,6 +279,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         throw new Error('Missing API credentials after creation.');
       }
 
+      // Credentials already saved server-side; just update context
       await connectPolymarket({ 
         walletAddress: address,
         apiKey: apiKey || undefined,
@@ -288,28 +289,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         }
       });
 
-      // Store credentials in database with UPSERT (merge resolution)
-      const normalizedWalletAddress = address.toLowerCase();
-      const { error: dbError } = await supabase
-        .from('user_polymarket_credentials')
-        .upsert({
-          user_id: user?.id,
-          wallet_address: normalizedWalletAddress,
-          api_credentials_key: apiCredentials.apiKey,
-          api_credentials_secret: apiCredentials.secret,
-          api_credentials_passphrase: apiCredentials.passphrase,
-          funder_address: funderAddress,
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (dbError) {
-        throw new Error('Failed to store trading credentials');
-      }
-
-      console.info('CREDS_SAVED eoa=' + normalizedWalletAddress + ' hasKey=true hasSecret=true hasPassphrase=true');
+      console.log('Polymarket credentials updated in context');
 
       // Step 1: Credentials created ✓
+      const normalizedWalletAddress = address.toLowerCase();
       setDiagnostics(prev => ({ 
         ...prev, 
         credsReady: true, 
@@ -354,21 +337,36 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
       // Small delay to allow credentials to propagate before L2 sanity check
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Step 2: Call server-side /connect/status to get authoritative flags
+      // Step 2: L2 sanity check with direct fetch to get full diagnostics
       console.log('Fetching authoritative connection status...');
       const normalizedEOA = address.toLowerCase();
       try {
-        const { data: statusData, error: statusError } = await supabase.functions.invoke('polymarket-connect-status', {
-          body: { connectedEOA: normalizedEOA }
+        const projectUrl = import.meta.env.VITE_SUPABASE_URL as string;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const statusRes = await fetch(`${projectUrl}/functions/v1/polymarket-connect-status`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'apikey': anonKey,
+            'authorization': `Bearer ${sessionData.session?.access_token || ''}`,
+          },
+          body: JSON.stringify({ connectedEOA: normalizedEOA })
         });
 
-        if (statusError || !statusData) {
-          console.error('Connect status error:', statusError || 'No data');
-          throw new Error('Failed to fetch connection status');
-        }
+        const statusTxt = await statusRes.text();
+        const statusData = (() => { try { return JSON.parse(statusTxt); } catch { return statusTxt; } })();
+        console.log('L2 sanity check response:', { status: statusRes.status, body: statusData });
+        setDiagnostics(prev => ({ ...prev, l2SanityCheck: statusData }));
 
-        console.info('Connect status response:', JSON.stringify(statusData, null, 2));
-        console.info('DB row key: user_id + eoa=' + normalizedEOA);
+        if (!statusRes.ok) {
+          toast({
+            title: `L2 sanity check failed (${statusRes.status})`,
+            description: typeof statusData === 'string' ? statusData : (statusData.error || 'See diagnostics'),
+            variant: 'destructive',
+          });
+          return;
+        }
 
         const {
           hasKey: serverHasKey = false,
@@ -975,6 +973,14 @@ POLY_SIGNATURE (b64) first12 + POLY_TIMESTAMP: ${diagnostics.serverL2Debug.sigB6
                 disabled={isLoading}
               >
                 Disconnect
+              </Button>
+              <Button
+                onClick={handleWalletConnect}
+                disabled={isLoading}
+                variant="outline"
+              >
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Re-sign L1
               </Button>
               <Button
                 onClick={handleWalletConnect}

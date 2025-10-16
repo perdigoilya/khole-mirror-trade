@@ -10,10 +10,14 @@ const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
 
 async function hmacBase64(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
-  const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+  // Normalize base64url to standard base64
+  let normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
+  while (normalized.length % 4 !== 0) normalized += '=';
+  
+  const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(normalized);
   let secretBytes: Uint8Array;
   if (isB64) {
-    const raw = atob(secret);
+    const raw = atob(normalized);
     secretBytes = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) {
       secretBytes[i] = raw.charCodeAt(i);
