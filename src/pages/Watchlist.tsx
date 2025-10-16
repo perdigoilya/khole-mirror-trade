@@ -25,6 +25,7 @@ import {
   POLYMARKET_ORDER_DOMAIN, 
   POLYMARKET_ORDER_TYPES 
 } from "@/lib/polymarket-orders";
+import { generatePolymarketHeaders } from "@/lib/polymarket-auth";
 
 const Watchlist = () => {
   const { user, kalshiCredentials, polymarketCredentials } = useTrading();
@@ -258,11 +259,27 @@ const Watchlist = () => {
 
           console.log('Submitting order to Polymarket...');
           
-          // Prepare headers
-          const headers: HeadersInit = {
-            'Content-Type': 'application/json',
-          };
-          // Note: No API key used. Trading via signed orders.
+          // Check if we have API credentials
+          if (!polymarketCredentials?.apiCredentials) {
+            toast({
+              title: "Missing API Credentials",
+              description: "Please reconnect your wallet to generate trading credentials",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          // Generate HMAC auth headers
+          const headers = await generatePolymarketHeaders(
+            address,
+            polymarketCredentials.apiCredentials.apiKey,
+            polymarketCredentials.apiCredentials.secret,
+            polymarketCredentials.apiCredentials.passphrase,
+            'POST',
+            '/order',
+            signedOrder
+          );
+
           // Submit the order to Polymarket CLOB API
           const response = await fetch('https://clob.polymarket.com/order', {
             method: 'POST',

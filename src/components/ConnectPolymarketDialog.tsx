@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Wallet, AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSignTypedData } from "wagmi";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -30,6 +30,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const { address, isConnected } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
+  const { signTypedDataAsync } = useSignTypedData();
 
   const isPolymarketConnected = !!polymarketCredentials;
 
@@ -101,9 +102,66 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         });
       }
 
+      // Create API credentials for authenticated trading
+      toast({
+        title: "Setting up API credentials...",
+        description: "Please sign the message in your wallet to enable trading",
+      });
+
+      // Generate L1 signature for API key creation
+      const timestamp = Math.floor(Date.now() / 1000);
+      const message = {
+        address: address,
+        timestamp: timestamp.toString(),
+        nonce: 0,
+        message: "This message attests that I control the given wallet",
+      };
+
+      const domain = {
+        name: "ClobAuthDomain",
+        version: "1",
+        chainId: 137, // Polygon mainnet
+      };
+
+      const types = {
+        ClobAuth: [
+          { name: "address", type: "address" },
+          { name: "timestamp", type: "string" },
+          { name: "nonce", type: "uint256" },
+          { name: "message", type: "string" },
+        ],
+      };
+
+      // Request signature from wallet
+      const signature = await signTypedDataAsync({
+        account: address,
+        domain,
+        types,
+        primaryType: "ClobAuth",
+        message,
+      });
+
+      // Create/derive API key using the signature
+      const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
+        body: {
+          walletAddress: address,
+          signature,
+          timestamp,
+          nonce: 0,
+        }
+      });
+
+      if (apiKeyResponse.error) {
+        throw new Error(apiKeyResponse.error.message || 'Failed to create API credentials');
+      }
+
+      const apiCredentials = apiKeyResponse.data;
+      console.log('API credentials created successfully');
+
       await connectPolymarket({ 
         walletAddress: address,
-        apiKey: apiKey || undefined 
+        apiKey: apiKey || undefined,
+        apiCredentials: apiCredentials 
       });
       
       toast({
@@ -129,9 +187,66 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     
     setIsLoading(true);
     try {
+      // Create API credentials for authenticated trading
+      toast({
+        title: "Setting up API credentials...",
+        description: "Please sign the message in your wallet to enable trading",
+      });
+
+      // Generate L1 signature for API key creation
+      const timestamp = Math.floor(Date.now() / 1000);
+      const message = {
+        address: address,
+        timestamp: timestamp.toString(),
+        nonce: 0,
+        message: "This message attests that I control the given wallet",
+      };
+
+      const domain = {
+        name: "ClobAuthDomain",
+        version: "1",
+        chainId: 137, // Polygon mainnet
+      };
+
+      const types = {
+        ClobAuth: [
+          { name: "address", type: "address" },
+          { name: "timestamp", type: "string" },
+          { name: "nonce", type: "uint256" },
+          { name: "message", type: "string" },
+        ],
+      };
+
+      // Request signature from wallet
+      const signature = await signTypedDataAsync({
+        account: address,
+        domain,
+        types,
+        primaryType: "ClobAuth",
+        message,
+      });
+
+      // Create/derive API key using the signature
+      const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
+        body: {
+          walletAddress: address,
+          signature,
+          timestamp,
+          nonce: 0,
+        }
+      });
+
+      if (apiKeyResponse.error) {
+        throw new Error(apiKeyResponse.error.message || 'Failed to create API credentials');
+      }
+
+      const apiCredentials = apiKeyResponse.data;
+      console.log('API credentials created successfully');
+
       await connectPolymarket({ 
         walletAddress: address,
-        apiKey: apiKey || undefined 
+        apiKey: apiKey || undefined,
+        apiCredentials: apiCredentials 
       });
       
       toast({

@@ -10,6 +10,11 @@ interface KalshiCredentials {
 interface PolymarketCredentials {
   walletAddress: string;
   apiKey?: string;
+  apiCredentials?: {
+    apiKey: string;
+    secret: string;
+    passphrase: string;
+  };
 }
 
 type Provider = 'kalshi' | 'polymarket' | null;
@@ -105,6 +110,11 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setPolymarketCredentials({
           walletAddress: polymarketData.wallet_address,
           apiKey: polymarketData.api_key,
+          apiCredentials: polymarketData.api_credentials_key ? {
+            apiKey: polymarketData.api_credentials_key,
+            secret: polymarketData.api_credentials_secret,
+            passphrase: polymarketData.api_credentials_passphrase,
+          } : undefined,
         });
       }
     } catch (error) {
@@ -147,6 +157,9 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         user_id: user.id,
         wallet_address: creds.walletAddress,
         api_key: creds.apiKey,
+        api_credentials_key: creds.apiCredentials?.apiKey,
+        api_credentials_secret: creds.apiCredentials?.secret,
+        api_credentials_passphrase: creds.apiCredentials?.passphrase,
       });
 
     if (error) throw error;

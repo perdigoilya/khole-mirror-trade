@@ -150,6 +150,9 @@ export type Database = {
       }
       user_polymarket_credentials: {
         Row: {
+          api_credentials_key: string | null
+          api_credentials_passphrase: string | null
+          api_credentials_secret: string | null
           api_key: string | null
           created_at: string
           id: string
@@ -158,6 +161,9 @@ export type Database = {
           wallet_address: string
         }
         Insert: {
+          api_credentials_key?: string | null
+          api_credentials_passphrase?: string | null
+          api_credentials_secret?: string | null
           api_key?: string | null
           created_at?: string
           id?: string
@@ -166,6 +172,9 @@ export type Database = {
           wallet_address: string
         }
         Update: {
+          api_credentials_key?: string | null
+          api_credentials_passphrase?: string | null
+          api_credentials_secret?: string | null
           api_key?: string | null
           created_at?: string
           id?: string
