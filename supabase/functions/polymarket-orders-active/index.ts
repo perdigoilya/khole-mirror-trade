@@ -182,6 +182,28 @@ serve(async (req) => {
 
     // Extract closed_only flag from response
     const closedOnly = sanityData?.closed_only === true;
+
+    // Also check access-status endpoint to see if there are onboarding requirements
+    console.log('Checking access-status for:', ownerAddress);
+    const accessStatusResponse = await fetch(
+      `https://clob.polymarket.com/auth/access-status?address=${ownerAddress}`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      }
+    );
+
+    let accessStatus: any = null;
+    if (accessStatusResponse.ok) {
+      accessStatus = await accessStatusResponse.json();
+      console.log('✓ Access status response:', JSON.stringify(accessStatus, null, 2));
+    } else {
+      console.warn('⚠️ Access status check failed:', accessStatusResponse.status);
+      const errorText = await accessStatusResponse.text();
+      console.warn('Access status error:', errorText);
+    }
     
     // Trading enabled only when ALL conditions met:
     // 1. hasKey && hasSecret && hasPassphrase ✓
@@ -192,6 +214,17 @@ serve(async (req) => {
 
     if (closedOnly) {
       console.warn('⚠️ Account is in closed-only mode - trading blocked');
+    }
+
+    // Check for access restrictions
+    const hasAccessRestrictions = accessStatus && (
+      accessStatus.cert_required === true ||
+      accessStatus.kyc_required === true ||
+      accessStatus.restricted === true
+    );
+
+    if (hasAccessRestrictions) {
+      console.warn('⚠️ Account has access restrictions:', accessStatus);
     }
 
     return new Response(
@@ -205,6 +238,7 @@ serve(async (req) => {
         hasPassphrase: true,
         l2SanityPassed: true,
         closedOnly,
+        accessStatus, // Include full access-status response
         l2Body: sanityData, // Include full L2 response for diagnostics
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }

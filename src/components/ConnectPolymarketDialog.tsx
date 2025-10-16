@@ -41,6 +41,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     closedOnly?: boolean;
     fundsReady?: boolean;
     l2Body?: any;
+    accessStatus?: any;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -301,7 +302,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
             l2SanityCheck: true, 
             tradingEnabled,
             closedOnly,
-            l2Body: sanityCheck.data?.l2Body
+            l2Body: sanityCheck.data?.l2Body,
+            accessStatus: sanityCheck.data?.accessStatus
           }));
           
           if (tradingEnabled) {
@@ -458,23 +460,39 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                     </div>
                   </div>
                   
-                  {diagnostics.closedOnly && (
+                  {(diagnostics.closedOnly || diagnostics.accessStatus?.cert_required || diagnostics.accessStatus?.kyc_required || diagnostics.accessStatus?.restricted) && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <div className="flex flex-col gap-3">
                         <div className="flex items-start gap-2">
                           <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-red-600 dark:text-red-400">
-                            <span className="font-medium">Trading Blocked:</span> Your Polymarket account is in closed-only mode (can't open new positions).
-                          </p>
+                          <div className="text-xs">
+                            <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked - Onboarding Required</p>
+                            <ul className="space-y-0.5 text-red-600 dark:text-red-400">
+                              {diagnostics.closedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
+                              {diagnostics.accessStatus?.cert_required && <li>• Certificate required</li>}
+                              {diagnostics.accessStatus?.kyc_required && <li>• KYC verification required</li>}
+                              {diagnostics.accessStatus?.restricted && <li>• Account restricted</li>}
+                            </ul>
+                          </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-red-500/50 text-red-500 hover:bg-red-500/10"
-                          onClick={() => window.open('https://polymarket.com', '_blank')}
-                        >
-                          Open Polymarket to Resolve
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                            onClick={() => window.open('https://polymarket.com', '_blank')}
+                          >
+                            Finish Onboarding on Polymarket
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleWalletConnect}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? 'Retrying...' : 'Retry'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -484,6 +502,15 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       <p className="text-xs font-medium text-muted-foreground mb-2">L2 Response Body:</p>
                       <pre className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
                         {JSON.stringify(diagnostics.l2Body, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                  
+                  {diagnostics.accessStatus && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Access Status:</p>
+                      <pre className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">
+                        {JSON.stringify(diagnostics.accessStatus, null, 2)}
                       </pre>
                     </div>
                   )}
