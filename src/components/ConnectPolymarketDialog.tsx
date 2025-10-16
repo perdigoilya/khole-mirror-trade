@@ -126,35 +126,126 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
               <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 p-3 text-sm mb-4">
                 <p className="font-semibold text-amber-900 dark:text-amber-300 mb-2">⚠️ Important: Set up Polymarket first</p>
                 <p className="text-amber-800 dark:text-amber-400">
-                  Before connecting here, you must create a Polymarket account and deposit funds at polymarket.com
+                  Before connecting here, you must create a Polymarket account and deposit funds. Follow the guide below.
                 </p>
               </div>
 
-              <div className="rounded-lg bg-muted p-4 text-sm">
-                <p className="font-semibold mb-2">Step-by-Step Guide:</p>
-                <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
-                  <li className="pl-2">
-                    <span className="font-medium text-foreground">Create Polymarket Account:</span>
-                    <br />Visit polymarket.com and connect your wallet there first
-                  </li>
-                  <li className="pl-2">
-                    <span className="font-medium text-foreground">Deposit Funds:</span>
-                    <br />Add USDC to your Polymarket account (required for trading)
-                  </li>
-                  <li className="pl-2">
-                    <span className="font-medium text-foreground">Return Here:</span>
-                    <br />Click "Connect Wallet" below and select the same wallet
-                  </li>
-                  <li className="pl-2">
-                    <span className="font-medium text-foreground">Verify Connection:</span>
-                    <br />We'll check that your wallet is registered on Polymarket
-                  </li>
-                </ol>
+              <div className="rounded-lg bg-muted p-4 text-sm space-y-4">
+                <p className="font-semibold text-base mb-3">📋 Step-by-Step Setup Guide:</p>
+                
+                <div className="space-y-3">
+                  <div className="pl-2">
+                    <span className="font-semibold text-foreground">Step 1: Get a Crypto Wallet</span>
+                    <p className="text-muted-foreground mt-1">
+                      If you don't have a crypto wallet yet, download one:
+                    </p>
+                    <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground space-y-1">
+                      <li>
+                        <a 
+                          href="https://metamask.io/download/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          MetaMask (Browser Extension)
+                        </a>
+                      </li>
+                      <li>
+                        <a 
+                          href="https://www.coinbase.com/wallet" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          Coinbase Wallet (Mobile & Browser)
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="pl-2">
+                    <span className="font-semibold text-foreground">Step 2: Create Polymarket Account</span>
+                    <p className="text-muted-foreground mt-1">
+                      Visit{" "}
+                      <a 
+                        href="https://polymarket.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline font-medium"
+                      >
+                        polymarket.com
+                      </a>
+                      {" "}and connect your wallet to create an account.
+                    </p>
+                  </div>
+
+                  <div className="pl-2">
+                    <span className="font-semibold text-foreground">Step 3: Get USDC (Required for Trading)</span>
+                    <p className="text-muted-foreground mt-1">
+                      Polymarket uses USDC for all trades. You can:
+                    </p>
+                    <ul className="list-disc list-inside ml-4 mt-1 text-muted-foreground space-y-1">
+                      <li>
+                        Buy USDC directly on{" "}
+                        <a 
+                          href="https://polymarket.com/deposit" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          Polymarket's deposit page
+                        </a>
+                      </li>
+                      <li>Transfer USDC from another exchange (Coinbase, Binance, etc.)</li>
+                      <li>
+                        Bridge ETH to USDC on{" "}
+                        <a 
+                          href="https://bridge.polygon.technology/" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          Polygon Bridge
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="pl-2">
+                    <span className="font-semibold text-foreground">Step 4: Return Here & Connect</span>
+                    <p className="text-muted-foreground mt-1">
+                      Once your Polymarket account has USDC, click "Connect Wallet" below and select the same wallet you used on Polymarket.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 mt-4">
+                  <p className="text-sm text-blue-900 dark:text-blue-300">
+                    💡 <span className="font-semibold">Need help?</span> Visit the{" "}
+                    <a 
+                      href="https://polymarket.com/faq" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="underline hover:text-blue-700 dark:hover:text-blue-100"
+                    >
+                      Polymarket FAQ
+                    </a>
+                    {" "}or{" "}
+                    <a 
+                      href="https://docs.polymarket.com/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="underline hover:text-blue-700 dark:hover:text-blue-100"
+                    >
+                      Documentation
+                    </a>
+                  </p>
+                </div>
               </div>
 
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 text-sm">
-                <p className="text-blue-900 dark:text-blue-300">
-                  🔒 Your wallet must be the same one used on Polymarket. We'll verify it has funds before allowing trades.
+              <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm mt-4">
+                <p className="text-green-900 dark:text-green-300">
+                  🔒 Your wallet connection is secure. We only verify your wallet is registered on Polymarket - we never access your funds.
                 </p>
               </div>
             </>
