@@ -703,6 +703,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       <p className="text-xs font-medium text-muted-foreground">L2 Debug</p>
                       <pre className="text-[10px] text-muted-foreground bg-muted/30 p-2 rounded overflow-x-auto">{`
 ownerAddress vs POLY_ADDRESS: ${diagnostics.serverOwnerAddress} vs ${diagnostics.serverL2Debug.polyAddress}
+keySuffix/passSuffix: ${diagnostics.serverL2Debug.keySuffix}/${diagnostics.serverL2Debug.passSuffix}
 preimage (first 120) + URL: ${diagnostics.serverL2Debug.preimageFirst120} | ${diagnostics.serverL2Debug.url}
 POLY_SIGNATURE (b64) first12 + POLY_TIMESTAMP: ${diagnostics.serverL2Debug.sigB64First12} | ${diagnostics.serverL2Debug.polyTimestamp}
 `}

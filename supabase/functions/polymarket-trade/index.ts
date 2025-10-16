@@ -118,21 +118,16 @@ serve(async (req) => {
     };
     const rawBody = JSON.stringify(orderPayload); // Create ONCE for signing and sending
 
-    // L2 HMAC authentication
-    const timestamp = Math.floor(Date.now() / 1000);
-    
-    // Assert timestamp is valid
-    if (!Number.isInteger(timestamp) || timestamp.toString().length > 10) {
-      throw new Error('Invalid timestamp format - must be epoch seconds');
-    }
-
     const method = 'POST';
     const requestPath = '/order';
     
-    // Preimage: exact bytes (method + path + timestamp + rawBody)
-    const preimage = `${method}${requestPath}${timestamp}${rawBody}`;
-
     const attemptOrderSubmission = async (key: string, secret: string, pass: string): Promise<Response> => {
+      // Fresh timestamp and preimage per attempt
+      const ts = Math.floor(Date.now() / 1000);
+      if (!Number.isInteger(ts) || ts.toString().length > 10) {
+        throw new Error('Invalid timestamp format - must be epoch seconds');
+      }
+      const preimage = `${method}${requestPath}${ts}${rawBody}`;
       // Detect if secret is base64 (Polymarket returns base64 secrets)
       const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
       const encoder = new TextEncoder();
@@ -174,7 +169,7 @@ serve(async (req) => {
         POLY_ADDRESS: requestWallet,
         keySuffix: key.slice(-6),
         passSuffix: pass.slice(-4),
-        ts: timestamp,
+        ts,
         preimageFirst120: preimage.substring(0, 120),
         sigB64First12: signatureBase64.substring(0, 12),
         funderAddress: funderAddress || 'not_specified',
@@ -188,7 +183,7 @@ serve(async (req) => {
           'accept': 'application/json',
           'POLY_ADDRESS': requestWallet,
           'POLY_SIGNATURE': signatureBase64,
-          'POLY_TIMESTAMP': timestamp.toString(),
+          'POLY_TIMESTAMP': ts.toString(),
           'POLY_API_KEY': key,
           'POLY_PASSPHRASE': pass,
         },

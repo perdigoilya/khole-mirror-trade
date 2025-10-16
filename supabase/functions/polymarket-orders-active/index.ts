@@ -103,7 +103,11 @@ serve(async (req) => {
         ['sign']
       );
 
-      const messageData = encoder.encode(preimage);
+      // Fresh timestamp and preimage per attempt
+      const ts = Math.floor(Date.now() / 1000);
+      const preimageLocal = `${method}${requestPath}${ts}`;
+
+      const messageData = encoder.encode(preimageLocal);
       const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
       const signatureArray = Array.from(new Uint8Array(signature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
@@ -119,8 +123,8 @@ serve(async (req) => {
         polyAddress: ownerAddress,
         keySuffix: key.slice(-6),
         passSuffix: pass.slice(-4),
-        ts: timestamp,
-        preimageFirst120: preimage.substring(0, 120),
+        ts,
+        preimageFirst120: preimageLocal.substring(0, 120),
         sigB64First12: signatureBase64.substring(0, 12),
         method,
         requestPath
@@ -132,7 +136,7 @@ serve(async (req) => {
           'Accept': 'application/json',
           'POLY_ADDRESS': ownerAddress,
           'POLY_SIGNATURE': signatureBase64,
-          'POLY_TIMESTAMP': timestamp.toString(),
+          'POLY_TIMESTAMP': ts.toString(),
           'POLY_API_KEY': key,
           'POLY_PASSPHRASE': pass,
         },

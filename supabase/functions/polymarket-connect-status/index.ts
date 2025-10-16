@@ -153,6 +153,10 @@ serve(async (req) => {
           ['sign']
         );
 
+        // Fresh timestamp and preimage per attempt
+        const ts = Math.floor(Date.now() / 1000);
+        const preimage = `${method}${requestPath}${ts}`;
+
         const messageData = encoder.encode(preimage);
         const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
         const signatureArray = Array.from(new Uint8Array(signature));
@@ -169,9 +173,11 @@ serve(async (req) => {
           preimageFirst120: preimage.substring(0, 120),
           url: 'https://clob.polymarket.com/auth/ban-status/closed-only',
           sigB64First12: signatureBase64.substring(0, 12),
-          polyTimestamp: timestamp.toString(),
+          polyTimestamp: ts.toString(),
           method,
-          requestPath
+          requestPath,
+          keySuffix: key.slice(-6),
+          passSuffix: pass.slice(-4),
         };
 
         console.log('L2 ban-status attempt:', {
@@ -180,7 +186,7 @@ serve(async (req) => {
           polyAddress: ownerAddress,
           keySuffix: key.slice(-6),
           passSuffix: pass.slice(-4),
-          ts: timestamp,
+          ts,
           preimageFirst120: preimage.substring(0, 120),
           sigB64First12: signatureBase64.substring(0, 12),
         });
@@ -191,7 +197,7 @@ serve(async (req) => {
             'Accept': 'application/json',
             'POLY_ADDRESS': ownerAddress,
             'POLY_SIGNATURE': signatureBase64,
-            'POLY_TIMESTAMP': timestamp.toString(),
+            'POLY_TIMESTAMP': ts.toString(),
             'POLY_API_KEY': key,
             'POLY_PASSPHRASE': pass,
           },
