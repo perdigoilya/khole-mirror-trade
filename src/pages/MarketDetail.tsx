@@ -119,7 +119,7 @@ const MarketDetail = () => {
     }
   };
 
-  const handleTrade = (outcome: string, side: 'yes' | 'no', price: number) => {
+  const handleTrade = async (outcome: string, side: 'yes' | 'no', price: number) => {
     if (!user) {
       toast({
         title: "Authentication Required",
@@ -149,6 +149,44 @@ const MarketDetail = () => {
       }
       setConnectionDialogOpen(true);
       return;
+    }
+
+    // For Polymarket: verify trading is enabled via L2 sanity check
+    if (targetMarket?.provider === 'polymarket') {
+      try {
+        const sanityCheck = await supabase.functions.invoke('polymarket-orders-active', {
+          body: {}
+        });
+        
+        if (!sanityCheck.data?.tradingEnabled || sanityCheck.data?.status !== 200) {
+          console.error('Trading not enabled:', sanityCheck.data);
+          
+          if (sanityCheck.data?.action === 'derive_required') {
+            toast({
+              title: "Session Expired",
+              description: "Your Polymarket session expired. Please disconnect and reconnect in Portfolio.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Trading Not Available",
+              description: sanityCheck.data?.details || "L2 authentication failed. Please reconnect in Portfolio.",
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+        
+        console.log('✓ Trading enabled - proceeding with trade');
+      } catch (e: any) {
+        console.error('Sanity check error:', e);
+        toast({
+          title: "Connection Check Failed",
+          description: "Unable to verify trading status. Please try reconnecting.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
     
     setCurrentTrade({ outcome, side, price });

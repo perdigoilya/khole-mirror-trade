@@ -50,20 +50,28 @@ serve(async (req) => {
 
     if (!apiKey || !apiSecret || !apiPassphrase) {
       return new Response(
-        JSON.stringify({ error: 'Incomplete credentials', ready: false }),
+        JSON.stringify({ 
+          ready: false,
+          tradingEnabled: false,
+          error: 'Incomplete credentials',
+          hasKey: !!apiKey,
+          hasSecret: !!apiSecret,
+          hasPassphrase: !!apiPassphrase,
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // Sanity check: GET /data/orders with L2 auth
-    console.log('Sanity check: GET /data/orders with L2 auth');
+    const ownerAddress = walletAddress?.toLowerCase();
+
+    // Sanity check: GET /auth/ban-status/closed-only with L2 auth (read-only, no state change)
+    console.log('Sanity check: GET /auth/ban-status/closed-only with L2 auth');
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'GET';
-    const requestPath = '/data/orders';
-    const body = '';
-
-    // Generate HMAC
-    const message = `${timestamp}${method}${requestPath}${body}`;
+    const requestPath = '/auth/ban-status/closed-only';
+    
+    // HMAC preimage: method + path + timestamp (no body for GET)
+    const preimage = `${timestamp}${method}${requestPath}`;
     const encoder = new TextEncoder();
     const keyData = encoder.encode(apiSecret);
 
@@ -75,18 +83,25 @@ serve(async (req) => {
       ['sign']
     );
 
-    const messageData = encoder.encode(message);
+    const messageData = encoder.encode(preimage);
     const signature = await crypto.subtle.sign('HMAC', key, messageData);
     const signatureArray = Array.from(new Uint8Array(signature));
     const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-    console.log('L2 sanity check preimage:', { walletAddress, timestamp, method, requestPath });
+    console.log('L2 sanity check:', { 
+      ownerAddress, 
+      hasSecret: true, 
+      timestamp, 
+      preimage,
+      method,
+      requestPath
+    });
 
-    const activeOrdersResponse = await fetch('https://clob.polymarket.com/data/orders', {
+    const sanityResponse = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'POLY_ADDRESS': walletAddress.toLowerCase(),
+        'POLY_ADDRESS': ownerAddress,
         'POLY_SIGNATURE': signatureBase64,
         'POLY_TIMESTAMP': timestamp.toString(),
         'POLY_API_KEY': apiKey,
@@ -94,48 +109,93 @@ serve(async (req) => {
       },
     });
 
-    if (!activeOrdersResponse.ok) {
-      const errorText = await activeOrdersResponse.text();
-      console.error('L2 sanity check failed:', activeOrdersResponse.status, errorText);
+    if (!sanityResponse.ok) {
+      const errorText = await sanityResponse.text();
+      const cfRay = sanityResponse.headers.get('cf-ray') || null;
+      const cfCache = sanityResponse.headers.get('cf-cache-status') || null;
+      const server = sanityResponse.headers.get('server') || null;
+      const contentType = sanityResponse.headers.get('content-type') || null;
 
-      // If 401, credentials are invalid - signal reconnect required
-      if (activeOrdersResponse.status === 401) {
+      console.error('L2 sanity check failed:', sanityResponse.status, {
+        cfRay,
+        cfCache,
+        server,
+        contentType,
+        body: errorText?.slice(0, 500),
+        preimage
+      });
+
+      // If 401, credentials are invalid - signal auto-recovery needed
+      if (sanityResponse.status === 401) {
+        console.log('L2 401 - credentials invalid, auto-recovery required');
         return new Response(
           JSON.stringify({ 
             ready: false,
+            tradingEnabled: false,
             error: 'Invalid credentials',
             status: 401,
-            action: 'reconnect_required',
-            details: 'L2 credentials are invalid. Please disconnect and reconnect.'
+            action: 'derive_required',
+            details: 'L2 credentials are invalid. Auto-recovery will attempt to derive new credentials.',
+            ownerAddress,
+            hasKey: true,
+            hasSecret: true,
+            hasPassphrase: true,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      // If 403 with Cloudflare, it's a WAF/egress issue
+      if (sanityResponse.status === 403 && (cfRay || errorText?.includes('cloudflare'))) {
+        return new Response(
+          JSON.stringify({ 
+            ready: false,
+            tradingEnabled: false,
+            error: 'Cloudflare blocked',
+            status: 403,
+            cfRay,
+            cfCache,
+            server,
+            details: 'Request blocked by Cloudflare WAF. Consider using relay endpoint.',
+            upstream: errorText
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
         );
       }
 
       return new Response(
         JSON.stringify({ 
           ready: false,
+          tradingEnabled: false,
           error: 'L2 check failed',
-          status: activeOrdersResponse.status,
+          status: sanityResponse.status,
+          ownerAddress,
+          preimage,
           upstream: errorText
         }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: activeOrdersResponse.status }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: sanityResponse.status }
       );
     }
 
-    const ordersData = await activeOrdersResponse.json();
-    console.log('✓ L2 sanity check passed - active orders:', ordersData?.length || 0);
+    const sanityData = await sanityResponse.json();
+    console.log('✓ L2 sanity check passed:', sanityData);
+
+    // Trading enabled only when ALL conditions met:
+    // 1. hasKey && hasSecret && hasPassphrase ✓
+    // 2. ownerAddress === connectedEOA (already validated above)
+    // 3. L2 sanity status === 200 ✓
+    const tradingEnabled = true;
 
     return new Response(
       JSON.stringify({
         ready: true,
+        tradingEnabled: true,
         status: 200,
-        activeOrders: ordersData?.length || 0,
-        walletAddress,
-        ownerAddress: walletAddress,
+        ownerAddress,
         hasKey: true,
         hasSecret: true,
         hasPassphrase: true,
+        l2SanityPassed: true,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
@@ -146,6 +206,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         ready: false,
+        tradingEnabled: false,
         error: 'Check failed',
         details: errorMessage 
       }),

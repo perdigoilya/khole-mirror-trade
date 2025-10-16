@@ -247,7 +247,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           body: {}
         });
         
-        if (sanityCheck.data?.ready && sanityCheck.data?.status === 200) {
+        if (sanityCheck.data?.ready && sanityCheck.data?.tradingEnabled && sanityCheck.data?.status === 200) {
           console.log('✓ L2 sanity check passed - trading enabled');
           setDiagnostics(prev => ({ 
             ...prev, 
@@ -259,11 +259,23 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
             title: "Trading Ready",
             description: `✓ Credentials verified\n✓ L2 auth working\n✓ Funder: ${funderAddress.slice(0, 6)}...${funderAddress.slice(-4)}`,
           });
+        } else if (sanityCheck.data?.action === 'derive_required') {
+          // Auto-recovery: L2 401, need to derive new credentials
+          console.log('L2 401 detected - auto-recovery not implemented yet, user must reconnect');
+          setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
+          
+          toast({
+            title: "Session Expired",
+            description: "Your Polymarket session expired. Please disconnect and reconnect.",
+            variant: "destructive",
+          });
+          throw new Error('Session expired - please reconnect');
         } else {
           console.error('L2 sanity check failed:', sanityCheck.data || sanityCheck.error);
           setDiagnostics(prev => ({ ...prev, l2SanityCheck: false, tradingEnabled: false }));
           
-          throw new Error(sanityCheck.data?.error || 'L2 sanity check failed - please reconnect');
+          const errorMsg = sanityCheck.data?.details || sanityCheck.data?.error || 'L2 sanity check failed';
+          throw new Error(errorMsg);
         }
       } catch (e: any) {
         console.error('L2 sanity check error:', e);
