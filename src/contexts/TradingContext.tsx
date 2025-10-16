@@ -36,7 +36,11 @@ interface TradingContextType {
 
 const TradingContext = createContext<TradingContextType | undefined>(undefined);
 
+// Create a displayName for better debugging
+TradingContext.displayName = 'TradingContext';
+
 export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  console.log('TradingProvider initializing...');
   const [kalshiCredentials, setKalshiCredentials] = useState<KalshiCredentials | null>(null);
   const [polymarketCredentials, setPolymarketCredentials] = useState<PolymarketCredentials | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -163,6 +167,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Determine active provider (prefer user's connected account, default to Polymarket)
   const activeProvider: Provider = kalshiCredentials ? 'kalshi' : polymarketCredentials ? 'polymarket' : 'polymarket';
 
+  console.log('TradingProvider rendering with context:', { user: !!user, loading, isKalshiConnected: !!kalshiCredentials, isPolymarketConnected: !!polymarketCredentials });
+
   return (
     <TradingContext.Provider 
       value={{ 
@@ -187,7 +193,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 export const useTrading = () => {
   const context = useContext(TradingContext);
-  if (!context) {
+  if (context === undefined) {
+    console.error('useTrading was called outside of TradingProvider. Make sure TradingProvider wraps your component tree.');
     throw new Error("useTrading must be used within TradingProvider");
   }
   return context;
@@ -195,4 +202,4 @@ export const useTrading = () => {
 
 // Backwards compatibility exports
 export const useKalshi = useTrading;
-export const KalshiProvider = TradingProvider;
+export { TradingProvider as KalshiProvider };
