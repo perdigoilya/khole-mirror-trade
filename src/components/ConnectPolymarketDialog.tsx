@@ -3,6 +3,7 @@ import { useTrading } from "@/contexts/TradingContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const [registrationRequired, setRegistrationRequired] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [proxyAddress, setProxyAddress] = useState("");
+  const [useEoaAsFunder, setUseEoaAsFunder] = useState(false);
   const [diagnostics, setDiagnostics] = useState<{
     credsReady?: boolean;
     l2SanityCheck?: boolean;
@@ -229,8 +231,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         throw err;
       }
 
-      // Priority: manual input > auto-detected > API-provided > EOA
-      const funderAddress = proxyAddress || detectedFunder || apiCredentials?.funderAddress || address;
+      // Priority: toggle > manual input > auto-detected > API-provided > EOA
+      const funderAddress = useEoaAsFunder 
+        ? address 
+        : (proxyAddress || detectedFunder || apiCredentials?.funderAddress || address);
 
       if (!apiCredentials?.apiKey || !apiCredentials?.secret || !apiCredentials?.passphrase) {
         throw new Error('Missing API credentials after creation.');
@@ -641,10 +645,27 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                   value={proxyAddress}
                   onChange={(e) => setProxyAddress(e.target.value)}
                   className="font-mono text-sm"
+                  disabled={useEoaAsFunder}
                 />
                 <p className="text-xs text-muted-foreground">
                   We'll automatically detect your Polymarket proxy via Safe API. Only fill this if auto-detection fails.
                 </p>
+              </div>
+              
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/50 p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="use-eoa" className="text-sm font-medium cursor-pointer">
+                    Use EOA as Funder (Advanced)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Force your connected wallet as funder instead of proxy. Only useful if your EOA has USDC balance.
+                  </p>
+                </div>
+                <Switch
+                  id="use-eoa"
+                  checked={useEoaAsFunder}
+                  onCheckedChange={setUseEoaAsFunder}
+                />
               </div>
               
               <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm">
