@@ -262,46 +262,37 @@ const MarketDetail = () => {
 
           console.log('Submitting order to Polymarket...');
           
-          // Ensure API credentials (create on the fly if missing)
-          let apiCreds = polymarketCredentials?.apiCredentials;
+          // Use server function to submit order (L2 HMAC done server-side)
+          const apiCreds = polymarketCredentials?.apiCredentials;
           if (!apiCreds) {
-            try {
-              apiCreds = await ensureApiCreds(address as `0x${string}`);
-            } catch (err: any) {
-              toast({
-                title: 'Trading Setup Failed',
-                description: err?.message || 'Failed to create trading credentials',
-                variant: 'destructive',
-              });
-              return;
-            }
+            toast({
+              title: 'Trading Setup Required',
+              description: 'Open Polymarket connection and create API key first.',
+              variant: 'destructive',
+            });
+            return;
           }
 
-          // Generate HMAC auth headers
-          const headers = await generatePolymarketHeaders(
-            address,
-            apiCreds.apiKey,
-            apiCreds.secret,
-            apiCreds.passphrase,
-            'POST',
-            '/order',
-            signedOrder
-          );
-
-          // Submit the order to Polymarket CLOB API
-          const response = await fetch('https://clob.polymarket.com/order', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(signedOrder),
+          const { data, error } = await supabase.functions.invoke('polymarket-trade', {
+            body: {
+              walletAddress: address,
+              tokenId,
+              side,
+              price,
+              size: shares,
+              signedOrder,
+              apiKey: apiCreds.apiKey,
+              apiSecret: apiCreds.secret,
+              apiPassphrase: apiCreds.passphrase,
+              funderAddress,
+            }
           });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Order submission failed: ${response.statusText}`);
+          if (error || !data?.success) {
+            throw new Error(data?.error || error?.message || 'Trade failed');
           }
 
-          const result = await response.json();
-          console.log('Order placed successfully:', result);
+          console.log('Order placed successfully:', data);
 
           toast({
             title: "Trade Executed Successfully! ✅",
