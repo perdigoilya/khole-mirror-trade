@@ -215,44 +215,126 @@ if (!verifyResp.ok) {
   const resp2 = await fetch(`${CLOB}${path}`, { method, headers: hdrs2 });
   const text2 = await resp2.text();
   const up2 = tryJson(text2);
-  if (!resp2.ok) {
-    return out({
-      url: `${CLOB}${path}`,
-      method,
-      attempts: [
-        {
-          status: verifyResp.status,
+if (!resp2.ok) {
+  const attempts: any[] = [
+    {
+      status: verifyResp.status,
+      order: 'method+path+ts',
+      sent: {
+        POLY_ADDRESS: eoaLower,
+        POLY_API_KEY_suffix: suffix(hdrs.POLY_API_KEY),
+        POLY_PASSPHRASE_suffix: suffix(hdrs.POLY_PASSPHRASE),
+        POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
+        POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
+        preimage_first120: preimage.slice(0, 120)
+      },
+      upstream
+    },
+    {
+      status: resp2.status,
+      order: 'ts+method+path',
+      sent: {
+        POLY_ADDRESS: eoaLower,
+        POLY_API_KEY_suffix: suffix(hdrs2.POLY_API_KEY),
+        POLY_PASSPHRASE_suffix: suffix(hdrs2.POLY_PASSPHRASE),
+        POLY_TIMESTAMP: hdrs2.POLY_TIMESTAMP,
+        POLY_SIGNATURE_b64_first12: hdrs2.POLY_SIGNATURE.slice(0, 12),
+        preimage_first120: preimage2.slice(0, 120)
+      },
+      upstream: up2
+    }
+  ];
+
+  // Try with proxy/funder address as POLY_ADDRESS if different
+  try {
+    const proxyResp = await fetch(`https://data-api.polymarket.com/address_details?address=${eoa}`);
+    if (proxyResp.ok) {
+      const proxyData = await proxyResp.json();
+      const addr2 = String(proxyData?.proxy || '').toLowerCase();
+      if (addr2 && addr2 !== eoaLower) {
+        // A1 with funder
+        const ts3 = Math.floor(Date.now() / 1000);
+        const pre3 = `${method}${path}${ts3}`;
+        (globalThis as any).__PREIMAGE = pre3;
+        const s3 = await hmacBase64(secret, pre3);
+        const h3 = {
+          'Accept': 'application/json',
+          'POLY_ADDRESS': addr2,
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': passphrase,
+          'POLY_TIMESTAMP': ts3.toString(),
+          'POLY_SIGNATURE': s3,
+        };
+        console.log('[L2-VERIFY:PROXY A1]', { addr: addr2, keySuffix: suffix(h3.POLY_API_KEY), passSuffix: passphrase.slice(-4), ts: ts3, preimageFirst120: pre3.slice(0, 120), sigB64First12: s3.slice(0, 12) });
+        const r3 = await fetch(`${CLOB}${path}`, { method, headers: h3 });
+        const t3 = await r3.text();
+        const up3 = tryJson(t3);
+        attempts.push({
+          status: r3.status,
+          order: 'method+path+ts',
+          addressTried: addr2,
+          upstream: up3,
           sent: {
-            POLY_ADDRESS: eoaLower,
-            POLY_API_KEY_suffix: suffix(hdrs.POLY_API_KEY),
-            POLY_PASSPHRASE_suffix: suffix(hdrs.POLY_PASSPHRASE),
-            POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
-            POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
-            preimage_first120: preimage.slice(0, 120)
-          },
-          upstream
-        },
-        {
-          status: resp2.status,
-          sent: {
-            POLY_ADDRESS: eoaLower,
-            POLY_API_KEY_suffix: suffix(hdrs2.POLY_API_KEY),
-            POLY_PASSPHRASE_suffix: suffix(hdrs2.POLY_PASSPHRASE),
-            POLY_TIMESTAMP: hdrs2.POLY_TIMESTAMP,
-            POLY_SIGNATURE_b64_first12: hdrs2.POLY_SIGNATURE.slice(0, 12),
-            preimage_first120: preimage2.slice(0, 120)
-          },
-          upstream: up2
+            POLY_ADDRESS: addr2,
+            POLY_API_KEY_suffix: suffix(h3.POLY_API_KEY),
+            POLY_PASSPHRASE_suffix: suffix(h3.POLY_PASSPHRASE),
+            POLY_TIMESTAMP: h3.POLY_TIMESTAMP,
+            POLY_SIGNATURE_b64_first12: h3.POLY_SIGNATURE.slice(0, 12),
+            preimage_first120: pre3.slice(0, 120)
+          }
+        });
+        if (r3.ok) {
+          verifyResp = r3; upstream = up3; preimage = pre3; sig = s3; hdrs = h3 as any;
+          console.log('[L2-VERIFY] ✓ with proxy address');
+          // fallthrough to persistence below (outside if block)
+        } else {
+          // A2 with funder
+          const ts4 = Math.floor(Date.now() / 1000);
+          const pre4 = `${ts4}${method}${path}`;
+          (globalThis as any).__PREIMAGE = pre4;
+          const s4 = await hmacBase64(secret, pre4);
+          const h4 = {
+            'Accept': 'application/json',
+            'POLY_ADDRESS': addr2,
+            'POLY_API_KEY': key,
+            'POLY_PASSPHRASE': passphrase,
+            'POLY_TIMESTAMP': ts4.toString(),
+            'POLY_SIGNATURE': s4,
+          };
+          console.log('[L2-VERIFY:PROXY A2]', { addr: addr2, keySuffix: suffix(h4.POLY_API_KEY), passSuffix: passphrase.slice(-4), ts: ts4, preimageFirst120: pre4.slice(0, 120), sigB64First12: s4.slice(0, 12) });
+          const r4 = await fetch(`${CLOB}${path}`, { method, headers: h4 });
+          const t4 = await r4.text();
+          const up4 = tryJson(t4);
+          attempts.push({
+            status: r4.status,
+            order: 'ts+method+path',
+            addressTried: addr2,
+            upstream: up4,
+            sent: {
+              POLY_ADDRESS: addr2,
+              POLY_API_KEY_suffix: suffix(h4.POLY_API_KEY),
+              POLY_PASSPHRASE_suffix: suffix(h4.POLY_PASSPHRASE),
+              POLY_TIMESTAMP: h4.POLY_TIMESTAMP,
+              POLY_SIGNATURE_b64_first12: h4.POLY_SIGNATURE.slice(0, 12),
+              preimage_first120: pre4.slice(0, 120)
+            }
+          });
+          if (r4.ok) {
+            verifyResp = r4; upstream = up4; preimage = pre4; sig = s4; hdrs = h4 as any;
+            console.log('[L2-VERIFY] ✓ with proxy address (alt order)');
+          } else {
+            return out({ url: `${CLOB}${path}`, method, attempts, status: r4.status }, r4.status);
+          }
         }
-      ]
-    }, resp2.status);
+      }
+    }
+  } catch (e) {
+    console.warn('Proxy verify attempt skipped due to error:', e);
   }
-  // Success on alt ordering → rebind to alt and continue
-  verifyResp = resp2;
-  upstream = up2;
-  preimage = preimage2;
-  sig = sig2;
-  hdrs = hdrs2 as any;
+}
+
+// Success on alt ordering (or proxy) → continue
+
 }
 
 console.log('[L2-VERIFY] ✓ Credentials verified, safe to persist');
