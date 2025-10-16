@@ -15,6 +15,15 @@ export function useEnsurePolymarketCredentials() {
   const { toast } = useToast();
 
   const ensureApiCreds = async (address: `0x${string}`, apiKey?: string): Promise<ApiCredentials> => {
+    // First check if wallet is registered on Polymarket
+    const validateRes = await supabase.functions.invoke('polymarket-validate', {
+      body: { walletAddress: address }
+    });
+
+    if (validateRes.error || !validateRes.data?.success) {
+      throw new Error('WALLET_NOT_REGISTERED');
+    }
+
     // Get server time from our proxy function (required by Polymarket)
     const timeRes = await supabase.functions.invoke('polymarket-time');
     if (timeRes.error) throw new Error(timeRes.error.message || 'Failed to fetch server time');
