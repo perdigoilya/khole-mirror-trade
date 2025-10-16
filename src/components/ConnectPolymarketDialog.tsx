@@ -38,6 +38,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     funderBalance?: number;
     ownerAddress?: string;
     connectedEOA?: string;
+    closedOnly?: boolean;
+    fundsReady?: boolean;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -263,7 +265,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           setDiagnostics(prev => ({ 
             ...prev, 
             funderHasBalance: hasBalance,
-            funderBalance: balance
+            funderBalance: balance,
+            fundsReady: hasBalance
           }));
 
           if (!hasBalance) {
@@ -286,7 +289,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           setDiagnostics(prev => ({ 
             ...prev, 
             l2SanityCheck: true, 
-            tradingEnabled: true 
+            tradingEnabled: true,
+            closedOnly: sanityCheck.data?.closedOnly || false
           }));
           
           toast({
@@ -397,6 +401,16 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       )}
                       <span>L2 sanity (GET /auth/ban-status/closed-only) status = 200</span>
                     </div>
+                    {diagnostics.closedOnly !== undefined && (
+                      <div className="flex items-center gap-2">
+                        {!diagnostics.closedOnly ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        ) : (
+                          <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                        )}
+                        <span>closed_only = {diagnostics.closedOnly ? 'TRUE (BLOCKED)' : 'FALSE'}</span>
+                      </div>
+                    )}
                     {diagnostics.funderResolved && (
                       <>
                         <div className="flex items-center gap-2">
@@ -425,14 +439,33 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                     </div>
                   </div>
                   
-                  {!diagnostics.funderHasBalance && diagnostics.funderBalance === 0 && (
+                  {diagnostics.closedOnly && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-red-600 dark:text-red-400">
+                          <span className="font-medium">Trading Blocked:</span> Account is in closed-only mode. You cannot place new orders.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {!diagnostics.funderHasBalance && diagnostics.funderBalance === 0 && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-start gap-2 mb-3">
                         <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-amber-600 dark:text-amber-400">
                           <span className="font-medium">Warning:</span> Proxy has no funds. Orders may fail with NOT_ENOUGH_BALANCE.
                         </p>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => window.open('https://polymarket.com/deposit', '_blank')}
+                      >
+                        Fund Proxy on Polymarket
+                      </Button>
                     </div>
                   )}
                 </div>
