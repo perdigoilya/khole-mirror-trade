@@ -116,8 +116,9 @@ const MarketDetail = () => {
       return;
     }
     
-    // Check if connected to provider
-    const hasCredentials = market?.provider === 'kalshi' 
+    // Check if connected to provider - use selectedSubMarket if available
+    const targetMarket = selectedSubMarket || market;
+    const hasCredentials = targetMarket?.provider === 'kalshi' 
       ? kalshiCredentials 
       : polymarketCredentials;
       
@@ -131,7 +132,11 @@ const MarketDetail = () => {
   };
 
   const executeTrade = async () => {
-    if (!currentTrade || !market) return;
+    if (!currentTrade) return;
+
+    // Use selectedSubMarket if available, otherwise use main market
+    const targetMarket = selectedSubMarket || market;
+    if (!targetMarket) return;
 
     try {
       const shares = parseFloat(tradeAmount);
@@ -147,10 +152,10 @@ const MarketDetail = () => {
       // Show processing toast
       toast({
         title: "Processing Trade...",
-        description: "Validating and submitting your order",
+        description: `Trading on ${targetMarket.title}`,
       });
 
-      if (market.provider === 'polymarket') {
+      if (targetMarket.provider === 'polymarket') {
         // Polymarket trading
         if (!polymarketCredentials?.walletAddress) {
           toast({
@@ -161,8 +166,8 @@ const MarketDetail = () => {
           return;
         }
 
-        // Get the token ID for the market
-        const tokenId = market.clobTokenId;
+        // Get the token ID for the specific market being traded
+        const tokenId = targetMarket.clobTokenId;
         if (!tokenId) {
           toast({
             title: "Market Configuration Error",
@@ -196,7 +201,7 @@ const MarketDetail = () => {
         // This is a limitation - actual trading requires wallet interaction
         toast({
           title: "Validation Passed",
-          description: "Your wallet has sufficient funds. Note: Full Polymarket trading requires wallet signature integration.",
+          description: `Your wallet has sufficient funds for ${targetMarket.title}. Note: Full Polymarket trading requires wallet signature integration.`,
         });
 
       } else {
@@ -214,7 +219,7 @@ const MarketDetail = () => {
           body: {
             apiKeyId: kalshiCredentials.apiKeyId,
             privateKey: kalshiCredentials.privateKey,
-            ticker: market.ticker,
+            ticker: targetMarket.ticker,
             action: 'buy',
             side: currentTrade.side,
             count: Math.floor(shares),
@@ -237,13 +242,14 @@ const MarketDetail = () => {
         const cost = (shares * currentTrade.price / 100).toFixed(2);
         toast({
           title: "Order Submitted Successfully! ✅",
-          description: `Bought ${shares} shares of ${currentTrade.side.toUpperCase()} at ${currentTrade.price}¢ (Total: $${cost})`,
+          description: `Bought ${shares} shares of ${currentTrade.side.toUpperCase()} for ${targetMarket.title} at ${currentTrade.price}¢ (Total: $${cost})`,
         });
       }
 
       setTradeDialogOpen(false);
       setTradeAmount('0');
       setCurrentTrade(null);
+      setSelectedOutcome(null);
     } catch (error) {
       console.error('Trade error:', error);
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred. Please try again.";
@@ -619,13 +625,21 @@ const MarketDetail = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <Button 
                         className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 h-12"
-                        onClick={() => setSelectedOutcome('yes')}
+                        onClick={() => {
+                          setSelectedOutcome('yes');
+                          const targetMarket = selectedSubMarket || market;
+                          handleTrade(targetMarket.title, 'yes', targetMarket.yesPrice || 50);
+                        }}
                       >
                         Yes {(selectedSubMarket || market).yesPrice || 50}¢
                       </Button>
                       <Button 
                         className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 h-12"
-                        onClick={() => setSelectedOutcome('no')}
+                        onClick={() => {
+                          setSelectedOutcome('no');
+                          const targetMarket = selectedSubMarket || market;
+                          handleTrade(targetMarket.title, 'no', targetMarket.noPrice || 50);
+                        }}
                       >
                         No {(selectedSubMarket || market).noPrice || 50}¢
                       </Button>
@@ -656,50 +670,14 @@ const MarketDetail = () => {
 
                     <Button 
                       className="w-full h-12 bg-primary hover:bg-primary/90"
+                      disabled={!selectedOutcome || parseFloat(tradeAmount) === 0}
                       onClick={() => {
-                        if (!selectedOutcome) {
-                          toast({
-                            title: "Select Outcome",
-                            description: "Please select Yes or No first",
-                            variant: "destructive",
-                          });
-                          return;
+                        if (currentTrade) {
+                          executeTrade();
                         }
-                        
-                        if (parseFloat(tradeAmount) === 0) {
-                          toast({
-                            title: "Enter Amount",
-                            description: "Please enter a trade amount",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-                        
-                        if (!user) {
-                          toast({
-                            title: "Authentication Required",
-                            description: "Please sign in to trade",
-                            action: <a href="/auth" className="text-primary hover:underline">Sign in</a>,
-                          });
-                          return;
-                        }
-                        
-                        const hasCredentials = market?.provider === 'kalshi' 
-                          ? kalshiCredentials 
-                          : polymarketCredentials;
-                          
-                        if (!hasCredentials) {
-                          setConnectionDialogOpen(true);
-                          return;
-                        }
-                        
-                        toast({
-                          title: "Trade Placed",
-                          description: `Placed ${tradeSide} order for ${selectedOutcome}`,
-                        });
                       }}
                     >
-                      Buy {selectedOutcome === 'yes' ? 'Yes' : selectedOutcome === 'no' ? 'No' : ''}
+                      Confirm {currentTrade ? `${currentTrade.side.toUpperCase()} Trade` : 'Trade'}
                     </Button>
 
                     <p className="text-xs text-muted-foreground text-center">
@@ -785,7 +763,7 @@ const MarketDetail = () => {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Market</span>
-                      <span className="text-sm font-medium">{currentTrade.outcome}</span>
+                      <span className="text-sm font-medium line-clamp-1">{(selectedSubMarket || market)?.title}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Side</span>
