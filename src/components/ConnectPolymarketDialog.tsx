@@ -268,25 +268,17 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="apiKey">Polymarket API Key (Required for Trading)</Label>
+                <Label htmlFor="apiKey">Polymarket API Key (Optional)</Label>
                 <Input
                   id="apiKey"
                   type="password"
-                  placeholder="Enter your Polymarket API key"
+                  placeholder="Optional - for advanced trading features"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="font-mono text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Get your API key from{" "}
-                  <a 
-                    href="https://polymarket.com/settings/api" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    Polymarket Settings
-                  </a>
+                  You can trade without an API key using wallet signatures. API keys are only needed for certain advanced features.
                 </p>
               </div>
               
