@@ -64,6 +64,11 @@ serve(async (req) => {
 
     const ownerAddress = walletAddress?.toLowerCase();
 
+    // Assert all 3 credentials present
+    if (!apiKey || !apiSecret || !apiPassphrase) {
+      throw new Error('Missing L2 credentials (key, secret, or passphrase)');
+    }
+
     // Sanity check: GET /auth/ban-status/closed-only with L2 auth (read-only, no state change)
     console.log('Sanity check: GET /auth/ban-status/closed-only with L2 auth');
     
@@ -72,64 +77,69 @@ serve(async (req) => {
     const method = 'GET';
     const requestPath = '/auth/ban-status/closed-only';
     const preimage = `${timestamp}${method}${requestPath}`;
-    
-    // Detect if secret is base64 (Polymarket returns base64 secrets)
-    const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(apiSecret);
-    const encoder = new TextEncoder();
-    
-    // Decode secret from base64 if needed, otherwise use utf8
-    let secretBytes: Uint8Array;
-    if (isB64) {
-      const secretRaw = atob(apiSecret);
-      secretBytes = new Uint8Array(secretRaw.length);
-      for (let i = 0; i < secretRaw.length; i++) {
-        secretBytes[i] = secretRaw.charCodeAt(i);
+
+    const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
+      // Detect if secret is base64 (Polymarket returns base64 secrets)
+      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+      const encoder = new TextEncoder();
+      
+      // Decode secret from base64 if needed, otherwise use utf8
+      let secretBytes: Uint8Array;
+      if (isB64) {
+        const secretRaw = atob(secret);
+        secretBytes = new Uint8Array(secretRaw.length);
+        for (let i = 0; i < secretRaw.length; i++) {
+          secretBytes[i] = secretRaw.charCodeAt(i);
+        }
+      } else {
+        secretBytes = encoder.encode(secret);
       }
-    } else {
-      secretBytes = encoder.encode(apiSecret);
-    }
 
-    const key = await crypto.subtle.importKey(
-      'raw',
-      secretBytes as BufferSource,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        secretBytes as BufferSource,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
 
-    const messageData = encoder.encode(preimage);
-    const signature = await crypto.subtle.sign('HMAC', key, messageData);
-    const signatureArray = Array.from(new Uint8Array(signature));
-    const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+      const messageData = encoder.encode(preimage);
+      const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+      const signatureArray = Array.from(new Uint8Array(signature));
+      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-    // Validate standard base64 format
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-      throw new Error('POLY_SIGNATURE is not standard base64');
-    }
+      // Validate standard base64 format
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
+        throw new Error('POLY_SIGNATURE is not standard base64');
+      }
 
-    console.log('L2 sanity check auth:', { 
-      ownerAddress, 
-      polyAddress: ownerAddress,
-      hasSecret: true, 
-      timestamp, 
-      preimage: preimage.substring(0, 120),
-      signaturePreview: signatureBase64.substring(0, 12) + '...',
-      polyTimestamp: timestamp.toString(),
-      method,
-      requestPath
-    });
+      console.log('L2 sanity check attempt:', { 
+        eoa: ownerAddress,
+        ownerAddress, 
+        polyAddress: ownerAddress,
+        keySuffix: key.slice(-6),
+        passSuffix: pass.slice(-4),
+        ts: timestamp,
+        preimageFirst120: preimage.substring(0, 120),
+        sigB64First12: signatureBase64.substring(0, 12),
+        method,
+        requestPath
+      });
 
-    const sanityResponse = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'POLY_ADDRESS': ownerAddress,
-        'POLY_SIGNATURE': signatureBase64,
-        'POLY_TIMESTAMP': timestamp.toString(),
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-      },
-    });
+      return await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'POLY_ADDRESS': ownerAddress,
+          'POLY_SIGNATURE': signatureBase64,
+          'POLY_TIMESTAMP': timestamp.toString(),
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': pass,
+        },
+      });
+    };
+
+    let sanityResponse = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase);
 
     if (!sanityResponse.ok) {
       const errorText = await sanityResponse.text();
@@ -149,15 +159,91 @@ serve(async (req) => {
 
       // If 401, credentials are invalid - signal auto-recovery needed
       if (sanityResponse.status === 401) {
-        console.log('L2 401 - credentials invalid, auto-recovery required');
+        console.log('L2 401 - credentials invalid, attempting auto-recovery...');
+        
+        try {
+          const deriveResponse = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'POLY_ADDRESS': ownerAddress,
+            },
+          });
+
+          if (deriveResponse.ok) {
+            const deriveData = await deriveResponse.json();
+            if (deriveData.apiKey && deriveData.secret && deriveData.passphrase) {
+              console.log('✓ Derived new credentials, updating DB...');
+              
+              // Update credentials in DB
+              const { error: updateError } = await supabase
+                .from('user_polymarket_credentials')
+                .update({
+                  api_credentials_key: deriveData.apiKey,
+                  api_credentials_secret: deriveData.secret,
+                  api_credentials_passphrase: deriveData.passphrase,
+                  wallet_address: ownerAddress,
+                })
+                .eq('user_id', userId);
+
+              if (updateError) {
+                console.error('Failed to update derived credentials:', updateError);
+              } else {
+                // Retry sanity check with new credentials
+                const newApiKey = deriveData.apiKey;
+                const newApiSecret = deriveData.secret;
+                const newApiPassphrase = deriveData.passphrase;
+                
+                console.log('Retrying sanity check with derived credentials...');
+                sanityResponse = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase);
+                
+                // If retry succeeds, continue to success handler below
+                if (sanityResponse.ok) {
+                  const sanityData = await sanityResponse.json();
+                  console.log('✓ L2 sanity check response (after derive):', JSON.stringify(sanityData, null, 2));
+                  
+                  const closedOnly = sanityData?.closed_only === true;
+                  const tradingEnabled = !closedOnly;
+
+                  if (closedOnly) {
+                    console.warn('⚠️ Account is in closed-only mode - trading blocked');
+                  }
+
+                  return new Response(
+                    JSON.stringify({
+                      ready: true,
+                      tradingEnabled,
+                      status: 200,
+                      ownerAddress,
+                      hasKey: true,
+                      hasSecret: true,
+                      hasPassphrase: true,
+                      l2SanityPassed: true,
+                      closedOnly,
+                      l2Body: sanityData,
+                    }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                  );
+                }
+              }
+            }
+          } else {
+            const deriveError = await deriveResponse.text();
+            console.error('Derive-api-key failed:', deriveResponse.status, deriveError);
+          }
+        } catch (deriveErr) {
+          console.error('Auto-recovery failed:', deriveErr);
+        }
+
+        // If we're still here, derive failed or retry failed
         return new Response(
           JSON.stringify({ 
             ready: false,
             tradingEnabled: false,
             error: 'Invalid credentials',
             status: 401,
-            action: 'derive_required',
-            details: 'L2 credentials are invalid. Auto-recovery will attempt to derive new credentials.',
+            action: 'derive_failed',
+            details: 'L2 credentials are invalid and auto-recovery failed. Please reconnect.',
             ownerAddress,
             hasKey: true,
             hasSecret: true,

@@ -103,9 +103,19 @@ serve(async (req) => {
     }
 
     // Call CLOB /auth/ban-status/closed-only with L2 auth
-    const apiKey = credsRow.api_credentials_key || credsRow.api_key;
-    const apiSecret = credsRow.api_credentials_secret;
-    const apiPassphrase = credsRow.api_credentials_passphrase;
+    let apiKey = credsRow.api_credentials_key || credsRow.api_key;
+    let apiSecret = credsRow.api_credentials_secret;
+    let apiPassphrase = credsRow.api_credentials_passphrase;
+
+    // Assert all 3 credentials present
+    if (!apiKey || !apiSecret || !apiPassphrase) {
+      throw new Error('Missing L2 credentials (key, secret, or passphrase)');
+    }
+
+    // Assert owner match
+    if (ownerAddress !== eoaAddress) {
+      console.error('Owner mismatch:', { ownerAddress, eoaAddress });
+    }
 
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'GET';
@@ -114,82 +124,141 @@ serve(async (req) => {
 
     let banStatusBody: any = {};
     let closed_only = false;
+    let l2SanityPassed = false;
 
-    try {
-      // Detect if secret is base64 (Polymarket returns base64 secrets)
-      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(apiSecret);
-      const encoder = new TextEncoder();
-      
-      // Decode secret from base64 if needed, otherwise use utf8
-      let secretBytes: Uint8Array;
-      if (isB64) {
-        const secretRaw = atob(apiSecret);
-        secretBytes = new Uint8Array(secretRaw.length);
-        for (let i = 0; i < secretRaw.length; i++) {
-          secretBytes[i] = secretRaw.charCodeAt(i);
+    const attemptBanStatusCheck = async (key: string, secret: string, pass: string): Promise<boolean> => {
+      try {
+        // Detect if secret is base64 (Polymarket returns base64 secrets)
+        const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+        const encoder = new TextEncoder();
+        
+        // Decode secret from base64 if needed, otherwise use utf8
+        let secretBytes: Uint8Array;
+        if (isB64) {
+          const secretRaw = atob(secret);
+          secretBytes = new Uint8Array(secretRaw.length);
+          for (let i = 0; i < secretRaw.length; i++) {
+            secretBytes[i] = secretRaw.charCodeAt(i);
+          }
+        } else {
+          secretBytes = encoder.encode(secret);
         }
-      } else {
-        secretBytes = encoder.encode(apiSecret);
+
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          secretBytes as BufferSource,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+
+        const messageData = encoder.encode(preimage);
+        const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        const signatureArray = Array.from(new Uint8Array(signature));
+        const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+
+        // Validate standard base64 format
+        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
+          throw new Error('POLY_SIGNATURE is not standard base64');
+        }
+
+        console.log('L2 ban-status attempt:', {
+          eoa: ownerAddress,
+          ownerAddress,
+          polyAddress: ownerAddress,
+          keySuffix: key.slice(-6),
+          passSuffix: pass.slice(-4),
+          ts: timestamp,
+          preimageFirst120: preimage.substring(0, 120),
+          sigB64First12: signatureBase64.substring(0, 12),
+        });
+
+        const response = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'POLY_ADDRESS': ownerAddress,
+            'POLY_SIGNATURE': signatureBase64,
+            'POLY_TIMESTAMP': timestamp.toString(),
+            'POLY_API_KEY': key,
+            'POLY_PASSPHRASE': pass,
+          },
+        });
+
+        if (response.ok) {
+          banStatusBody = await response.json();
+          console.log('✓ Ban status response:', JSON.stringify(banStatusBody, null, 2));
+          closed_only = banStatusBody?.closed_only === true || banStatusBody?.closedOnly === true;
+          return true;
+        } else {
+          const errorText = await response.text();
+          console.error('Ban status call failed:', response.status, errorText);
+          banStatusBody = { error: errorText, status: response.status };
+          return false;
+        }
+      } catch (error) {
+        console.error('HMAC signing error:', error);
+        banStatusBody = { error: 'HMAC signing failed', details: error instanceof Error ? error.message : String(error) };
+        return false;
       }
+    };
 
-      const key = await crypto.subtle.importKey(
-        'raw',
-        secretBytes as BufferSource,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
+    // First attempt
+    l2SanityPassed = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
 
-      const messageData = encoder.encode(preimage);
-      const signature = await crypto.subtle.sign('HMAC', key, messageData);
-      const signatureArray = Array.from(new Uint8Array(signature));
-      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+    // On 401, try to derive new credentials and retry once
+    if (!l2SanityPassed && banStatusBody?.status === 401) {
+      console.log('L2 401 detected - attempting auto-recovery via derive-api-key...');
+      
+      try {
+        // Build L1-style headers for derive (no HMAC, just address)
+        const deriveResponse = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'POLY_ADDRESS': ownerAddress,
+          },
+        });
 
-      // Validate standard base64 format
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-        throw new Error('POLY_SIGNATURE is not standard base64');
+        if (deriveResponse.ok) {
+          const deriveData = await deriveResponse.json();
+          if (deriveData.apiKey && deriveData.secret && deriveData.passphrase) {
+            console.log('✓ Derived new credentials, updating DB...');
+            
+            // Update credentials in DB
+            const { error: updateError } = await supabase
+              .from('user_polymarket_credentials')
+              .update({
+                api_credentials_key: deriveData.apiKey,
+                api_credentials_secret: deriveData.secret,
+                api_credentials_passphrase: deriveData.passphrase,
+                wallet_address: ownerAddress,
+              })
+              .eq('user_id', userId);
+
+            if (updateError) {
+              console.error('Failed to update derived credentials:', updateError);
+            } else {
+              // Retry ban-status check with new credentials
+              apiKey = deriveData.apiKey;
+              apiSecret = deriveData.secret;
+              apiPassphrase = deriveData.passphrase;
+              
+              console.log('Retrying ban-status with derived credentials...');
+              l2SanityPassed = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
+            }
+          }
+        } else {
+          const deriveError = await deriveResponse.text();
+          console.error('Derive-api-key failed:', deriveResponse.status, deriveError);
+        }
+      } catch (deriveErr) {
+        console.error('Auto-recovery failed:', deriveErr);
       }
-
-      console.log('L2 ban-status auth:', {
-        ownerAddress,
-        polyAddress: ownerAddress,
-        timestamp,
-        method,
-        requestPath,
-        preimage: preimage.substring(0, 120),
-        signaturePreview: signatureBase64.substring(0, 12) + '...',
-        polyTimestamp: timestamp.toString(),
-      });
-
-      const banStatusResponse = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'POLY_ADDRESS': ownerAddress,
-          'POLY_SIGNATURE': signatureBase64,
-          'POLY_TIMESTAMP': timestamp.toString(),
-          'POLY_API_KEY': apiKey,
-          'POLY_PASSPHRASE': apiPassphrase,
-        },
-      });
-
-      if (banStatusResponse.ok) {
-        banStatusBody = await banStatusResponse.json();
-        console.log('Ban status response:', JSON.stringify(banStatusBody, null, 2));
-
-        // Parse closed_only from body (handle both snake_case and camelCase)
-        closed_only = banStatusBody?.closed_only === true || banStatusBody?.closedOnly === true;
-      } else {
-        const errorText = await banStatusResponse.text();
-        console.error('Ban status call failed:', banStatusResponse.status, errorText);
-        banStatusBody = { error: errorText, status: banStatusResponse.status };
-      }
-    } catch (hmacError) {
-      console.error('HMAC signing error:', hmacError);
-      banStatusBody = { error: 'HMAC signing failed', details: hmacError instanceof Error ? hmacError.message : String(hmacError) };
     }
 
-    const tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && !closed_only;
+    // Trading enabled ONLY if L2 sanity passed (200 response) and not in closed-only mode
+    const tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && l2SanityPassed && !closed_only;
 
     return new Response(
       JSON.stringify({

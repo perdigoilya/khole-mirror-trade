@@ -76,12 +76,11 @@ serve(async (req) => {
       );
     }
 
-    const apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
-    const apiSecret: string | null = credsRow.api_credentials_secret || null;
-    const apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
+    let apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
+    let apiSecret: string | null = credsRow.api_credentials_secret || null;
+    let apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
 
-
-    // Require L2 API credentials for private endpoints per Polymarket docs
+    // Assert all 3 credentials present
     if (!apiKey || !apiSecret || !apiPassphrase) {
       return new Response(
         JSON.stringify({ 
@@ -105,91 +104,100 @@ serve(async (req) => {
     // Per requirements, we rely on upstream CLOB errors or optional Data-API checks handled elsewhere.
 
 
-    // Submit the order to CLOB (private endpoint requires L2 auth)
-    console.log('Submitting order to CLOB...');
+    // Assert owner address match
+    const ownerAddress = storedWallet;
+    if (!ownerAddress || ownerAddress !== requestWallet) {
+      throw new Error(`Owner mismatch: ${ownerAddress} !== ${requestWallet}`);
+    }
 
     // Per docs, request payload must include { order, owner, orderType }
-    const payload = {
+    const orderPayload = {
       order: signedOrder,
       owner: apiKey, // API key of order owner
       orderType: 'GTC'
     };
-    const bodyString = JSON.stringify(payload);
+    const rawBody = JSON.stringify(orderPayload); // Create ONCE for signing and sending
 
     // L2 HMAC authentication
     const timestamp = Math.floor(Date.now() / 1000);
+    
+    // Assert timestamp is valid
+    if (!Number.isInteger(timestamp) || timestamp.toString().length > 10) {
+      throw new Error('Invalid timestamp format - must be epoch seconds');
+    }
+
     const method = 'POST';
     const requestPath = '/order';
+    
+    // Preimage: exact bytes (method + path + timestamp + rawBody)
+    const preimage = `${method}${requestPath}${timestamp}${rawBody}`;
 
-    // Generate HMAC signature: timestamp + method + path + raw body
-    const preimage = `${timestamp}${method}${requestPath}${bodyString}`;
-    
-    // Detect if secret is base64 (Polymarket returns base64 secrets)
-    const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(apiSecret);
-    const encoder = new TextEncoder();
-    
-    // Decode secret from base64 if needed, otherwise use utf8
-    let secretBytes: Uint8Array;
-    if (isB64) {
-      const secretRaw = atob(apiSecret);
-      secretBytes = new Uint8Array(secretRaw.length);
-      for (let i = 0; i < secretRaw.length; i++) {
-        secretBytes[i] = secretRaw.charCodeAt(i);
+    const attemptOrderSubmission = async (key: string, secret: string, pass: string): Promise<Response> => {
+      // Detect if secret is base64 (Polymarket returns base64 secrets)
+      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+      const encoder = new TextEncoder();
+      
+      // Decode secret from base64 if needed, otherwise use utf8
+      let secretBytes: Uint8Array;
+      if (isB64) {
+        const secretRaw = atob(secret);
+        secretBytes = new Uint8Array(secretRaw.length);
+        for (let i = 0; i < secretRaw.length; i++) {
+          secretBytes[i] = secretRaw.charCodeAt(i);
+        }
+      } else {
+        secretBytes = encoder.encode(secret);
       }
-    } else {
-      secretBytes = encoder.encode(apiSecret);
-    }
 
-    const key = await crypto.subtle.importKey(
-      'raw',
-      secretBytes as BufferSource,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        secretBytes as BufferSource,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
 
-    const messageData = encoder.encode(preimage);
-    const signature = await crypto.subtle.sign('HMAC', key, messageData);
-    const signatureArray = Array.from(new Uint8Array(signature));
-    const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
-    
-    // Validate standard base64 format
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-      throw new Error('POLY_SIGNATURE is not standard base64');
-    }
-    
-    console.log('L2 order submission:', { 
-      walletAddress: requestWallet,
-      ownerAddress: requestWallet,
-      polyAddress: walletAddress.toLowerCase(),
-      ownerMatchesPOLY_ADDRESS: requestWallet === walletAddress.toLowerCase(),
-      funderAddress: funderAddress || 'not_specified',
-      hasKey: !!apiKey,
-      hasSecret: !!apiSecret,
-      timestamp,
-      method,
-      requestPath,
-      preimage: preimage.substring(0, 120) + '...',
-      signaturePreview: signatureBase64.substring(0, 12) + '...',
-      polyTimestamp: timestamp.toString(),
-      bodyLength: bodyString.length
-    });
+      const messageData = encoder.encode(preimage);
+      const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+      const signatureArray = Array.from(new Uint8Array(signature));
+      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+      
+      // Validate standard base64 format
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
+        throw new Error('POLY_SIGNATURE is not standard base64');
+      }
+      
+      // Log every /order attempt
+      console.log('L2 /order attempt:', { 
+        eoa: requestWallet,
+        ownerAddress: ownerAddress,
+        POLY_ADDRESS: requestWallet,
+        keySuffix: key.slice(-6),
+        passSuffix: pass.slice(-4),
+        ts: timestamp,
+        preimageFirst120: preimage.substring(0, 120),
+        sigB64First12: signatureBase64.substring(0, 12),
+        funderAddress: funderAddress || 'not_specified',
+        bodyLength: rawBody.length
+      });
 
-    const orderResponse = await fetch('https://clob.polymarket.com/order', {
-      method: 'POST',
-      headers: {
-'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://polymarket.com/',
-        'POLY_ADDRESS': walletAddress.toLowerCase(),
-        'POLY_SIGNATURE': signatureBase64,
-        'POLY_TIMESTAMP': timestamp.toString(),
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-      },
-      body: bodyString,
-    });
+      return await fetch('https://clob.polymarket.com/order', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'accept': 'application/json',
+          'POLY_ADDRESS': requestWallet,
+          'POLY_SIGNATURE': signatureBase64,
+          'POLY_TIMESTAMP': timestamp.toString(),
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': pass,
+        },
+        body: rawBody, // Use SAME rawBody for signing and sending
+      });
+    };
+
+    console.log('Submitting order to CLOB...');
+    let orderResponse = await attemptOrderSubmission(apiKey, apiSecret, apiPassphrase);
 
     if (!orderResponse.ok) {
       const errorText = await orderResponse.text();
@@ -207,21 +215,69 @@ serve(async (req) => {
       });
 
       // Auto-recovery on 401: derive new credentials and retry once
-      if (orderResponse.status === 401 && errorText?.includes('Invalid api key')) {
+      if (orderResponse.status === 401) {
         console.log('L2 401 detected - attempting auto-recovery via derive-api-key...');
         
         try {
-          // We need a fresh L1 signature to derive, but we don't have one here
-          // Instead, signal to the client that they need to reconnect
-          return new Response(
-            JSON.stringify({ 
-              error: 'Session Expired',
-              details: 'Your Polymarket session has expired. Please disconnect and reconnect to re-authenticate.',
-              action: 'reconnect_required',
-              status: 401
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-          );
+          const deriveResponse = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'POLY_ADDRESS': requestWallet,
+            },
+          });
+
+          if (deriveResponse.ok) {
+            const deriveData = await deriveResponse.json();
+            if (deriveData.apiKey && deriveData.secret && deriveData.passphrase) {
+              console.log('✓ Derived new credentials, updating DB...');
+              
+              // Update credentials in DB
+              const { error: updateError } = await supabase
+                .from('user_polymarket_credentials')
+                .update({
+                  api_credentials_key: deriveData.apiKey,
+                  api_credentials_secret: deriveData.secret,
+                  api_credentials_passphrase: deriveData.passphrase,
+                  wallet_address: requestWallet,
+                })
+                .eq('user_id', userId);
+
+              if (updateError) {
+                console.error('Failed to update derived credentials:', updateError);
+              } else {
+                // Update local vars and retry once
+                const newApiKey = deriveData.apiKey;
+                const newApiSecret = deriveData.secret;
+                const newApiPassphrase = deriveData.passphrase;
+                
+                console.log('Retrying order with derived credentials...');
+                orderResponse = await attemptOrderSubmission(newApiKey, newApiSecret, newApiPassphrase);
+                
+                // If retry succeeds, continue to success handler below
+                if (orderResponse.ok) {
+                  const orderData = await orderResponse.json();
+                  console.log('✓ Order submitted successfully after derive:', orderData);
+
+                  return new Response(
+                    JSON.stringify({
+                      success: true,
+                      orderId: orderData.orderID,
+                      order: orderData
+                    }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+                  );
+                }
+                
+                // If retry also fails, continue to error handler below
+                const retryError = await orderResponse.text();
+                console.error('Order retry also failed:', orderResponse.status, retryError);
+              }
+            }
+          } else {
+            const deriveError = await deriveResponse.text();
+            console.error('Derive-api-key failed:', deriveResponse.status, deriveError);
+          }
         } catch (deriveErr) {
           console.error('Auto-recovery failed:', deriveErr);
         }
