@@ -230,6 +230,22 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           funderAddress
         }
       });
+
+      // Run server-side smoke test to validate L2 HMAC (no secrets exposed client-side)
+      try {
+        const smoke = await supabase.functions.invoke('polymarket-smoke', {
+          body: {
+            walletAddress: address,
+            signature, // EIP-712 from above
+            timestamp,
+            nonce: 0,
+            runHmacTest: true,
+          },
+        });
+        console.log('Polymarket smoke test:', smoke.data || smoke.error);
+      } catch (e) {
+        console.warn('Smoke test failed:', e);
+      }
       
       toast({
         title: "Connected to Polymarket",
