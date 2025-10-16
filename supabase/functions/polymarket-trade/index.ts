@@ -139,13 +139,8 @@ serve(async (req) => {
       headers: {
 'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Origin': 'https://polymarket.com',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://polymarket.com/',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Dest': 'empty',
-        'X-Requested-With': 'XMLHttpRequest',
         'POLY_ADDRESS': walletAddress.toLowerCase(),
         'POLY_SIGNATURE': signatureBase64,
         'POLY_TIMESTAMP': timestamp.toString(),
@@ -157,12 +152,28 @@ serve(async (req) => {
 
     if (!orderResponse.ok) {
       const errorText = await orderResponse.text();
-      console.error('Order submission failed:', orderResponse.status, errorText);
+      const cfRay = orderResponse.headers.get('cf-ray') || null;
+      const cfCache = orderResponse.headers.get('cf-cache-status') || null;
+      const server = orderResponse.headers.get('server') || null;
+      const contentType = orderResponse.headers.get('content-type') || null;
+
+      console.error('Order submission failed:', orderResponse.status, {
+        cfRay,
+        cfCache,
+        server,
+        contentType,
+        body: errorText?.slice(0, 2000) // cap log size
+      });
+
       return new Response(
         JSON.stringify({ 
           error: 'Order Submission Failed',
-          details: errorText,
-          status: orderResponse.status
+          status: orderResponse.status,
+          cfRay,
+          cfCache,
+          server,
+          contentType,
+          upstream: errorText
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: orderResponse.status }
       );
