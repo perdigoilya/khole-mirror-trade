@@ -327,6 +327,9 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         
       // on-chain USDC balances checked above
 
+      // Small delay to allow credentials to propagate before L2 sanity check
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // Step 2: Run L2 sanity check (GET /auth/ban-status/closed-only)
       console.log('Running L2 sanity check...');
       try {
