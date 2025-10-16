@@ -47,6 +47,14 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
     fundsReady?: boolean;
     l2Body?: any;
     accessStatus?: any;
+    serverHasKey?: boolean;
+    serverHasSecret?: boolean;
+    serverHasPassphrase?: boolean;
+    serverOwnerAddress?: string;
+    serverConnectedEOA?: string;
+    serverOwnerMatch?: boolean;
+    serverClosedOnly?: boolean;
+    serverTradingEnabled?: boolean;
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
@@ -282,17 +290,35 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         }
       });
 
+      // Store credentials in database with UPSERT (merge resolution)
+      const normalizedWalletAddress = address.toLowerCase();
+      const { error: dbError } = await supabase
+        .from('user_polymarket_credentials')
+        .upsert({
+          user_id: user?.id,
+          wallet_address: normalizedWalletAddress,
+          api_credentials_key: apiCredentials.apiKey,
+          api_credentials_secret: apiCredentials.secret,
+          api_credentials_passphrase: apiCredentials.passphrase,
+          funder_address: funderAddress,
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (dbError) {
+        throw new Error('Failed to store trading credentials');
+      }
+
+      console.info('CREDS_SAVED eoa=' + normalizedWalletAddress + ' hasKey=true hasSecret=true hasPassphrase=true');
+
       // Step 1: Credentials created ✓
       setDiagnostics(prev => ({ 
         ...prev, 
         credsReady: true, 
         funderResolved: funderAddress,
-        ownerAddress: address.toLowerCase(),
-        connectedEOA: address.toLowerCase(),
+        ownerAddress: normalizedWalletAddress,
+        connectedEOA: normalizedWalletAddress,
       }));
-
-      // Step 1.5: Check balances for both EOA and detected proxy (on-chain USDC)
-      console.log('Checking balances (on-chain USDC)...');
       let eoaBalance = 0;
       let proxyBalance = 0;
       
@@ -332,9 +358,10 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
       // Step 2: Call server-side /connect/status to get authoritative flags
       console.log('Fetching authoritative connection status...');
+      const normalizedEOA = address.toLowerCase();
       try {
         const { data: statusData, error: statusError } = await supabase.functions.invoke('polymarket-connect-status', {
-          body: { connectedEOA: address }
+          body: { connectedEOA: normalizedEOA }
         });
 
         if (statusError || !statusData) {
@@ -342,19 +369,22 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           throw new Error('Failed to fetch connection status');
         }
 
+        console.info('Connect status response:', JSON.stringify(statusData, null, 2));
+        console.info('DB row key: user_id + eoa=' + normalizedEOA);
+
         const {
-          hasKey: serverHasKey,
-          hasSecret: serverHasSecret,
-          hasPassphrase: serverHasPassphrase,
-          ownerAddress: serverOwnerAddress,
-          connectedEOA: serverConnectedEOA,
-          ownerMatch: serverOwnerMatch,
-          closed_only: serverClosedOnly,
-          tradingEnabled: serverTradingEnabled,
-          raw,
+          hasKey: serverHasKey = false,
+          hasSecret: serverHasSecret = false,
+          hasPassphrase: serverHasPassphrase = false,
+          ownerAddress: serverOwnerAddress = '',
+          connectedEOA: serverConnectedEOA = '',
+          ownerMatch: serverOwnerMatch = false,
+          closed_only: serverClosedOnly = false,
+          tradingEnabled: serverTradingEnabled = false,
+          banStatusRaw,
         } = statusData;
 
-        console.log('Server connection status:', {
+        console.log('Server connection status (explicit booleans):', {
           hasKey: serverHasKey,
           hasSecret: serverHasSecret,
           hasPassphrase: serverHasPassphrase,
@@ -363,23 +393,23 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
           ownerMatch: serverOwnerMatch,
           closed_only: serverClosedOnly,
           tradingEnabled: serverTradingEnabled,
-          raw,
         });
 
-        // Update diagnostics with server-computed values
+        // Update diagnostics with server-computed values (never undefined)
         setDiagnostics(prev => ({ 
           ...prev, 
           l2SanityCheck: true, 
           tradingEnabled: serverTradingEnabled,
           closedOnly: serverClosedOnly,
-          l2Body: raw?.banStatus,
-          accessStatus: undefined, // not used anymore
-          ownerAddress: serverOwnerAddress,
-          connectedEOA: serverConnectedEOA,
-          hasKey: serverHasKey,
-          hasSecret: serverHasSecret,
-          hasPassphrase: serverHasPassphrase,
-          ownerMatches: serverOwnerMatch,
+          l2Body: banStatusRaw,
+          serverHasKey,
+          serverHasSecret,
+          serverHasPassphrase,
+          serverOwnerAddress,
+          serverConnectedEOA,
+          serverOwnerMatch,
+          serverTradingEnabled,
+          serverClosedOnly,
         } as any));
         
         if (serverTradingEnabled) {
@@ -460,37 +490,89 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 </div>
               </div>
 
+              {/* Red banner for closed-only mode */}
+              {diagnostics.serverClosedOnly && (
+                <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-red-500">
+                        Account in Closed-Only Mode
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Your account is in closed-only mode on Polymarket (cannot open new positions)
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                        onClick={() => window.open('https://polymarket.com', '_blank')}
+                      >
+                        Open Polymarket
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Diagnostics Panel */}
               {diagnostics.credsReady && (
                 <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground mb-2">Connection Diagnostics</p>
                   <div className="space-y-1.5 text-xs">
+                    {/* Display the 5 trading gate predicates (explicit booleans) */}
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      <span>API credentials (key, secret, passphrase) ✓</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                      <span>Owner address = connected EOA ✓</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {diagnostics.l2SanityCheck ? (
+                      {diagnostics.serverHasKey ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
                       ) : (
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
                       )}
-                      <span>L2 sanity (GET /auth/ban-status/closed-only) status = 200</span>
+                      <span>hasKey = {String(diagnostics.serverHasKey ?? false)}</span>
                     </div>
-                    {diagnostics.closedOnly !== undefined && (
+                    <div className="flex items-center gap-2">
+                      {diagnostics.serverHasSecret ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      )}
+                      <span>hasSecret = {String(diagnostics.serverHasSecret ?? false)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {diagnostics.serverHasPassphrase ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      )}
+                      <span>hasPassphrase = {String(diagnostics.serverHasPassphrase ?? false)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {diagnostics.serverOwnerMatch ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      )}
+                      <span>ownerAddress === connectedEOA = {String(diagnostics.serverOwnerMatch ?? false)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!diagnostics.serverClosedOnly ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                      )}
+                      <span>closed_only === false = {String(!diagnostics.serverClosedOnly)}</span>
+                    </div>
+                    
+                    {/* Overall trading gate result */}
+                    <div className="border-t border-border pt-2 mt-2">
                       <div className="flex items-center gap-2">
-                        {!diagnostics.closedOnly ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        {diagnostics.serverTradingEnabled ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
                         ) : (
-                          <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                          <AlertTriangle className="h-4 w-4 text-red-500" />
                         )}
-                        <span>closed_only = {diagnostics.closedOnly ? 'TRUE (BLOCKED)' : 'FALSE'}</span>
+                        <span className="font-medium">tradingEnabled = {String(diagnostics.serverTradingEnabled ?? false)}</span>
                       </div>
-                    )}
+                    </div>
                     {diagnostics.funderResolved && (
                       <>
                         <div className="flex items-center gap-2">
@@ -541,31 +623,32 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       <span className="font-semibold">tradingEnabled = {diagnostics.tradingEnabled ? 'TRUE' : 'FALSE'}</span>
                     </div>
 
-                    {!diagnostics.tradingEnabled && (
+                    {!diagnostics.serverTradingEnabled && (
                       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasKey</span><span>{String((diagnostics as any).hasKey)}</span></div>
-                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasSecret</span><span>{String((diagnostics as any).hasSecret)}</span></div>
-                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasPassphrase</span><span>{String((diagnostics as any).hasPassphrase)}</span></div>
-                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">ownerAddress===connectedEOA</span><span>{String((diagnostics as any).ownerMatches)}</span></div>
-                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">closed_only===false</span><span>{String(diagnostics.closedOnly === false)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasKey</span><span>{String(diagnostics.serverHasKey ?? false)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasSecret</span><span>{String(diagnostics.serverHasSecret ?? false)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasPassphrase</span><span>{String(diagnostics.serverHasPassphrase ?? false)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">ownerAddress===connectedEOA</span><span>{String(diagnostics.serverOwnerMatch ?? false)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">closed_only===false</span><span>{String(!diagnostics.serverClosedOnly)}</span></div>
                       </div>
                     )}
                   </div>
                   
                   <div className="mt-3 pt-3 border-t border-border">
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                        <div className="text-xs">
-                          <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked - Onboarding or Restrictions</p>
-                          <ul className="space-y-0.5 text-red-600 dark:text-red-400">
-                            {diagnostics.closedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
-                            {diagnostics.accessStatus?.cert_required && <li>• Certificate required</li>}
-                            {diagnostics.accessStatus?.kyc_required && <li>• KYC verification required</li>}
-                            {diagnostics.accessStatus?.restricted && <li>• Account restricted</li>}
-                          </ul>
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs">
+                            <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked</p>
+                            <ul className="space-y-0.5 text-red-600 dark:text-red-400">
+                              {diagnostics.serverClosedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
+                              {!diagnostics.serverHasKey && <li>• Missing API key</li>}
+                              {!diagnostics.serverHasSecret && <li>• Missing API secret</li>}
+                              {!diagnostics.serverHasPassphrase && <li>• Missing API passphrase</li>}
+                              {!diagnostics.serverOwnerMatch && <li>• Owner address doesn't match connected EOA</li>}
+                            </ul>
+                          </div>
                         </div>
-                      </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant="outline"
