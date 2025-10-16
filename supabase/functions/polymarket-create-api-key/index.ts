@@ -103,6 +103,67 @@ serve(async (req) => {
 
         const deriveData = await deriveResponse.json();
         
+        // Inline-verify derived credentials before returning
+        const eoa = walletAddress.toLowerCase();
+        const verifyTs = Math.floor(Date.now() / 1000);
+        const verifyPre = `GET/auth/api-keys${verifyTs}`;
+        
+        // Detect if secret is base64
+        const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(deriveData.secret);
+        const encoder = new TextEncoder();
+        let secretBytes: Uint8Array;
+        if (isB64) {
+          const secretRaw = atob(deriveData.secret);
+          secretBytes = new Uint8Array(secretRaw.length);
+          for (let i = 0; i < secretRaw.length; i++) {
+            secretBytes[i] = secretRaw.charCodeAt(i);
+          }
+        } else {
+          secretBytes = encoder.encode(deriveData.secret);
+        }
+
+        const cryptoKey = await crypto.subtle.importKey(
+          'raw',
+          secretBytes as BufferSource,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+
+    const messageData = encoder.encode(verifyPre);
+    const sig = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+    const signatureArray = Array.from(new Uint8Array(sig));
+    const verifySig = btoa(String.fromCharCode(...signatureArray));
+
+        console.log('Inline-verifying derived credentials with GET /auth/api-keys...');
+        const verifyResponse = await fetch('https://clob.polymarket.com/auth/api-keys', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'POLY_ADDRESS': eoa,
+            'POLY_API_KEY': deriveData.apiKey,
+            'POLY_PASSPHRASE': deriveData.passphrase,
+            'POLY_TIMESTAMP': verifyTs.toString(),
+            'POLY_SIGNATURE': verifySig,
+          },
+        });
+
+        if (!verifyResponse.ok) {
+          const verifyError = await verifyResponse.text();
+          console.error('Inline verification of derived credentials failed:', verifyResponse.status, verifyError);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Derived credentials verification failed',
+              status: verifyResponse.status,
+              details: 'Derived credentials failed inline test. Do not save.',
+              upstream: verifyError
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        }
+
+        console.log('✓ Derived credentials verified inline');
+        
         // Fetch proxy address for derived key too
         let funderAddress = walletAddress;
         try {
@@ -126,6 +187,68 @@ serve(async (req) => {
 
     const data = await response.json();
     console.log('API key created successfully');
+
+    // Inline-verify the tuple before returning
+    // Test with GET /auth/api-keys to confirm credentials work
+    const eoa = walletAddress.toLowerCase();
+    const verifyTs = Math.floor(Date.now() / 1000);
+    const verifyPre = `GET/auth/api-keys${verifyTs}`;
+    
+    // Detect if secret is base64
+    const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(data.secret);
+    const encoder = new TextEncoder();
+    let secretBytes: Uint8Array;
+    if (isB64) {
+      const secretRaw = atob(data.secret);
+      secretBytes = new Uint8Array(secretRaw.length);
+      for (let i = 0; i < secretRaw.length; i++) {
+        secretBytes[i] = secretRaw.charCodeAt(i);
+      }
+    } else {
+      secretBytes = encoder.encode(data.secret);
+    }
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      secretBytes as BufferSource,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+
+        const messageData = encoder.encode(verifyPre);
+        const sig = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+        const signatureArray = Array.from(new Uint8Array(sig));
+        const verifySig = btoa(String.fromCharCode(...signatureArray));
+
+    console.log('Inline-verifying credentials with GET /auth/api-keys...');
+    const verifyResponse = await fetch('https://clob.polymarket.com/auth/api-keys', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'POLY_ADDRESS': eoa,
+        'POLY_API_KEY': data.apiKey,
+        'POLY_PASSPHRASE': data.passphrase,
+        'POLY_TIMESTAMP': verifyTs.toString(),
+        'POLY_SIGNATURE': verifySig,
+      },
+    });
+
+    if (!verifyResponse.ok) {
+      const verifyError = await verifyResponse.text();
+      console.error('Inline verification failed:', verifyResponse.status, verifyError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Credentials verification failed',
+          status: verifyResponse.status,
+          details: 'Fresh credentials failed inline test. Do not save.',
+          upstream: verifyError
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    console.log('✓ Credentials verified inline');
 
     // Also fetch the proxy (funder) address for this wallet
     let funderAddress = walletAddress; // fallback to EOA

@@ -239,8 +239,9 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
       // Create/derive API key (REQUIRED for trading)
       let apiCredentials = null;
+      let apiKeyResponse = null;
       try {
-        const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
+        apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
           body: {
             walletAddress: address,
             signature,
@@ -251,6 +252,21 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
         if (apiKeyResponse.error) {
           const errorData = apiKeyResponse.error as any;
+          
+          // Check if this is an inline verification failure (401)
+          if (errorData.status === 401) {
+            toast({
+              title: "Credentials Verification Failed",
+              description: "Fresh credentials failed inline test. Please try reconnecting.",
+              variant: "destructive",
+            });
+            setDiagnostics(prev => ({
+              ...prev,
+              l2Body: errorData.upstream || errorData,
+              tradingEnabled: false,
+            }));
+            return;
+          }
           
           // Check if this is a registration-required error
           if (errorData.cert_required || errorData.status === 'not_registered') {
@@ -267,9 +283,9 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         }
 
         apiCredentials = apiKeyResponse.data;
-        console.log('API credentials created');
+        console.log('API credentials created and inline-verified');
       } catch (err: any) {
-        console.error('API key creation failed:', err);
+        console.error('API key creation/verification failed:', err);
         throw err;
       }
 
