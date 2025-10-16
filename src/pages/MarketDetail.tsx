@@ -260,12 +260,7 @@ const MarketDetail = () => {
           const headers: HeadersInit = {
             'Content-Type': 'application/json',
           };
-
-          // Add API key if available
-          if (polymarketCredentials?.apiKey) {
-            headers['Authorization'] = `Bearer ${polymarketCredentials.apiKey}`;
-          }
-
+          // Note: No API key used. Trading via signed orders.
           // Submit the order to Polymarket CLOB API
           const response = await fetch('https://clob.polymarket.com/order', {
             method: 'POST',
