@@ -256,15 +256,12 @@ const MarketDetail = () => {
 
           console.log('Submitting order to Polymarket...');
           
-          // Prepare headers
-          const headers: HeadersInit = {
-            'Content-Type': 'application/json',
-          };
-          // Note: No API key used. Trading via signed orders.
-          // Submit the order to Polymarket CLOB API
+          // Submit the order to Polymarket CLOB API (no API key required - using signed orders)
           const response = await fetch('https://clob.polymarket.com/order', {
             method: 'POST',
-            headers,
+            headers: {
+              'Content-Type': 'application/json',
+            },
             body: JSON.stringify(signedOrder),
           });
 
@@ -504,207 +501,195 @@ const MarketDetail = () => {
                   </div>
                 </div>
               </div>
-              
             </div>
 
+            {/* Charts and Outcomes - Single column layout */}
             <div className="space-y-4">
-              {/* Charts and Outcomes */}
-                {/* Outcomes with Individual Charts */}
-                <div className="space-y-2">
+              {market.isMultiOutcome && market.subMarkets ? (
+                // Multi-outcome market - show each outcome with its own chart
+                market.subMarkets.map((outcome, idx) => {
+                  const colorClasses = [
+                    'bg-[hsl(var(--chart-orange))]',
+                    'bg-[hsl(var(--chart-blue))]',
+                    'bg-[hsl(var(--chart-green))]',
+                    'bg-[hsl(var(--chart-yellow))]',
+                  ];
                   
-                  {market.isMultiOutcome && market.subMarkets ? (
-                    // Multi-outcome market - show each outcome with its own chart
-                    market.subMarkets.map((outcome, idx) => {
-                      const colorClasses = [
-                        'bg-[hsl(var(--chart-orange))]',
-                        'bg-[hsl(var(--chart-blue))]',
-                        'bg-[hsl(var(--chart-green))]',
-                        'bg-[hsl(var(--chart-yellow))]',
-                      ];
-                      const textColorClasses = [
-                        'text-[hsl(var(--chart-orange))]',
-                        'text-[hsl(var(--chart-blue))]',
-                        'text-[hsl(var(--chart-green))]',
-                        'text-[hsl(var(--chart-yellow))]',
-                      ];
-                      
-                      return (
-                      <Card key={outcome.id} className="overflow-hidden">
-                        {/* Outcome Header */}
-                        <div className="p-3 border-b border-border">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 flex-1">
-                              {outcome.image ? (
-                                <img 
-                                  src={outcome.image}
-                                  alt={outcome.title}
-                                  className="w-10 h-10 rounded object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-                                    if (fallback) fallback.style.display = 'flex';
-                                  }}
-                                />
-                              ) : null}
-                              <div 
-                                className={`w-10 h-10 rounded flex items-center justify-center font-bold text-background text-sm ${colorClasses[idx % 4]} ${outcome.image ? 'hidden' : ''}`}
-                              >
-                                {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
-                              </div>
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-sm mb-1">{outcome.title}</h3>
-                                <p className="text-xs text-muted-foreground">{outcome.volume} Vol.</p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <div className="text-2xl font-bold text-emerald-400">
-                                  {outcome.yesPrice || 50}%
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button 
-                                  size="sm"
-                                  className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                  onClick={() => {
-                                    setSelectedSubMarket(outcome);
-                                    handleTrade(outcome.title, 'yes', outcome.yesPrice || 50);
-                                  }}
-                                >
-                                  Buy {outcome.yesPrice}¢
-                                </Button>
-                                <Button 
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => navigate(`/market/${outcome.id}`, { state: { market: outcome }})}
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
+                  return (
+                  <Card key={outcome.id} className="overflow-hidden">
+                    {/* Outcome Header */}
+                    <div className="p-3 border-b border-border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          {outcome.image ? (
+                            <img 
+                              src={outcome.image}
+                              alt={outcome.title}
+                              className="w-10 h-10 rounded object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            className={`w-10 h-10 rounded flex items-center justify-center font-bold text-background text-sm ${colorClasses[idx % 4]} ${outcome.image ? 'hidden' : ''}`}
+                          >
+                            {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-sm mb-1">{outcome.title}</h3>
+                            <p className="text-xs text-muted-foreground">{outcome.volume} Vol.</p>
                           </div>
                         </div>
                         
-                        {/* Individual Chart */}
-                        <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
-                          <div className="flex items-center gap-2">
-                            <LineChart className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs font-medium">Price History</span>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-emerald-400">
+                              {outcome.yesPrice || 50}%
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
-                              <Button
-                                key={range}
-                                variant={timeRange === range ? 'default' : 'ghost'}
-                                size="sm"
-                                className="h-7 px-2 text-xs font-medium"
-                                onClick={() => setTimeRange(range)}
-                              >
-                                {range}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
-                          <MarketChart 
-                            marketId={outcome.clobTokenId || outcome.id} 
-                            timeRange={timeRange}
-                          />
-                        </div>
-                      </Card>
-                      );
-                    })
-                  ) : (
-                    // Binary market - show single chart and Yes/No buttons
-                    <>
-                      <Card className="p-0 overflow-hidden">
-                        <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
-                          <div className="flex items-center gap-2">
-                            <LineChart className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs font-medium">Price History</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
-                              <Button
-                                key={range}
-                                variant={timeRange === range ? 'default' : 'ghost'}
-                                size="sm"
-                                className="h-7 px-2 text-xs font-medium"
-                                onClick={() => setTimeRange(range)}
-                              >
-                                {range}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
-                          <MarketChart 
-                            marketId={market.clobTokenId || market.id} 
-                            timeRange={timeRange}
-                          />
-                        </div>
-                      </Card>
-                      
-                      <Card className="p-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-2">
-                            <div className="text-xs text-muted-foreground">YES</div>
-                            <div className="text-3xl font-bold text-emerald-400">{market.yesPrice}¢</div>
+                          <div className="flex gap-2">
                             <Button 
-                              className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              onClick={() => handleTrade(market.title, 'yes', market.yesPrice || 50)}
+                              size="sm"
+                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              onClick={() => {
+                                setSelectedSubMarket(outcome);
+                                handleTrade(outcome.title, 'yes', outcome.yesPrice || 50);
+                              }}
                             >
-                              Buy Yes
+                              Buy {outcome.yesPrice}¢
                             </Button>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="text-xs text-muted-foreground">NO</div>
-                            <div className="text-3xl font-bold text-red-400">{market.noPrice}¢</div>
                             <Button 
-                              className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                              onClick={() => handleTrade(market.title, 'no', market.noPrice || 50)}
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/market/${outcome.id}`, { state: { market: outcome }})}
                             >
-                              Buy No
+                              <ExternalLink className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
-                      </Card>
-                    </>
-                  )}
-                </div>
-
-                {/* Content Tabs */}
-                <Card className="p-4">
-                  <Tabs value={contentTab} onValueChange={(v) => setContentTab(v as any)}>
-                    <TabsList className="w-full mb-4">
-                      <TabsTrigger value="description" className="flex-1">Description</TabsTrigger>
-                      <TabsTrigger value="positions" className="flex-1">Positions</TabsTrigger>
-                      <TabsTrigger value="trades" className="flex-1">Trades</TabsTrigger>
-                    </TabsList>
+                      </div>
+                    </div>
                     
-                    <TabsContent value="description" className="mt-0">
+                    {/* Individual Chart */}
+                    <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
+                      <div className="flex items-center gap-2">
+                        <LineChart className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs font-medium">Price History</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
+                          <Button
+                            key={range}
+                            variant={timeRange === range ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-7 px-2 text-xs font-medium"
+                            onClick={() => setTimeRange(range)}
+                          >
+                            {range}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
+                      <MarketChart 
+                        marketId={outcome.clobTokenId || outcome.id} 
+                        timeRange={timeRange}
+                      />
+                    </div>
+                  </Card>
+                  );
+                })
+              ) : (
+                // Binary market - show single chart and Yes/No buttons
+                <>
+                  <Card className="p-0 overflow-hidden">
+                    <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
+                      <div className="flex items-center gap-2">
+                        <LineChart className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs font-medium">Price History</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
+                          <Button
+                            key={range}
+                            variant={timeRange === range ? 'default' : 'ghost'}
+                            size="sm"
+                            className="h-7 px-2 text-xs font-medium"
+                            onClick={() => setTimeRange(range)}
+                          >
+                            {range}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
+                      <MarketChart 
+                        marketId={market.clobTokenId || market.id} 
+                        timeRange={timeRange}
+                      />
+                    </div>
+                  </Card>
+                  
+                  <Card className="p-4">
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <h2 className="text-base font-semibold">About this market</h2>
-                        <p className="text-sm text-muted-foreground">{market.description}</p>
+                        <div className="text-xs text-muted-foreground">YES</div>
+                        <div className="text-3xl font-bold text-emerald-400">{market.yesPrice}¢</div>
+                        <Button 
+                          className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                          onClick={() => handleTrade(market.title, 'yes', market.yesPrice || 50)}
+                        >
+                          Buy Yes
+                        </Button>
                       </div>
-                    </TabsContent>
-                    
-                    <TabsContent value="positions" className="mt-0">
-                      <div className="text-center py-8">
-                        <p className="text-sm text-muted-foreground">No positions yet</p>
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">NO</div>
+                        <div className="text-3xl font-bold text-red-400">{market.noPrice}¢</div>
+                        <Button 
+                          className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
+                          onClick={() => handleTrade(market.title, 'no', market.noPrice || 50)}
+                        >
+                          Buy No
+                        </Button>
                       </div>
-                    </TabsContent>
-                    
-                    <TabsContent value="trades" className="mt-0">
-                      <div className="text-center py-8">
-                        <p className="text-sm text-muted-foreground">No trades yet</p>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </Card>
-              </div>
+                    </div>
+                  </Card>
+                </>
+              )}
+
+              {/* Content Tabs */}
+              <Card className="p-4">
+                <Tabs value={contentTab} onValueChange={(v) => setContentTab(v as any)}>
+                  <TabsList className="w-full mb-4">
+                    <TabsTrigger value="description" className="flex-1">Description</TabsTrigger>
+                    <TabsTrigger value="positions" className="flex-1">Positions</TabsTrigger>
+                    <TabsTrigger value="trades" className="flex-1">Trades</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="description" className="mt-0">
+                    <div className="space-y-2">
+                      <h2 className="text-base font-semibold">About this market</h2>
+                      <p className="text-sm text-muted-foreground">{market.description}</p>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="positions" className="mt-0">
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">No positions yet</p>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="trades" className="mt-0">
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">No trades yet</p>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </Card>
             </div>
           </div>
         </div>
