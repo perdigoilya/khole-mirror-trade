@@ -119,11 +119,13 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         description: "Please sign the message in your wallet to enable trading",
       });
 
-      // Generate L1 signature for API key creation
-      const timestamp = Math.floor(Date.now() / 1000);
+      // Fetch server time required by Polymarket for EIP-712 signing
+      const timeRes = await supabase.functions.invoke('polymarket-time');
+      if (timeRes.error) throw new Error(timeRes.error.message || 'Failed to fetch server time');
+      const timestamp = parseInt(timeRes.data?.timestamp, 10);
       const message = {
         address: address,
-        timestamp: timestamp.toString(),
+        timestamp: String(timestamp),
         nonce: 0,
         message: "This message attests that I control the given wallet",
       };
