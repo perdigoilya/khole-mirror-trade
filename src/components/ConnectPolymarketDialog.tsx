@@ -24,7 +24,7 @@ interface ConnectPolymarketDialogProps {
 }
 
 export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarketDialogProps) => {
-  const { connectPolymarket, polymarketCredentials } = useTrading();
+  const { connectPolymarket, polymarketCredentials, user } = useTrading();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [registrationRequired, setRegistrationRequired] = useState(false);
@@ -339,12 +339,25 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         
         if (sanityCheck.data?.status === 200) {
           const closedOnly = sanityCheck.data?.closedOnly === true;
-          const tradingEnabled = sanityCheck.data?.tradingEnabled === true;
-          
+          const ownerAddr = (sanityCheck.data?.ownerAddress || '').toLowerCase();
+          const eoaAddr = (address || '').toLowerCase();
+          const hasKey = sanityCheck.data?.hasKey === true;
+          const hasSecret = sanityCheck.data?.hasSecret === true;
+          const hasPassphrase = sanityCheck.data?.hasPassphrase === true;
+          const ownerMatches = ownerAddr && eoaAddr && ownerAddr === eoaAddr;
+
+          const tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatches && !closedOnly;
+
           console.log('L2 sanity check response:', {
             status: sanityCheck.data?.status,
             closedOnly,
             tradingEnabled,
+            ownerAddr,
+            eoaAddr,
+            hasKey,
+            hasSecret,
+            hasPassphrase,
+            ownerMatches,
             l2Body: sanityCheck.data?.l2Body
           });
           
@@ -354,8 +367,14 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
             tradingEnabled,
             closedOnly,
             l2Body: sanityCheck.data?.l2Body,
-            accessStatus: sanityCheck.data?.accessStatus
-          }));
+            accessStatus: sanityCheck.data?.accessStatus,
+            ownerAddress: ownerAddr,
+            connectedEOA: eoaAddr,
+            hasKey,
+            hasSecret,
+            hasPassphrase,
+            ownerMatches,
+          } as any));
           
           if (tradingEnabled) {
             toast({
@@ -532,44 +551,76 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                       )}
                       <span className="font-semibold">tradingEnabled = {diagnostics.tradingEnabled ? 'TRUE' : 'FALSE'}</span>
                     </div>
+
+                    {!diagnostics.tradingEnabled && (
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasKey</span><span>{String((diagnostics as any).hasKey)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasSecret</span><span>{String((diagnostics as any).hasSecret)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">hasPassphrase</span><span>{String((diagnostics as any).hasPassphrase)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">ownerAddress===connectedEOA</span><span>{String((diagnostics as any).ownerMatches)}</span></div>
+                        <div className="flex items-center gap-2"><span className="w-44 text-muted-foreground">closed_only===false</span><span>{String(diagnostics.closedOnly === false)}</span></div>
+                      </div>
+                    )}
                   </div>
                   
-                  {(diagnostics.closedOnly || diagnostics.accessStatus?.cert_required || diagnostics.accessStatus?.kyc_required || diagnostics.accessStatus?.restricted) && (
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div className="text-xs">
-                            <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked - Onboarding Required</p>
-                            <ul className="space-y-0.5 text-red-600 dark:text-red-400">
-                              {diagnostics.closedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
-                              {diagnostics.accessStatus?.cert_required && <li>• Certificate required</li>}
-                              {diagnostics.accessStatus?.kyc_required && <li>• KYC verification required</li>}
-                              {diagnostics.accessStatus?.restricted && <li>• Account restricted</li>}
-                            </ul>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                            onClick={() => window.open('https://polymarket.com', '_blank')}
-                          >
-                            Finish Onboarding on Polymarket
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleWalletConnect}
-                            disabled={isLoading}
-                          >
-                            {isLoading ? 'Retrying...' : 'Retry'}
-                          </Button>
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                        <div className="text-xs">
+                          <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked - Onboarding or Restrictions</p>
+                          <ul className="space-y-0.5 text-red-600 dark:text-red-400">
+                            {diagnostics.closedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
+                            {diagnostics.accessStatus?.cert_required && <li>• Certificate required</li>}
+                            {diagnostics.accessStatus?.kyc_required && <li>• KYC verification required</li>}
+                            {diagnostics.accessStatus?.restricted && <li>• Account restricted</li>}
+                          </ul>
                         </div>
                       </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                          onClick={() => window.open('https://polymarket.com', '_blank')}
+                        >
+                          Open Polymarket
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleWalletConnect}
+                          disabled={isLoading}
+                        >
+                          {isLoading ? 'Retrying...' : 'Retry'}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              if (!user?.id) throw new Error('Not signed in');
+                              await supabase
+                                .from('user_polymarket_credentials')
+                                .update({
+                                  api_credentials_key: null,
+                                  api_credentials_secret: null,
+                                  api_credentials_passphrase: null,
+                                  api_key: null,
+                                })
+                                .eq('user_id', user.id);
+                              toast({ title: 'Credentials cleared', description: 'Recreating credentials...' });
+                              await handleWalletConnect();
+                            } catch (e: any) {
+                              toast({ title: 'Failed to refresh credentials', description: e.message || 'Try again', variant: 'destructive' });
+                            }
+                          }}
+                        >
+                          Force fresh creds
+                        </Button>
+                      </div>
                     </div>
-                  )}
+                  </div>
                   
                   {diagnostics.l2Body && (
                     <div className="mt-3 pt-3 border-t border-border">
