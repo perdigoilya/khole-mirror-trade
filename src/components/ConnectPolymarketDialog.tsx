@@ -27,10 +27,31 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   const { open: openWalletModal } = useWeb3Modal();
   const { disconnect } = useDisconnect();
 
+  const handleDialogClose = (newOpen: boolean) => {
+    // Clean up wallet connection state when dialog is closed
+    if (!newOpen && !address) {
+      disconnect();
+    }
+    onOpenChange(newOpen);
+  };
+
   const handleWalletConnect = async () => {
     if (!isConnected) {
-      // Open WalletConnect modal
-      await openWalletModal();
+      try {
+        // Open WalletConnect modal
+        setIsLoading(true);
+        await openWalletModal();
+        // Note: Connection happens asynchronously, modal closing doesn't mean success/failure
+      } catch (error: any) {
+        console.error("Wallet modal error:", error);
+        toast({
+          title: "Connection Cancelled",
+          description: "Please try connecting again",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -96,7 +117,7 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Connect to Polymarket</DialogTitle>
@@ -275,15 +296,18 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
             <>
               <Button
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleDialogClose(false)}
+                disabled={isLoading}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleWalletConnect}
+                disabled={isLoading}
                 className="bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
               >
-                <Wallet className="mr-2 h-4 w-4" />
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {!isLoading && <Wallet className="mr-2 h-4 w-4" />}
                 Connect Wallet
               </Button>
             </>
