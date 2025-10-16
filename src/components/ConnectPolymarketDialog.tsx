@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Wallet, AlertTriangle, CheckCircle2, Info } from "lucide-react";
-import { useAccount, useConnect, useDisconnect, useSignTypedData, useSwitchChain } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSignTypedData, useSwitchChain, usePublicClient } from "wagmi";
 import { useWeb3Modal } from "@web3modal/wagmi/react";
 import { polygon } from "wagmi/chains";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,9 +50,39 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
   }>({});
   const { address, isConnected, chainId } = useAccount();
   const { open: openWalletModal } = useWeb3Modal();
+  const publicClient = usePublicClient({ chainId: polygon.id });
   const { disconnect } = useDisconnect();
   const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
+
+  // USDC on Polygon (native)
+  const USDC_POLYGON = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`;
+  const ERC20_ABI = [
+    {
+      type: 'function',
+      name: 'balanceOf',
+      stateMutability: 'view',
+      inputs: [{ name: 'account', type: 'address' }],
+      outputs: [{ name: '', type: 'uint256' }],
+    },
+  ] as const;
+
+  const getUsdcBalance = async (addr?: string): Promise<number> => {
+    try {
+      if (!publicClient || !addr) return 0;
+      const raw = (await (publicClient as any).readContract({
+        address: USDC_POLYGON,
+        abi: ERC20_ABI as any,
+        functionName: 'balanceOf',
+        args: [addr as `0x${string}`],
+      })) as unknown as bigint;
+      // USDC has 6 decimals on Polygon
+      return Number(raw) / 1_000_000;
+    } catch (e) {
+      console.warn('USDC balance read failed for', addr, e);
+      return 0;
+    }
+  };
 
   const isPolymarketConnected = !!polymarketCredentials;
 
