@@ -291,28 +291,18 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         connectedEOA: address.toLowerCase(),
       }));
 
-      // Step 1.5: Check balances for both EOA and detected proxy
-      console.log('Checking balances...');
+      // Step 1.5: Check balances for both EOA and detected proxy (on-chain USDC)
+      console.log('Checking balances (on-chain USDC)...');
       let eoaBalance = 0;
       let proxyBalance = 0;
       
       try {
-        // Check EOA balance
-        const eoaBalanceResponse = await fetch(`https://data-api.polymarket.com/value?user=${address}`);
-        if (eoaBalanceResponse.ok) {
-          const eoaBalanceData = await eoaBalanceResponse.json();
-          eoaBalance = eoaBalanceData?.[0]?.value || 0;
-          console.log(`EOA ${address} balance: $${eoaBalance}`);
-        }
+        // Check EOA USDC balance on Polygon
+        eoaBalance = await getUsdcBalance(address);
         
-        // Check proxy balance if detected
+        // Check proxy USDC balance if a distinct proxy was detected
         if (detectedFunder && detectedFunder.toLowerCase() !== address.toLowerCase()) {
-          const proxyBalanceResponse = await fetch(`https://data-api.polymarket.com/value?user=${detectedFunder}`);
-          if (proxyBalanceResponse.ok) {
-            const proxyBalanceData = await proxyBalanceResponse.json();
-            proxyBalance = proxyBalanceData?.[0]?.value || 0;
-            console.log(`Proxy ${detectedFunder} balance: $${proxyBalance}`);
-          }
+          proxyBalance = await getUsdcBalance(detectedFunder);
         }
         
         const activeFunderBalance = useEoaAsFunder ? eoaBalance : (proxyBalance || eoaBalance);
@@ -329,11 +319,13 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         }));
 
         if (!hasBalance) {
-          console.warn('⚠️ Active funder has no balance - orders may fail with NOT_ENOUGH_BALANCE');
+          console.warn('⚠️ Active funder has no USDC balance - orders may fail with NOT_ENOUGH_BALANCE');
         }
       } catch (e) {
-        console.warn('Could not check balances:', e);
+        console.warn('Could not check on-chain USDC balances:', e);
       }
+        
+      // on-chain USDC balances checked above
 
       // Step 2: Run L2 sanity check (GET /auth/ban-status/closed-only)
       console.log('Running L2 sanity check...');
@@ -739,20 +731,27 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                 <Switch
                   id="use-eoa"
                   checked={useEoaAsFunder}
-                  onCheckedChange={(checked) => {
+                  onCheckedChange={async (checked) => {
                     setUseEoaAsFunder(checked);
-                    // Update active funder balance based on toggle
-                    if (diagnostics.eoaBalance !== undefined) {
-                      const newFunderBalance = checked 
-                        ? diagnostics.eoaBalance 
-                        : (diagnostics.proxyBalance || diagnostics.eoaBalance);
+                    // Recompute balances from on-chain USDC when toggled
+                    try {
+                      const [eoaB, proxyB] = await Promise.all([
+                        getUsdcBalance(address),
+                        diagnostics.detectedProxy ? getUsdcBalance(diagnostics.detectedProxy) : Promise.resolve(0),
+                      ]);
+                      const newFunder = checked ? address : (diagnostics.detectedProxy || address);
+                      const active = checked ? eoaB : (proxyB || eoaB);
                       setDiagnostics(prev => ({
                         ...prev,
-                        funderBalance: newFunderBalance,
-                        funderHasBalance: newFunderBalance > 0,
-                        fundsReady: newFunderBalance > 0,
-                        funderResolved: checked ? address : (prev.detectedProxy || address),
+                        eoaBalance: eoaB,
+                        proxyBalance: diagnostics.detectedProxy ? proxyB : undefined,
+                        funderResolved: newFunder || undefined,
+                        funderBalance: active,
+                        funderHasBalance: active > 0,
+                        fundsReady: active > 0,
                       }));
+                    } catch (e) {
+                      console.warn('Toggle balance refresh failed', e);
                     }
                   }}
                 />
