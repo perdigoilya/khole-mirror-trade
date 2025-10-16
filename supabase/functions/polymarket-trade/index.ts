@@ -95,12 +95,16 @@ serve(async (req) => {
     const orderResponse = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+'Content-Type': 'application/json',
         'Accept': 'application/json',
-        // Set a browser-like UA and referer to avoid Cloudflare bot blocks
+        'Origin': 'https://polymarket.com',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Referer': 'https://polymarket.com/',
-        'POLY_ADDRESS': walletAddress,
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Dest': 'empty',
+        'X-Requested-With': 'XMLHttpRequest',
+        'POLY_ADDRESS': walletAddress.toLowerCase(),
         'POLY_SIGNATURE': signatureBase64,
         'POLY_TIMESTAMP': timestamp.toString(),
         'POLY_API_KEY': apiKey,
