@@ -237,37 +237,34 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         message,
       });
 
-      // Create/derive API key (REQUIRED for trading)
       let apiCredentials = null;
       try {
-        const apiKeyResponse = await supabase.functions.invoke('polymarket-create-api-key', {
-          body: {
-            walletAddress: address,
-            signature,
-            timestamp,
-            nonce: 0,
-          }
+        const projectUrl = import.meta.env.VITE_SUPABASE_URL as string;
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const res = await fetch(`${projectUrl}/functions/v1/polymarket-create-api-key`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'apikey': anonKey,
+            'authorization': `Bearer ${sessionData.session?.access_token || ''}`,
+          },
+          body: JSON.stringify({ walletAddress: address, signature, timestamp, nonce: 0 })
         });
-
-        if (apiKeyResponse.error) {
-          const errorData = apiKeyResponse.error as any;
-          
-          // Check if this is a registration-required error
-          if (errorData.cert_required || errorData.status === 'not_registered') {
-            setRegistrationRequired(true);
-            toast({
-              title: "Registration Required",
-              description: "Please visit polymarket.com to complete your registration first",
-              variant: "destructive",
-            });
-            return;
-          }
-          
-          throw new Error(errorData.message || 'Failed to create Polymarket API key');
+        const txt = await res.text();
+        const parsed = (() => { try { return JSON.parse(txt); } catch { return txt; } })();
+        if (!res.ok) {
+          console.error('L1 create/verify failed:', { status: res.status, body: parsed });
+          setDiagnostics(prev => ({ ...prev, l2Body: parsed }));
+          toast({
+            title: `L1 failed (${res.status})`,
+            description: typeof parsed === 'string' ? parsed : (parsed.error || parsed.upstream?.error || 'See console for details'),
+            variant: 'destructive',
+          });
+          return; // stop here on non-2xx, do not save
         }
-
-        apiCredentials = apiKeyResponse.data;
-        console.log('API credentials created');
+        apiCredentials = parsed;
+        console.log('API credentials created and verified inline');
       } catch (err: any) {
         console.error('API key creation failed:', err);
         throw err;
