@@ -20,7 +20,26 @@ serve(async (req) => {
       );
     }
 
-    console.log('Creating API key for wallet:', walletAddress);
+    // Validate timestamp is epoch seconds and not drifted
+    const now = Math.floor(Date.now() / 1000);
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || ts <= 0) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid timestamp format - must be epoch seconds' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (Math.abs(now - ts) > 60) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Timestamp drift too large',
+          details: `Server time: ${now}, your timestamp: ${ts}. Please re-sign with current time.`
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Creating API key for wallet:', walletAddress, 'timestamp:', ts);
 
     // Call Polymarket CLOB to create API key (L1 only headers)
     const response = await fetch('https://clob.polymarket.com/auth/api-key', {

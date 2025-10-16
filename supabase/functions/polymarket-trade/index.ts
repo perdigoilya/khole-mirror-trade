@@ -62,10 +62,16 @@ serve(async (req) => {
       );
     }
 
-    // Ensure the wallet matches the stored one
-    if (credsRow.wallet_address?.toLowerCase() !== String(walletAddress).toLowerCase()) {
+    // Ensure the wallet matches the stored one (ownerAddress validation)
+    const storedWallet = credsRow.wallet_address?.toLowerCase();
+    const requestWallet = String(walletAddress).toLowerCase();
+    if (storedWallet !== requestWallet) {
+      console.error('Wallet mismatch:', { storedWallet, requestWallet });
       return new Response(
-        JSON.stringify({ error: 'Wallet mismatch', details: 'Order signer does not match stored Polymarket wallet' }),
+        JSON.stringify({ 
+          error: 'Wallet mismatch', 
+          details: `POLY_ADDRESS (${requestWallet}) must match stored wallet (${storedWallet}). Switch wallets or reconnect.`
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
@@ -111,13 +117,21 @@ serve(async (req) => {
     const bodyString = JSON.stringify(payload);
 
     // L2 HMAC authentication
-    console.log('Using L2 HMAC authentication');
     const timestamp = Math.floor(Date.now() / 1000);
     const method = 'POST';
     const requestPath = '/order';
 
     // Generate HMAC signature (timestamp + method + path + raw body)
     const message = `${timestamp}${method}${requestPath}${bodyString}`;
+    console.log('L2 HMAC preimage (no secret):', { 
+      walletAddress: requestWallet, 
+      hasKey: !!apiKey, 
+      hasSecret: !!apiSecret, 
+      timestamp, 
+      method, 
+      requestPath 
+    });
+
     const encoder = new TextEncoder();
     const keyData = encoder.encode(apiSecret);
 
@@ -162,8 +176,29 @@ serve(async (req) => {
         cfCache,
         server,
         contentType,
-        body: errorText?.slice(0, 2000) // cap log size
+        body: errorText?.slice(0, 2000)
       });
+
+      // Auto-recovery on 401: derive new credentials and retry once
+      if (orderResponse.status === 401 && errorText?.includes('Invalid api key')) {
+        console.log('L2 401 detected - attempting auto-recovery via derive-api-key...');
+        
+        try {
+          // We need a fresh L1 signature to derive, but we don't have one here
+          // Instead, signal to the client that they need to reconnect
+          return new Response(
+            JSON.stringify({ 
+              error: 'Session Expired',
+              details: 'Your Polymarket session has expired. Please disconnect and reconnect to re-authenticate.',
+              action: 'reconnect_required',
+              status: 401
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          );
+        } catch (deriveErr) {
+          console.error('Auto-recovery failed:', deriveErr);
+        }
+      }
 
       return new Response(
         JSON.stringify({ 

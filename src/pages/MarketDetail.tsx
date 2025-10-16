@@ -292,7 +292,17 @@ const MarketDetail = () => {
           });
 
           if (error || !data?.success) {
-            throw new Error((data as any)?.error || error?.message || 'Trade failed');
+            const errorData = data as any;
+            // Check for session expiry
+            if (errorData?.action === 'reconnect_required' || errorData?.status === 401) {
+              toast({
+                title: "Session Expired",
+                description: "Your Polymarket session expired. Please disconnect and reconnect in Portfolio.",
+                variant: "destructive",
+              });
+              throw new Error('Session expired - please reconnect');
+            }
+            throw new Error(errorData?.error || error?.message || 'Trade failed');
           }
 
 
