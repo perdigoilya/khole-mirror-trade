@@ -21,6 +21,7 @@ import {
   POLYMARKET_ORDER_TYPES 
 } from "@/lib/polymarket-orders";
 import { generatePolymarketHeaders } from "@/lib/polymarket-auth";
+import { useEnsurePolymarketCredentials } from "@/hooks/usePolymarketCredentials";
 
 interface Market {
   id: string;
@@ -52,6 +53,7 @@ const MarketDetail = () => {
   const { address, isConnected, chain } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
+  const { ensureApiCreds } = useEnsurePolymarketCredentials();
   const [market, setMarket] = useState<Market | null>(location.state?.market || null);
   const [loading, setLoading] = useState(!location.state?.market);
   const [timeRange, setTimeRange] = useState<'1H' | '6H' | '1D' | '1W' | '1M' | 'ALL'>('ALL');
@@ -257,22 +259,30 @@ const MarketDetail = () => {
 
           console.log('Submitting order to Polymarket...');
           
-          // Check if we have API credentials
-          if (!polymarketCredentials?.apiCredentials) {
-            toast({
-              title: "Missing API Credentials",
-              description: "Please reconnect your wallet to generate trading credentials",
-              variant: "destructive",
-            });
-            return;
+          // Ensure API credentials (create on the fly if missing)
+          let apiCreds = polymarketCredentials?.apiCredentials;
+          if (!apiCreds) {
+            try {
+              apiCreds = await ensureApiCreds(address as `0x${string}`);
+            } catch (err: any) {
+              const msg = err?.message || 'Failed to create trading credentials';
+              toast({
+                title: 'Trading Not Ready',
+                description: msg.includes('Could not create api key') || msg.includes('not registered')
+                  ? 'Please connect this wallet on polymarket.com and deposit USDC at least once, then reconnect here.'
+                  : msg,
+                variant: 'destructive',
+              });
+              return;
+            }
           }
 
           // Generate HMAC auth headers
           const headers = await generatePolymarketHeaders(
             address,
-            polymarketCredentials.apiCredentials.apiKey,
-            polymarketCredentials.apiCredentials.secret,
-            polymarketCredentials.apiCredentials.passphrase,
+            apiCreds.apiKey,
+            apiCreds.secret,
+            apiCreds.passphrase,
             'POST',
             '/order',
             signedOrder
