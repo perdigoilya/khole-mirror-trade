@@ -13,7 +13,7 @@ import { useTrading } from "@/contexts/TradingContext";
 import Footer from "@/components/Footer";
 import { MarketChart } from "@/components/MarketChart";
 import { ClobClient } from "@polymarket/clob-client";
-import { providers } from "ethers";
+import * as ethers from "ethers";
 import { useAccount, useWalletClient } from "wagmi";
 
 interface Market {
@@ -200,7 +200,7 @@ const MarketDetail = () => {
 
         try {
           // Create ethers v5 provider from wallet client
-          const provider = new providers.Web3Provider(walletClient as any);
+          const provider = new ethers.providers.Web3Provider(walletClient as any);
           const signer = provider.getSigner();
 
           // Initialize Polymarket CLOB client

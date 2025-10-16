@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { ClobClient } from "@polymarket/clob-client";
-import { providers } from "ethers";
+import * as ethers from "ethers";
 import { useAccount, useWalletClient } from "wagmi";
 
 const Watchlist = () => {
@@ -202,7 +202,7 @@ const Watchlist = () => {
 
         try {
           // Create ethers v5 provider from wallet client
-          const provider = new providers.Web3Provider(walletClient as any);
+          const provider = new ethers.providers.Web3Provider(walletClient as any);
           const signer = provider.getSigner();
 
           // Initialize Polymarket CLOB client
