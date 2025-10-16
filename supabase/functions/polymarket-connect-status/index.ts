@@ -5,10 +5,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const CLOB = 'https://clob.polymarket.com';
+const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
+
+async function hmacBase64(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+  let secretBytes: Uint8Array;
+  if (isB64) {
+    const raw = atob(secret);
+    secretBytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) {
+      secretBytes[i] = raw.charCodeAt(i);
+    }
+  } else {
+    secretBytes = encoder.encode(secret);
+  }
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    secretBytes as BufferSource,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+  const arr = Array.from(new Uint8Array(sig));
+  return btoa(String.fromCharCode(...arr));
+}
+
+function suffix(v: any): string {
+  return typeof v === 'string' && v.length > 6 ? v.slice(-6) : v || '';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const out = (obj: any, status = 200) =>
+    new Response(JSON.stringify(obj), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -20,21 +58,18 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    // Get authenticated user
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: authErr?.message || 'No user' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
+      return out({ error: 'Unauthorized', details: authErr?.message || 'No user' }, 401);
     }
 
     const userId = authData.user.id;
-
-    // Get the connectedEOA from request body or derive from wallet connection
     const { connectedEOA } = await req.json().catch(() => ({ connectedEOA: null }));
+    const eoaLower = (connectedEOA || '').toLowerCase();
+    const dbKey = `polymarket:${ENV}:${eoaLower}`;
 
-    // Read credentials from DB
+    console.log(`[CONNECT-STATUS] user=${userId} eoa=${eoaLower} dbKey=${dbKey}`);
+
     const { data: credsRow, error: credsErr } = await supabase
       .from('user_polymarket_credentials')
       .select('*')
@@ -42,267 +77,195 @@ serve(async (req) => {
       .maybeSingle();
 
     if (credsErr) {
-      console.error('CREDS_MISSING user_id=' + userId + ' reason=error details=' + credsErr.message);
-      return new Response(
-        JSON.stringify({ 
-          hasKey: false,
-          hasSecret: false,
-          hasPassphrase: false,
-          ownerAddress: '',
-          connectedEOA: (connectedEOA || '').toLowerCase(),
-          ownerMatch: false,
-          closed_only: false,
-          banStatusRaw: {},
-          tradingEnabled: false,
-          error: 'Database error',
-          details: credsErr.message
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
+      console.error(`[DB-ERROR] user=${userId} reason=error details=${credsErr.message}`);
+      return out({
+        hasKey: false,
+        hasSecret: false,
+        hasPassphrase: false,
+        ownerAddress: '',
+        connectedEOA: eoaLower,
+        ownerMatch: false,
+        closed_only: false,
+        tradingEnabled: false,
+        error: 'Database error',
+        details: credsErr.message
+      });
     }
 
-    // Compute booleans from DB (explicit false for nulls, don't expose raw secrets)
     const hasKey = !!(credsRow?.api_credentials_key || credsRow?.api_key);
     const hasSecret = !!credsRow?.api_credentials_secret;
     const hasPassphrase = !!credsRow?.api_credentials_passphrase;
     const ownerAddress = (credsRow?.wallet_address || '').toLowerCase();
-    const eoaAddress = (connectedEOA || '').toLowerCase();
-    const ownerMatch = !!(ownerAddress && eoaAddress && ownerAddress === eoaAddress);
-    
+    const ownerMatch = !!(ownerAddress && eoaLower && ownerAddress === eoaLower);
+
     if (!credsRow) {
-      console.log('CREDS_MISSING user_id=' + userId + ' reason=no_row');
+      console.log(`[CREDS-MISSING] user=${userId} reason=no_row`);
     } else {
-      console.log('CREDS_READ user_id=' + userId + ' hasKey=' + hasKey + ' hasSecret=' + hasSecret + ' hasPassphrase=' + hasPassphrase + ' ownerAddress=' + ownerAddress + ' eoaAddress=' + eoaAddress + ' ownerMatch=' + ownerMatch);
+      console.log(`[CREDS-READ] user=${userId} hasKey=${hasKey} hasSecret=${hasSecret} hasPassphrase=${hasPassphrase} ownerAddress=${ownerAddress} eoaLower=${eoaLower} ownerMatch=${ownerMatch}`);
     }
 
-    console.log('Connect status computed:', { 
-      hasKey, 
-      hasSecret, 
-      hasPassphrase, 
-      ownerAddress, 
-      eoaAddress, 
-      ownerMatch 
-    });
-
-    // If no credentials, return early with explicit false values
     if (!hasKey || !hasSecret || !hasPassphrase) {
-      return new Response(
-        JSON.stringify({
-          hasKey: hasKey,
-          hasSecret: hasSecret,
-          hasPassphrase: hasPassphrase,
-          ownerAddress: ownerAddress,
-          connectedEOA: eoaAddress,
-          ownerMatch: ownerMatch,
-          closed_only: false,
-          banStatusRaw: {},
-          tradingEnabled: false,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
+      return out({
+        hasKey,
+        hasSecret,
+        hasPassphrase,
+        ownerAddress,
+        connectedEOA: eoaLower,
+        ownerMatch,
+        closed_only: false,
+        tradingEnabled: false,
+      });
     }
 
-    // Call CLOB /auth/ban-status/closed-only with L2 auth
-    let apiKey = credsRow.api_credentials_key || credsRow.api_key;
-    let apiSecret = credsRow.api_credentials_secret;
-    let apiPassphrase = credsRow.api_credentials_passphrase;
+    let key = credsRow.api_credentials_key || credsRow.api_key;
+    let secret = credsRow.api_credentials_secret;
+    let passphrase = credsRow.api_credentials_passphrase;
 
-    // Assert all 3 credentials present
-    if (!apiKey || !apiSecret || !apiPassphrase) {
-      throw new Error('Missing L2 credentials (key, secret, or passphrase)');
+    if (!key || !secret || !passphrase) {
+      return out({ problem: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
     }
 
-    // Assert owner match
-    if (ownerAddress !== eoaAddress) {
-      console.error('Owner mismatch:', { ownerAddress, eoaAddress });
+    if (ownerAddress !== eoaLower) {
+      console.error('[OWNER-MISMATCH]', { ownerAddress, eoaLower });
     }
 
-    const timestamp = Math.floor(Date.now() / 1000);
+    // L2 sanity check: GET /auth/ban-status/closed-only
     const method = 'GET';
-    const requestPath = '/auth/ban-status/closed-only';
-    const preimage = `${method}${requestPath}${timestamp}`;
+    const path = '/auth/ban-status/closed-only';
+    const ts = Math.floor(Date.now() / 1000);
+    const preimage = `${method}${path}${ts}`;
+    (globalThis as any).__PREIMAGE = preimage;
 
-    let banStatusBody: any = {};
-    let closed_only = false;
-    let l2SanityPassed = false;
-    let l2Debug: any = null;
-
-    const attemptBanStatusCheck = async (key: string, secret: string, pass: string): Promise<boolean> => {
-      try {
-        // Detect if secret is base64 (Polymarket returns base64 secrets)
-        const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
-        const encoder = new TextEncoder();
-        
-        // Decode secret from base64 if needed, otherwise use utf8
-        let secretBytes: Uint8Array;
-        if (isB64) {
-          const secretRaw = atob(secret);
-          secretBytes = new Uint8Array(secretRaw.length);
-          for (let i = 0; i < secretRaw.length; i++) {
-            secretBytes[i] = secretRaw.charCodeAt(i);
-          }
-        } else {
-          secretBytes = encoder.encode(secret);
-        }
-
-        const cryptoKey = await crypto.subtle.importKey(
-          'raw',
-          secretBytes as BufferSource,
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign']
-        );
-
-        // Fresh timestamp and preimage per attempt
-        const ts = Math.floor(Date.now() / 1000);
-        const preimage = `${method}${requestPath}${ts}`;
-
-        const messageData = encoder.encode(preimage);
-        const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-        const signatureArray = Array.from(new Uint8Array(signature));
-        const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
-
-        // Validate standard base64 format
-        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-          throw new Error('POLY_SIGNATURE is not standard base64');
-        }
-
-        l2Debug = {
-          eoa: ownerAddress,
-          polyAddress: ownerAddress,
-          preimageFirst120: preimage.substring(0, 120),
-          url: 'https://clob.polymarket.com/auth/ban-status/closed-only',
-          sigB64First12: signatureBase64.substring(0, 12),
-          polyTimestamp: ts.toString(),
-          method,
-          requestPath,
-          keySuffix: key.slice(-6),
-          passSuffix: pass.slice(-4),
-        };
-
-        console.log('L2 ban-status attempt:', {
-          eoa: ownerAddress,
-          ownerAddress,
-          polyAddress: ownerAddress,
-          keySuffix: key.slice(-6),
-          passSuffix: pass.slice(-4),
-          ts,
-          preimageFirst120: preimage.substring(0, 120),
-          sigB64First12: signatureBase64.substring(0, 12),
-        });
-
-        const response = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'POLY_ADDRESS': ownerAddress,
-            'POLY_SIGNATURE': signatureBase64,
-            'POLY_TIMESTAMP': ts.toString(),
-            'POLY_API_KEY': key,
-            'POLY_PASSPHRASE': pass,
-          },
-        });
-
-        if (response.ok) {
-          banStatusBody = await response.json();
-          console.log('✓ Ban status response:', JSON.stringify(banStatusBody, null, 2));
-          closed_only = banStatusBody?.closed_only === true || banStatusBody?.closedOnly === true;
-          return true;
-        } else {
-          const errorText = await response.text();
-          console.error('Ban status call failed:', response.status, errorText);
-          banStatusBody = { error: errorText, status: response.status };
-          return false;
-        }
-      } catch (error) {
-        console.error('HMAC signing error:', error);
-        banStatusBody = { error: 'HMAC signing failed', details: error instanceof Error ? error.message : String(error) };
-        return false;
-      }
+    const sig = await hmacBase64(secret, preimage);
+    const hdrs: Record<string, string> = {
+      'Accept': 'application/json',
+      'POLY_ADDRESS': ownerAddress,
+      'POLY_API_KEY': key,
+      'POLY_PASSPHRASE': passphrase,
+      'POLY_TIMESTAMP': ts.toString(),
+      'POLY_SIGNATURE': sig,
     };
 
-    // First attempt
-    l2SanityPassed = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
+    console.log('[L2-SANITY] Before fetch:', {
+      eoa: ownerAddress,
+      keySuffix: suffix(key),
+      passSuffix: passphrase.slice(-4),
+      ts,
+      preimageFirst120: preimage.slice(0, 120),
+      sigB64First12: sig.slice(0, 12),
+      dbKey
+    });
 
-    // On 401, try to derive new credentials and retry once
-    if (!l2SanityPassed && banStatusBody?.status === 401) {
-      console.log('L2 401 detected - attempting auto-recovery via derive-api-key...');
-      
-      try {
-        // Build L1-style headers for derive (no HMAC, just address)
-        const deriveResponse = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'POLY_ADDRESS': ownerAddress,
-          },
+    let r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
+    const text = await r.text();
+    let upstream = text ? JSON.parse(text) : null;
+    const cf = {
+      'cf-ray': r.headers.get('cf-ray') || '',
+      'cf-cache-status': r.headers.get('cf-cache-status') || '',
+      'server': r.headers.get('server') || '',
+      'content-type': r.headers.get('content-type') || ''
+    };
+
+    let closed_only = false;
+    let tradingEnabled = false;
+
+    // On 401: derive → REBIND → retry ONCE
+    if (r.status === 401) {
+      console.log('[L2-401] Attempting derive → rebind → retry...');
+      const d = await fetch(`${CLOB}/auth/derive-api-key`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json', 'POLY_ADDRESS': ownerAddress },
+      });
+      const dUp = await d.json();
+      if (!d.ok || !dUp.apiKey || !dUp.secret || !dUp.passphrase) {
+        console.error('[DERIVE-FAILED]', d.status, dUp);
+        return out({
+          hasKey,
+          hasSecret,
+          hasPassphrase,
+          ownerAddress,
+          connectedEOA: eoaLower,
+          ownerMatch,
+          closed_only: false,
+          tradingEnabled: false,
+          attempts: [{ status: r.status, upstream, cf }, { deriveError: dUp }]
         });
+      }
 
-        if (deriveResponse.ok) {
-          const deriveData = await deriveResponse.json();
-          if (deriveData.apiKey && deriveData.secret && deriveData.passphrase) {
-            console.log('✓ Derived new credentials, updating DB...');
-            
-            // Update credentials in DB
-            const { error: updateError } = await supabase
-              .from('user_polymarket_credentials')
-              .update({
-                api_credentials_key: deriveData.apiKey,
-                api_credentials_secret: deriveData.secret,
-                api_credentials_passphrase: deriveData.passphrase,
-                wallet_address: ownerAddress,
-              })
-              .eq('user_id', userId);
+      // REBIND locals
+      key = dUp.apiKey;
+      secret = dUp.secret;
+      passphrase = dUp.passphrase;
 
-            if (updateError) {
-              console.error('Failed to update derived credentials:', updateError);
-            } else {
-              // Retry ban-status check with new credentials
-              apiKey = deriveData.apiKey;
-              apiSecret = deriveData.secret;
-              apiPassphrase = deriveData.passphrase;
-              
-              console.log('Retrying ban-status with derived credentials...');
-              l2SanityPassed = await attemptBanStatusCheck(apiKey, apiSecret, apiPassphrase);
-            }
-          }
-        } else {
-          const deriveError = await deriveResponse.text();
-          console.error('Derive-api-key failed:', deriveResponse.status, deriveError);
-        }
-      } catch (deriveErr) {
-        console.error('Auto-recovery failed:', deriveErr);
+      const ts2 = Math.floor(Date.now() / 1000);
+      const pre2 = `${method}${path}${ts2}`;
+      (globalThis as any).__PREIMAGE = pre2;
+      const sig2 = await hmacBase64(secret, pre2);
+
+      hdrs['POLY_API_KEY'] = key;
+      hdrs['POLY_PASSPHRASE'] = passphrase;
+      hdrs['POLY_TIMESTAMP'] = ts2.toString();
+      hdrs['POLY_SIGNATURE'] = sig2;
+
+      console.log('[L2-RETRY] After derive:', {
+        eoa: ownerAddress,
+        keySuffix: suffix(key),
+        passSuffix: passphrase.slice(-4),
+        ts: ts2,
+        preimageFirst120: pre2.slice(0, 120),
+        sigB64First12: sig2.slice(0, 12),
+      });
+
+      r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
+      const text2 = await r.text();
+      upstream = text2 ? JSON.parse(text2) : null;
+
+      if (r.ok) {
+        // Persist new tuple atomically
+        await supabase
+          .from('user_polymarket_credentials')
+          .update({
+            api_credentials_key: key,
+            api_credentials_secret: secret,
+            api_credentials_passphrase: passphrase,
+            wallet_address: ownerAddress,
+          })
+          .eq('user_id', userId);
+        console.log('[DB-UPDATED] Persisted derived credentials');
       }
     }
 
-    // Trading enabled ONLY if L2 sanity passed (200 response) and not in closed-only mode
-    const tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && l2SanityPassed && !closed_only;
+    if (r.ok) {
+      closed_only = upstream?.closed_only === true || upstream?.closedOnly === true;
+      tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && !closed_only;
+      console.log('[L2-SANITY] ✓ Success:', { closed_only, tradingEnabled });
+    } else {
+      console.error('[L2-SANITY] FAILED:', r.status, upstream);
+    }
 
-    return new Response(
-      JSON.stringify({
-        hasKey: hasKey,
-        hasSecret: hasSecret,
-        hasPassphrase: hasPassphrase,
-        ownerAddress: ownerAddress,
-        connectedEOA: eoaAddress,
-        ownerMatch: ownerMatch,
-        closed_only: closed_only,
-        banStatusRaw: banStatusBody,
-        tradingEnabled: tradingEnabled,
-        l2Debug: l2Debug,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
+    return out({
+      hasKey,
+      hasSecret,
+      hasPassphrase,
+      ownerAddress,
+      connectedEOA: eoaLower,
+      ownerMatch,
+      closed_only,
+      tradingEnabled,
+      upstream,
+      cf,
+      sent: {
+        POLY_ADDRESS: ownerAddress,
+        POLY_API_KEY_suffix: suffix(key),
+        POLY_PASSPHRASE_suffix: passphrase.slice(-4),
+        POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
+        POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
+        preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
+      }
+    });
 
-  } catch (error) {
-    console.error('Error in polymarket-connect-status:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(
-      JSON.stringify({ 
-        error: 'Status check failed',
-        details: errorMessage 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+  } catch (e: any) {
+    console.error('[ERROR] polymarket-connect-status crashed:', e);
+    return out({ ok: false, error: 'EdgeCrash', message: e?.message, stack: e?.stack }, 500);
   }
 });

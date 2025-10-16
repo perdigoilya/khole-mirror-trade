@@ -5,10 +5,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const CLOB = 'https://clob.polymarket.com';
+const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
+
+async function hmacBase64(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+  let secretBytes: Uint8Array;
+  if (isB64) {
+    const raw = atob(secret);
+    secretBytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) {
+      secretBytes[i] = raw.charCodeAt(i);
+    }
+  } else {
+    secretBytes = encoder.encode(secret);
+  }
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    secretBytes as BufferSource,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+  const arr = Array.from(new Uint8Array(sig));
+  return btoa(String.fromCharCode(...arr));
+}
+
+function suffix(v: any): string {
+  return typeof v === 'string' && v.length > 6 ? v.slice(-6) : v || '';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const out = (obj: any, status = 200) =>
+    new Response(JSON.stringify(obj), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
 
   try {
     const {
@@ -21,13 +59,13 @@ serve(async (req) => {
       funderAddress,
     } = await req.json();
 
-    console.log('Trade request:', { walletAddress, tokenId, side, price, size, funderAddress });
+    const eoaLower = String(walletAddress).toLowerCase();
+    const dbKey = `polymarket:${ENV}:${eoaLower}`;
+
+    console.log(`[TRADE] eoa=${eoaLower} tokenId=${tokenId} side=${side} dbKey=${dbKey}`);
 
     if (!walletAddress || !tokenId || !side || !price || !size || !signedOrder) {
-      return new Response(
-        JSON.stringify({ error: 'Missing required parameters' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ problem: 'Missing required parameters', details: { walletAddress, tokenId, side, price, size, signedOrder } }, 400);
     }
 
     // Load L2 API credentials securely from the backend for the authenticated user
@@ -42,10 +80,7 @@ serve(async (req) => {
 
     const { data: authData, error: authErr } = await supabase.auth.getUser();
     if (authErr || !authData?.user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: authErr?.message || 'No user' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
+      return out({ error: 'Unauthorized', details: authErr?.message || 'No user' }, 401);
     }
 
     const userId = authData.user.id;
@@ -56,263 +91,157 @@ serve(async (req) => {
       .maybeSingle();
 
     if (credsErr || !credsRow) {
-      return new Response(
-        JSON.stringify({ error: 'Missing L2 credentials', details: 'No Polymarket credentials stored for this user', action: 'create_api_key' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ error: 'Missing L2 credentials', details: 'No Polymarket credentials stored for this user', action: 'create_api_key' }, 400);
     }
 
-    // Ensure the wallet matches the stored one (ownerAddress validation)
     const storedWallet = credsRow.wallet_address?.toLowerCase();
-    const requestWallet = String(walletAddress).toLowerCase();
-    if (storedWallet !== requestWallet) {
-      console.error('Wallet mismatch:', { storedWallet, requestWallet });
-      return new Response(
-        JSON.stringify({ 
-          error: 'Wallet mismatch', 
-          details: `POLY_ADDRESS (${requestWallet}) must match stored wallet (${storedWallet}). Switch wallets or reconnect.`
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    if (storedWallet !== eoaLower) {
+      console.error('[WALLET-MISMATCH]', { storedWallet, eoaLower });
+      return out({
+        error: 'Wallet mismatch',
+        details: `POLY_ADDRESS (${eoaLower}) must match stored wallet (${storedWallet}). Switch wallets or reconnect.`
+      }, 400);
     }
 
-    let apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
-    let apiSecret: string | null = credsRow.api_credentials_secret || null;
-    let apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
+    let key: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
+    let secret: string | null = credsRow.api_credentials_secret || null;
+    let passphrase: string | null = credsRow.api_credentials_passphrase || null;
 
-    // Assert all 3 credentials present
-    if (!apiKey || !apiSecret || !apiPassphrase) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Missing L2 credentials',
-          details: 'Polymarket requires API key auth (L2) for placing orders. Please connect and create API keys first.',
-          action: 'create_api_key'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    if (!key || !secret || !passphrase) {
+      return out({ problem: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase }, action: 'create_api_key' }, 400);
     }
 
-    // Validate price and size
     if (price <= 0 || price > 1 || size <= 0) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid price or size. Price must be between 0 and 1, size must be positive.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return out({ problem: 'Invalid price or size', details: { price, size } }, 400);
     }
 
-    // Removed deprecated balance check that caused 404s.
-    // Per requirements, we rely on upstream CLOB errors or optional Data-API checks handled elsewhere.
-
-
-    // Assert owner address match
-    const ownerAddress = storedWallet;
-    if (!ownerAddress || ownerAddress !== requestWallet) {
-      throw new Error(`Owner mismatch: ${ownerAddress} !== ${requestWallet}`);
-    }
-
-    // Per docs, request payload must include { order, owner, orderType }
     const orderPayload = {
       order: signedOrder,
-      owner: apiKey, // API key of order owner
+      owner: key,
       orderType: 'GTC'
     };
-    const rawBody = JSON.stringify(orderPayload); // Create ONCE for signing and sending
+    const rawBody = JSON.stringify(orderPayload);
 
     const method = 'POST';
-    const requestPath = '/order';
-    
-    const attemptOrderSubmission = async (key: string, secret: string, pass: string): Promise<Response> => {
-      // Fresh timestamp and preimage per attempt
-      const ts = Math.floor(Date.now() / 1000);
-      if (!Number.isInteger(ts) || ts.toString().length > 10) {
-        throw new Error('Invalid timestamp format - must be epoch seconds');
-      }
-      const preimage = `${method}${requestPath}${ts}${rawBody}`;
-      // Detect if secret is base64 (Polymarket returns base64 secrets)
-      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
-      const encoder = new TextEncoder();
-      
-      // Decode secret from base64 if needed, otherwise use utf8
-      let secretBytes: Uint8Array;
-      if (isB64) {
-        const secretRaw = atob(secret);
-        secretBytes = new Uint8Array(secretRaw.length);
-        for (let i = 0; i < secretRaw.length; i++) {
-          secretBytes[i] = secretRaw.charCodeAt(i);
-        }
-      } else {
-        secretBytes = encoder.encode(secret);
-      }
+    const path = '/order';
+    const ts = Math.floor(Date.now() / 1000);
+    const preimage = `${method}${path}${ts}${rawBody}`;
+    (globalThis as any).__PREIMAGE = preimage;
 
-      const cryptoKey = await crypto.subtle.importKey(
-        'raw',
-        secretBytes as BufferSource,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-
-      const messageData = encoder.encode(preimage);
-      const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-      const signatureArray = Array.from(new Uint8Array(signature));
-      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
-      
-      // Validate standard base64 format
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-        throw new Error('POLY_SIGNATURE is not standard base64');
-      }
-      
-      // Log every /order attempt
-      console.log('L2 /order attempt:', { 
-        eoa: requestWallet,
-        ownerAddress: ownerAddress,
-        POLY_ADDRESS: requestWallet,
-        keySuffix: key.slice(-6),
-        passSuffix: pass.slice(-4),
-        ts,
-        preimageFirst120: preimage.substring(0, 120),
-        sigB64First12: signatureBase64.substring(0, 12),
-        funderAddress: funderAddress || 'not_specified',
-        bodyLength: rawBody.length
-      });
-
-      return await fetch('https://clob.polymarket.com/order', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'accept': 'application/json',
-          'POLY_ADDRESS': requestWallet,
-          'POLY_SIGNATURE': signatureBase64,
-          'POLY_TIMESTAMP': ts.toString(),
-          'POLY_API_KEY': key,
-          'POLY_PASSPHRASE': pass,
-        },
-        body: rawBody, // Use SAME rawBody for signing and sending
-      });
+    const sig = await hmacBase64(secret, preimage);
+    const hdrs: Record<string, string> = {
+      'content-type': 'application/json',
+      'accept': 'application/json',
+      'POLY_ADDRESS': eoaLower,
+      'POLY_API_KEY': key,
+      'POLY_PASSPHRASE': passphrase,
+      'POLY_TIMESTAMP': ts.toString(),
+      'POLY_SIGNATURE': sig,
     };
 
-    console.log('Submitting order to CLOB...');
-    let orderResponse = await attemptOrderSubmission(apiKey, apiSecret, apiPassphrase);
+    console.log('[L2-ORDER] Before fetch:', {
+      eoa: eoaLower,
+      keySuffix: suffix(key),
+      passSuffix: passphrase.slice(-4),
+      ts,
+      preimageFirst120: preimage.slice(0, 120),
+      sigB64First12: sig.slice(0, 12),
+      funderAddress: funderAddress || 'not_specified',
+      bodyLength: rawBody.length,
+      dbKey
+    });
 
-    if (!orderResponse.ok) {
-      const errorText = await orderResponse.text();
-      const cfRay = orderResponse.headers.get('cf-ray') || null;
-      const cfCache = orderResponse.headers.get('cf-cache-status') || null;
-      const server = orderResponse.headers.get('server') || null;
-      const contentType = orderResponse.headers.get('content-type') || null;
+    let r = await fetch(`${CLOB}${path}`, { method, headers: hdrs, body: rawBody });
+    const text = await r.text();
+    let upstream = text ? JSON.parse(text) : null;
+    const cf = {
+      'cf-ray': r.headers.get('cf-ray') || '',
+      'cf-cache-status': r.headers.get('cf-cache-status') || '',
+      'server': r.headers.get('server') || '',
+      'content-type': r.headers.get('content-type') || ''
+    };
 
-      console.error('Order submission failed:', orderResponse.status, {
-        cfRay,
-        cfCache,
-        server,
-        contentType,
-        body: errorText?.slice(0, 2000)
+    // On 401: derive → REBIND → retry ONCE
+    if (r.status === 401) {
+      console.log('[L2-401] Attempting derive → rebind → retry...');
+      const d = await fetch(`${CLOB}/auth/derive-api-key`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json', 'POLY_ADDRESS': eoaLower },
       });
-
-      // Auto-recovery on 401: derive new credentials and retry once
-      if (orderResponse.status === 401) {
-        console.log('L2 401 detected - attempting auto-recovery via derive-api-key...');
-        
-        try {
-          const deriveResponse = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json',
-              'POLY_ADDRESS': requestWallet,
-            },
-          });
-
-          if (deriveResponse.ok) {
-            const deriveData = await deriveResponse.json();
-            if (deriveData.apiKey && deriveData.secret && deriveData.passphrase) {
-              console.log('✓ Derived new credentials, updating DB...');
-              
-              // Update credentials in DB
-              const { error: updateError } = await supabase
-                .from('user_polymarket_credentials')
-                .update({
-                  api_credentials_key: deriveData.apiKey,
-                  api_credentials_secret: deriveData.secret,
-                  api_credentials_passphrase: deriveData.passphrase,
-                  wallet_address: requestWallet,
-                })
-                .eq('user_id', userId);
-
-              if (updateError) {
-                console.error('Failed to update derived credentials:', updateError);
-              } else {
-                // Update local vars and retry once
-                const newApiKey = deriveData.apiKey;
-                const newApiSecret = deriveData.secret;
-                const newApiPassphrase = deriveData.passphrase;
-                
-                console.log('Retrying order with derived credentials...');
-                orderResponse = await attemptOrderSubmission(newApiKey, newApiSecret, newApiPassphrase);
-                
-                // If retry succeeds, continue to success handler below
-                if (orderResponse.ok) {
-                  const orderData = await orderResponse.json();
-                  console.log('✓ Order submitted successfully after derive:', orderData);
-
-                  return new Response(
-                    JSON.stringify({
-                      success: true,
-                      orderId: orderData.orderID,
-                      order: orderData
-                    }),
-                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-                  );
-                }
-                
-                // If retry also fails, continue to error handler below
-                const retryError = await orderResponse.text();
-                console.error('Order retry also failed:', orderResponse.status, retryError);
-              }
-            }
-          } else {
-            const deriveError = await deriveResponse.text();
-            console.error('Derive-api-key failed:', deriveResponse.status, deriveError);
-          }
-        } catch (deriveErr) {
-          console.error('Auto-recovery failed:', deriveErr);
-        }
+      const dUp = await d.json();
+      if (!d.ok || !dUp.apiKey || !dUp.secret || !dUp.passphrase) {
+        console.error('[DERIVE-FAILED]', d.status, dUp);
+        return out({
+          error: 'Order Submission Failed',
+          status: r.status,
+          cf,
+          upstream,
+          attempts: [{ status: r.status, upstream, cf }, { deriveError: dUp }]
+        }, r.status);
       }
 
-      return new Response(
-        JSON.stringify({ 
-          error: 'Order Submission Failed',
-          status: orderResponse.status,
-          cfRay,
-          cfCache,
-          server,
-          contentType,
-          upstream: errorText
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: orderResponse.status }
-      );
+      // REBIND locals
+      key = dUp.apiKey;
+      secret = dUp.secret;
+      passphrase = dUp.passphrase;
+
+      const ts2 = Math.floor(Date.now() / 1000);
+      const pre2 = `${method}${path}${ts2}${rawBody}`;
+      (globalThis as any).__PREIMAGE = pre2;
+      const sig2 = await hmacBase64(secret!, pre2);
+
+      hdrs['POLY_API_KEY'] = key!;
+      hdrs['POLY_PASSPHRASE'] = passphrase!;
+      hdrs['POLY_TIMESTAMP'] = ts2.toString();
+      hdrs['POLY_SIGNATURE'] = sig2;
+
+      console.log('[L2-RETRY] After derive:', {
+        eoa: eoaLower,
+        keySuffix: suffix(key),
+        passSuffix: passphrase!.slice(-4),
+        ts: ts2,
+        preimageFirst120: pre2.slice(0, 120),
+        sigB64First12: sig2.slice(0, 12),
+      });
+
+      r = await fetch(`${CLOB}${path}`, { method, headers: hdrs, body: rawBody });
+      const text2 = await r.text();
+      upstream = text2 ? JSON.parse(text2) : null;
+
+      if (r.ok) {
+        // Persist new tuple atomically
+        await supabase
+          .from('user_polymarket_credentials')
+          .update({
+            api_credentials_key: key,
+            api_credentials_secret: secret,
+            api_credentials_passphrase: passphrase,
+            wallet_address: eoaLower,
+          })
+          .eq('user_id', userId);
+        console.log('[DB-UPDATED] Persisted derived credentials');
+      }
     }
 
-    const orderData = await orderResponse.json();
-    console.log('Order submitted successfully:', orderData);
+    if (!r.ok) {
+      console.error('[L2-ORDER] FAILED:', r.status, upstream);
+      return out({
+        error: 'Order Submission Failed',
+        status: r.status,
+        cf,
+        upstream
+      }, r.status);
+    }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        orderId: orderData.orderID,
-        order: orderData
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    );
+    console.log('[L2-ORDER] ✓ Success:', upstream);
+    return out({
+      success: true,
+      orderId: upstream.orderID,
+      order: upstream
+    });
 
-  } catch (error) {
-    console.error('Trade error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    return new Response(
-      JSON.stringify({ 
-        error: 'Trade failed',
-        details: errorMessage 
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+  } catch (e: any) {
+    console.error('[ERROR] polymarket-trade crashed:', e);
+    return out({ ok: false, error: 'EdgeCrash', message: e?.message, stack: e?.stack }, 500);
   }
 });
