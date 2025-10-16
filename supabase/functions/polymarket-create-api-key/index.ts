@@ -22,25 +22,28 @@ serve(async (req) => {
 
     console.log('Creating API key for wallet:', walletAddress);
 
-    // Call Polymarket CLOB to create/derive API key
+    // Call Polymarket CLOB to create API key (L1 only headers)
     const response = await fetch('https://clob.polymarket.com/auth/api-key', {
       method: 'POST',
       headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/json',
         'POLY_ADDRESS': walletAddress,
         'POLY_SIGNATURE': signature,
         'POLY_TIMESTAMP': timestamp.toString(),
         'POLY_NONCE': nonce.toString(),
       },
+      // Some environments require an explicit JSON body for POST
+      body: JSON.stringify({})
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Polymarket API key creation failed:', response.status, errorText);
       
-      // If we get a 409, try to derive the existing key instead
-      if (response.status === 409) {
-        console.log('API key already exists, attempting to derive...');
+      // If we get a 409 or a 400 (common upstream error), try to derive the existing key instead
+      if (response.status === 409 || response.status === 400) {
+        console.log('Create failed, attempting to derive existing API key...');
         const deriveResponse = await fetch(`https://clob.polymarket.com/auth/derive-api-key?nonce=${nonce}`, {
           method: 'GET',
           headers: {
