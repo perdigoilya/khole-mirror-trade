@@ -437,7 +437,8 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
         throw e;
       }
       
-      onOpenChange(false);
+      // Don't auto-close dialog - let user review diagnostics
+      // onOpenChange(false);
     } catch (error: any) {
       console.error('Wallet connection error:', error);
       
