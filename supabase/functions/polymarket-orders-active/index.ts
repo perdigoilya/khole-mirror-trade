@@ -93,11 +93,13 @@ serve(async (req) => {
     const signatureArray = Array.from(new Uint8Array(signature));
     const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-    console.log('L2 sanity check:', { 
+    console.log('L2 sanity check auth:', { 
       ownerAddress, 
+      polyAddress: ownerAddress,
       hasSecret: true, 
       timestamp, 
       preimage,
+      signaturePreview: signatureBase64.substring(0, 10) + '...',
       method,
       requestPath
     });

@@ -122,31 +122,45 @@ serve(async (req) => {
     const requestPath = '/order';
 
     // Generate HMAC signature (timestamp + method + path + raw body)
-    const message = `${timestamp}${method}${requestPath}${bodyString}`;
-    console.log('L2 HMAC preimage (no secret):', { 
-      walletAddress: requestWallet, 
-      hasKey: !!apiKey, 
-      hasSecret: !!apiSecret, 
-      timestamp, 
-      method, 
-      requestPath 
-    });
-
+    const preimage = `${timestamp}${method}${requestPath}${bodyString}`;
+    
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(apiSecret);
+    
+    // Base64-decode the API secret to raw bytes for HMAC key (critical for L2 auth)
+    const secretRaw = atob(apiSecret);
+    const secretBytes = new Uint8Array(secretRaw.length);
+    for (let i = 0; i < secretRaw.length; i++) {
+      secretBytes[i] = secretRaw.charCodeAt(i);
+    }
 
     const key = await crypto.subtle.importKey(
       'raw',
-      keyData,
+      secretBytes,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
     );
 
-    const messageData = encoder.encode(message);
+    const messageData = encoder.encode(preimage);
     const signature = await crypto.subtle.sign('HMAC', key, messageData);
     const signatureArray = Array.from(new Uint8Array(signature));
     const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+    
+    console.log('L2 order submission:', { 
+      walletAddress: requestWallet,
+      ownerAddress: requestWallet,
+      polyAddress: walletAddress.toLowerCase(),
+      ownerMatchesPOLY_ADDRESS: requestWallet === walletAddress.toLowerCase(),
+      funderAddress: funderAddress || 'not_specified',
+      hasKey: !!apiKey,
+      hasSecret: !!apiSecret,
+      timestamp,
+      method,
+      requestPath,
+      preimage: preimage.substring(0, 100) + '...',
+      signaturePreview: signatureBase64.substring(0, 10) + '...',
+      bodyLength: bodyString.length
+    });
 
     const orderResponse = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',

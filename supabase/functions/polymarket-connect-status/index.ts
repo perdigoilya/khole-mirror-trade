@@ -137,7 +137,15 @@ serve(async (req) => {
       const signatureArray = Array.from(new Uint8Array(signature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-      console.log('Calling CLOB ban-status with:', { ownerAddress, timestamp, preimage });
+      console.log('L2 ban-status auth:', {
+        ownerAddress,
+        polyAddress: ownerAddress,
+        timestamp,
+        method,
+        requestPath,
+        preimage,
+        signaturePreview: signatureBase64.substring(0, 10) + '...',
+      });
 
       const banStatusResponse = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
         method: 'GET',
