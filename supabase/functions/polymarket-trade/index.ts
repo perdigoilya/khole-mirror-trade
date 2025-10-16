@@ -45,8 +45,9 @@ serve(async (req) => {
       console.error('Failed to fetch balance:', balanceResponse.status);
       return new Response(
         JSON.stringify({ 
-          error: 'Failed to verify wallet',
-          details: 'Could not connect to Polymarket. Please ensure your wallet is a valid Polymarket wallet.'
+          error: 'Wallet Not Registered on Polymarket',
+          details: 'This wallet is not registered on Polymarket. Please:\n1. Visit polymarket.com\n2. Connect this wallet\n3. Deposit USDC\n4. Return here to trade',
+          notRegistered: true
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );

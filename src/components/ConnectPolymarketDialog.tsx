@@ -44,11 +44,37 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
 
     setIsLoading(true);
     try {
+      // Validate that the wallet is registered on Polymarket
+      const balanceResponse = await fetch(
+        `https://clob.polymarket.com/balances/${address}`
+      );
+
+      if (!balanceResponse.ok) {
+        toast({
+          title: "Wallet Not Registered on Polymarket",
+          description: "This wallet hasn't been used on Polymarket yet. Please create a Polymarket account first by depositing funds at polymarket.com",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const balanceData = await balanceResponse.json();
+      const balance = parseFloat(balanceData.balance || '0');
+
+      if (balance === 0) {
+        toast({
+          title: "Warning: Zero Balance",
+          description: "Your Polymarket account has no funds. Deposit USDC at polymarket.com to start trading.",
+          variant: "destructive",
+        });
+      }
+
       await connectPolymarket({ walletAddress: address });
       
       toast({
-        title: "Connected",
-        description: "Successfully connected to Polymarket",
+        title: "Connected Successfully",
+        description: `Polymarket account connected with $${balance.toFixed(2)} available`,
       });
       
       onOpenChange(false);
@@ -95,19 +121,38 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
             </div>
           ) : (
             <>
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 p-3 text-sm mb-4">
+                <p className="font-semibold text-amber-900 dark:text-amber-300 mb-2">⚠️ Important: Set up Polymarket first</p>
+                <p className="text-amber-800 dark:text-amber-400">
+                  Before connecting here, you must create a Polymarket account and deposit funds at polymarket.com
+                </p>
+              </div>
+
               <div className="rounded-lg bg-muted p-4 text-sm">
-                <p className="font-semibold mb-2">How WalletConnect works:</p>
-                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                  <li>Click "Connect Wallet" below</li>
-                  <li>Choose your wallet (MetaMask, Coinbase, etc.)</li>
-                  <li>Approve the connection in your wallet</li>
-                  <li>Your wallet address will be securely stored</li>
+                <p className="font-semibold mb-2">Step-by-Step Guide:</p>
+                <ol className="list-decimal list-inside space-y-2 text-muted-foreground">
+                  <li className="pl-2">
+                    <span className="font-medium text-foreground">Create Polymarket Account:</span>
+                    <br />Visit polymarket.com and connect your wallet there first
+                  </li>
+                  <li className="pl-2">
+                    <span className="font-medium text-foreground">Deposit Funds:</span>
+                    <br />Add USDC to your Polymarket account (required for trading)
+                  </li>
+                  <li className="pl-2">
+                    <span className="font-medium text-foreground">Return Here:</span>
+                    <br />Click "Connect Wallet" below and select the same wallet
+                  </li>
+                  <li className="pl-2">
+                    <span className="font-medium text-foreground">Verify Connection:</span>
+                    <br />We'll check that your wallet is registered on Polymarket
+                  </li>
                 </ol>
               </div>
 
               <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 text-sm">
                 <p className="text-blue-900 dark:text-blue-300">
-                  🔒 No private keys needed. Your funds stay in your wallet. WalletConnect is the industry-standard secure connection protocol.
+                  🔒 Your wallet must be the same one used on Polymarket. We'll verify it has funds before allowing trades.
                 </p>
               </div>
             </>
