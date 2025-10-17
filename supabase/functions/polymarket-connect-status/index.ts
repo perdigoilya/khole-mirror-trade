@@ -138,7 +138,7 @@ serve(async (req) => {
       return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
     }
 
-    // Step 1: Validate credentials with GET /auth/api-keys (owner first, then funder; both preimage formats)
+    // Step 1: Prepare credential checks (do not gate trading on /auth/api-keys)
     let tradingEnabled = false;
     let closed_only = false;
     let apiKeysCheck = { ok: false, status: 0, body: null as any };
@@ -167,7 +167,7 @@ serve(async (req) => {
       const b1 = tryJson(t1);
       if (r1.ok) {
         apiKeysCheck = { ok: true, status: r1.status, body: b1 };
-        usedAddress = addr;
+        usedAddress = addr; // prefer this address for ban-status
         return true;
       }
       console.warn('[API-KEYS-CHECK:A1] Failed', r1.status, b1);
@@ -196,17 +196,17 @@ serve(async (req) => {
       return false;
     };
 
-    // Try owner address first, then funder if available
-    if (await tryApiKeys(ownerAddress)) {
-      tradingEnabled = true;
-    } else if (funderAddress && funderAddress !== ownerAddress && await tryApiKeys(funderAddress)) {
-      tradingEnabled = true;
+    // Try API keys with owner first, then funder (advisory only)
+    await tryApiKeys(ownerAddress);
+    if (!apiKeysCheck.ok && funderAddress && funderAddress !== ownerAddress) {
+      await tryApiKeys(funderAddress);
     }
 
-    // Step 2: Check ban-status (only if credentials are valid)
-    if (tradingEnabled && usedAddress) {
-      const method2 = 'GET';
-      const path2 = '/auth/ban-status/closed-only';
+    // Step 2: Authoritative ban-status check (determines tradingEnabled)
+    const method2 = 'GET';
+    const path2 = '/auth/ban-status/closed-only';
+
+    const tryBanStatus = async (addr: string) => {
       const ts2 = Math.floor(Date.now() / 1000);
 
       // Standard ban-status
@@ -214,13 +214,13 @@ serve(async (req) => {
       const sigB1 = await hmacBase64(secret, preimageB1);
       const hdrsB1: Record<string, string> = {
         'Accept': 'application/json',
-        'POLY_ADDRESS': usedAddress,
+        'POLY_ADDRESS': addr,
         'POLY_API_KEY': key,
         'POLY_PASSPHRASE': passphrase,
         'POLY_TIMESTAMP': ts2.toString(),
         'POLY_SIGNATURE': sigB1,
       };
-      console.log('[BAN-STATUS-CHECK:B1]', { addr: usedAddress, ts: ts2 });
+      console.log('[BAN-STATUS-CHECK:B1]', { addr, ts: ts2 });
       try {
         let rB1 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrsB1 });
         let txtB1 = await rB1.text();
@@ -228,28 +228,41 @@ serve(async (req) => {
         if (rB1.ok) {
           banStatusCheck = { ok: true, status: rB1.status, body: bodyB1 };
           closed_only = bodyB1?.closed_only === true || bodyB1?.closedOnly === true;
-          if (closed_only) tradingEnabled = false;
-        } else {
-          // Alt ban-status
-          const preimageB2 = `${ts2}${method2}${path2}`;
-          const sigB2 = await hmacBase64(secret, preimageB2);
-          const hdrsB2: Record<string, string> = { ...hdrsB1, POLY_SIGNATURE: sigB2 };
-          console.warn('[BAN-STATUS-CHECK:B1] Failed', rB1.status, bodyB1, 'retrying alt');
-          let rB2 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrsB2 });
-          let txtB2 = await rB2.text();
-          let bodyB2 = tryJson(txtB2);
-          banStatusCheck = { ok: rB2.ok, status: rB2.status, body: bodyB2 };
-          if (rB2.ok) {
-            closed_only = bodyB2?.closed_only === true || bodyB2?.closedOnly === true;
-            if (closed_only) tradingEnabled = false;
-          } else {
-            console.warn('[BAN-STATUS-CHECK] Could not verify ban status:', rB2.status);
-          }
+          usedAddress = addr;
+          return true;
+        }
+        // Alt ban-status
+        const preimageB2 = `${ts2}${method2}${path2}`;
+        const sigB2 = await hmacBase64(secret, preimageB2);
+        const hdrsB2: Record<string, string> = { ...hdrsB1, POLY_SIGNATURE: sigB2 };
+        console.warn('[BAN-STATUS-CHECK:B1] Failed', rB1.status, bodyB1, 'retrying alt');
+        let rB2 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrsB2 });
+        let txtB2 = await rB2.text();
+        let bodyB2 = tryJson(txtB2);
+        banStatusCheck = { ok: rB2.ok, status: rB2.status, body: bodyB2 };
+        if (rB2.ok) {
+          closed_only = bodyB2?.closed_only === true || bodyB2?.closedOnly === true;
+          usedAddress = addr;
+          return true;
         }
       } catch (e: any) {
         console.error('[BAN-STATUS-CHECK] Request failed:', e.message);
       }
+      return false;
+    };
+
+    // Determine preferred order for ban-status attempts
+    const addressCandidates: string[] = [];
+    if (usedAddress) addressCandidates.push(usedAddress);
+    if (!addressCandidates.includes(ownerAddress)) addressCandidates.push(ownerAddress);
+    if (funderAddress && funderAddress !== ownerAddress && !addressCandidates.includes(funderAddress)) addressCandidates.push(funderAddress);
+
+    for (const addr of addressCandidates) {
+      const ok = await tryBanStatus(addr);
+      if (ok) break;
     }
+
+    tradingEnabled = banStatusCheck.ok && !closed_only;
 
     (globalThis as any).__PREIMAGE = `${method1}${path1}${ts1}`;
 
