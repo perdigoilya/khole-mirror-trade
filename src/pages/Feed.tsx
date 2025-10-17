@@ -618,8 +618,15 @@ const Feed = () => {
                           className="p-4 hover:border-primary/50 transition-colors cursor-pointer"
                           onClick={() => handleMarketClick(market)}
                         >
-                          <Badge variant="outline" className="mb-2 text-xs">
-                            {market.provider}
+                          <Badge 
+                            variant="outline" 
+                            className={`mb-2 text-xs ${
+                              market.provider === 'polymarket' 
+                                ? 'bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30' 
+                                : 'bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30'
+                            }`}
+                          >
+                            {market.provider === 'polymarket' ? 'Polymarket' : 'Kalshi'}
                           </Badge>
                           <h4 className="text-sm font-semibold mb-2 line-clamp-2">
                             {market.title}
