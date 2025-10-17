@@ -128,6 +128,7 @@ serve(async (req) => {
     let key = credsRow.api_credentials_key || credsRow.api_key;
     let secret = credsRow.api_credentials_secret;
     let passphrase = credsRow.api_credentials_passphrase;
+    const funderAddress = (credsRow?.funder_address || '').toLowerCase();
 
     if (!key || !secret || !passphrase) {
       return out({ error: 'Missing L2 credentials', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
@@ -137,130 +138,120 @@ serve(async (req) => {
       return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
     }
 
-    // Step 1: Validate credentials with GET /auth/api-keys (try both preimage formats)
+    // Step 1: Validate credentials with GET /auth/api-keys (owner first, then funder; both preimage formats)
     let tradingEnabled = false;
     let closed_only = false;
     let apiKeysCheck = { ok: false, status: 0, body: null as any };
     let banStatusCheck = { ok: false, status: 0, body: null as any };
+    let usedAddress = '';
 
     const method1 = 'GET';
     const path1 = '/auth/api-keys';
     const ts1 = Math.floor(Date.now() / 1000);
 
-    // Try standard format first: method+path+timestamp
-    const preimage1 = `${method1}${path1}${ts1}`;
-    const sig1 = await hmacBase64(secret, preimage1);
-    
-    const hdrs1: Record<string, string> = {
-      'Accept': 'application/json',
-      'POLY_ADDRESS': ownerAddress,
-      'POLY_API_KEY': key,
-      'POLY_PASSPHRASE': passphrase,
-      'POLY_TIMESTAMP': ts1.toString(),
-      'POLY_SIGNATURE': sig1,
+    const tryApiKeys = async (addr: string) => {
+      // Standard format: method+path+timestamp
+      const preimageA1 = `${method1}${path1}${ts1}`;
+      const sigA1 = await hmacBase64(secret, preimageA1);
+      const hdrsA1: Record<string, string> = {
+        'Accept': 'application/json',
+        'POLY_ADDRESS': addr,
+        'POLY_API_KEY': key,
+        'POLY_PASSPHRASE': passphrase,
+        'POLY_TIMESTAMP': ts1.toString(),
+        'POLY_SIGNATURE': sigA1,
+      };
+      console.log('[API-KEYS-CHECK:A1]', { addr, ts: ts1, preimage: preimageA1.slice(0,120), sig: sigA1.slice(0,12) });
+      const r1 = await fetch(`${CLOB}${path1}`, { method: method1, headers: hdrsA1 });
+      const t1 = await r1.text();
+      const b1 = tryJson(t1);
+      if (r1.ok) {
+        apiKeysCheck = { ok: true, status: r1.status, body: b1 };
+        usedAddress = addr;
+        return true;
+      }
+      console.warn('[API-KEYS-CHECK:A1] Failed', r1.status, b1);
+
+      // Alt format: timestamp+method+path
+      const preimageA2 = `${ts1}${method1}${path1}`;
+      const sigA2 = await hmacBase64(secret, preimageA2);
+      const hdrsA2: Record<string, string> = {
+        'Accept': 'application/json',
+        'POLY_ADDRESS': addr,
+        'POLY_API_KEY': key,
+        'POLY_PASSPHRASE': passphrase,
+        'POLY_TIMESTAMP': ts1.toString(),
+        'POLY_SIGNATURE': sigA2,
+      };
+      console.log('[API-KEYS-CHECK:A2]', { addr, ts: ts1, preimage: preimageA2.slice(0,120), sig: sigA2.slice(0,12) });
+      const r2 = await fetch(`${CLOB}${path1}`, { method: method1, headers: hdrsA2 });
+      const t2 = await r2.text();
+      const b2 = tryJson(t2);
+      apiKeysCheck = { ok: r2.ok, status: r2.status, body: b2 };
+      if (r2.ok) {
+        usedAddress = addr;
+        return true;
+      }
+      console.error('[API-KEYS-CHECK] Both formats failed for', addr, r2.status, b2);
+      return false;
     };
 
-    console.log('[API-KEYS-CHECK:A1] Standard format:', {
-      eoa: ownerAddress,
-      keySuffix: suffix(key),
-      passSuffix: suffix(passphrase),
-      ts: ts1,
-      preimage: preimage1.slice(0, 120),
-      sig: sig1.slice(0, 12),
-    });
-
-    try {
-      const r1 = await fetch(`${CLOB}${path1}`, { method: method1, headers: hdrs1 });
-      const text1 = await r1.text();
-      const body1 = tryJson(text1);
-      apiKeysCheck = { ok: r1.ok, status: r1.status, body: body1 };
-
-      if (r1.ok) {
-        console.log('[API-KEYS-CHECK:A1] ✓ Standard format worked');
-        tradingEnabled = true;
-      } else {
-        console.warn('[API-KEYS-CHECK:A1] Standard format failed:', r1.status);
-        
-        // Try alternative format: timestamp+method+path
-        const preimage2 = `${ts1}${method1}${path1}`;
-        const sig2 = await hmacBase64(secret, preimage2);
-        
-        const hdrs2: Record<string, string> = {
-          'Accept': 'application/json',
-          'POLY_ADDRESS': ownerAddress,
-          'POLY_API_KEY': key,
-          'POLY_PASSPHRASE': passphrase,
-          'POLY_TIMESTAMP': ts1.toString(),
-          'POLY_SIGNATURE': sig2,
-        };
-
-        console.log('[API-KEYS-CHECK:A2] Trying alt format (ts+method+path):', {
-          preimage: preimage2.slice(0, 120),
-          sig: sig2.slice(0, 12),
-        });
-
-        const r2 = await fetch(`${CLOB}${path1}`, { method: method1, headers: hdrs2 });
-        const text2 = await r2.text();
-        const body2 = tryJson(text2);
-        apiKeysCheck = { ok: r2.ok, status: r2.status, body: body2 };
-
-        if (r2.ok) {
-          console.log('[API-KEYS-CHECK:A2] ✓ Alt format worked');
-          tradingEnabled = true;
-        } else {
-          console.error('[API-KEYS-CHECK:A2] ✗ Both formats failed:', r2.status, body2);
-        }
-      }
-    } catch (e: any) {
-      console.error('[API-KEYS-CHECK] Request failed:', e.message);
+    // Try owner address first, then funder if available
+    if (await tryApiKeys(ownerAddress)) {
+      tradingEnabled = true;
+    } else if (funderAddress && funderAddress !== ownerAddress && await tryApiKeys(funderAddress)) {
+      tradingEnabled = true;
     }
 
     // Step 2: Check ban-status (only if credentials are valid)
-    if (tradingEnabled) {
+    if (tradingEnabled && usedAddress) {
       const method2 = 'GET';
       const path2 = '/auth/ban-status/closed-only';
       const ts2 = Math.floor(Date.now() / 1000);
-      const preimage2 = `${method2}${path2}${ts2}`;
-      const sig2 = await hmacBase64(secret, preimage2);
-      
-      const hdrs2: Record<string, string> = {
+
+      // Standard ban-status
+      const preimageB1 = `${method2}${path2}${ts2}`;
+      const sigB1 = await hmacBase64(secret, preimageB1);
+      const hdrsB1: Record<string, string> = {
         'Accept': 'application/json',
-        'POLY_ADDRESS': ownerAddress,
+        'POLY_ADDRESS': usedAddress,
         'POLY_API_KEY': key,
         'POLY_PASSPHRASE': passphrase,
         'POLY_TIMESTAMP': ts2.toString(),
-        'POLY_SIGNATURE': sig2,
+        'POLY_SIGNATURE': sigB1,
       };
-
-      console.log('[BAN-STATUS-CHECK] Checking account status:', {
-        eoa: ownerAddress,
-        ts: ts2,
-      });
-
+      console.log('[BAN-STATUS-CHECK:B1]', { addr: usedAddress, ts: ts2 });
       try {
-        const r2 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrs2 });
-        const text2 = await r2.text();
-        const body2 = tryJson(text2);
-        banStatusCheck = { ok: r2.ok, status: r2.status, body: body2 };
-
-        if (r2.ok) {
-          closed_only = body2?.closed_only === true || body2?.closedOnly === true;
-          if (closed_only) {
-            tradingEnabled = false; // Account restricted
-            console.log('[BAN-STATUS-CHECK] ⚠️ Account in closed-only mode');
-          } else {
-            console.log('[BAN-STATUS-CHECK] ✓ Account unrestricted');
-          }
+        let rB1 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrsB1 });
+        let txtB1 = await rB1.text();
+        let bodyB1 = tryJson(txtB1);
+        if (rB1.ok) {
+          banStatusCheck = { ok: true, status: rB1.status, body: bodyB1 };
+          closed_only = bodyB1?.closed_only === true || bodyB1?.closedOnly === true;
+          if (closed_only) tradingEnabled = false;
         } else {
-          // If ban-status fails but api-keys worked, keep tradingEnabled=true with warning
-          console.warn('[BAN-STATUS-CHECK] ⚠️ Could not check ban status:', r2.status);
+          // Alt ban-status
+          const preimageB2 = `${ts2}${method2}${path2}`;
+          const sigB2 = await hmacBase64(secret, preimageB2);
+          const hdrsB2: Record<string, string> = { ...hdrsB1, POLY_SIGNATURE: sigB2 };
+          console.warn('[BAN-STATUS-CHECK:B1] Failed', rB1.status, bodyB1, 'retrying alt');
+          let rB2 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrsB2 });
+          let txtB2 = await rB2.text();
+          let bodyB2 = tryJson(txtB2);
+          banStatusCheck = { ok: rB2.ok, status: rB2.status, body: bodyB2 };
+          if (rB2.ok) {
+            closed_only = bodyB2?.closed_only === true || bodyB2?.closedOnly === true;
+            if (closed_only) tradingEnabled = false;
+          } else {
+            console.warn('[BAN-STATUS-CHECK] Could not verify ban status:', rB2.status);
+          }
         }
       } catch (e: any) {
         console.error('[BAN-STATUS-CHECK] Request failed:', e.message);
       }
     }
 
-    (globalThis as any).__PREIMAGE = apiKeysCheck.ok ? `${method1}${path1}${ts1}` : '';
+    (globalThis as any).__PREIMAGE = `${method1}${path1}${ts1}`;
 
     return out({
       hasKey,
@@ -271,6 +262,8 @@ serve(async (req) => {
       ownerMatch,
       closed_only,
       tradingEnabled,
+      usedAddress,
+      funderAddress,
       validation: {
         apiKeysCheck: {
           ok: apiKeysCheck.ok,
