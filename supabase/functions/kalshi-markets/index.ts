@@ -11,6 +11,16 @@ serve(async (req) => {
   }
 
   try {
+    // Parse JSON body (may be empty)
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch (_) {
+      body = {};
+    }
+    const includeParlays = !!body.includeParlays;
+    const diagnostics = !!body.diagnostics;
+
     console.log('[PUBLIC] Fetching Kalshi market data from public API - no authentication required');
 
     // Use public unauthenticated endpoint for market data
@@ -54,7 +64,16 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
+
+    const marketsRaw: any[] = Array.isArray(marketData.markets) ? marketData.markets : [];
+
+    // Diagnostics summary
+    const hasCommaCount = marketsRaw.filter((m: any) => ((m.title || '').toString().includes(','))).length;
+    const multiFlagCount = marketsRaw.filter((m: any) => /MULTIGAME|PARLAY|BUNDLE/i.test(m.ticker || '') || /MULTIGAME|PARLAY|BUNDLE/i.test(m.event_ticker || '')).length;
+    const singleGameFlagCount = marketsRaw.filter((m: any) => /SINGLEGAME/i.test(m.ticker || '') || /SINGLEGAME/i.test(m.event_ticker || '')).length;
+    const noCommaNoFlagCount = marketsRaw.filter((m: any) => !((m.title || '').toString().includes(',')) && !(/MULTIGAME|PARLAY|BUNDLE/i.test(m.ticker || '') || /MULTIGAME|PARLAY|BUNDLE/i.test(m.event_ticker || ''))).length;
+    console.log(`[PUBLIC][diag] total=${marketsRaw.length} hasComma=${hasCommaCount} multiFlags=${multiFlagCount} singleGameFlag=${singleGameFlagCount} noCommaNoFlag=${noCommaNoFlagCount}`);
+
     // Filter out parlay markets - only show single-leg markets
     const isParlay = (m: any): boolean => {
       const ticker: string = m.ticker || '';
@@ -62,17 +81,15 @@ serve(async (req) => {
       const title: string = (m.title || '').toString();
       const hasComma = title.includes(',');
       const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
-      // Treat as parlay if title lists multiple legs (comma-separated) or has explicit multi flags
-      // Allow SINGLEGAME as single-leg only when there is no comma in the title
       return hasComma || multiFlag;
     };
 
-    const singleLegMarkets = (marketData.markets || []).filter((market: any) => !isParlay(market));
+    const sourceList = includeParlays ? marketsRaw : marketsRaw.filter((market: any) => !isParlay(market));
     
-    console.log(`[PUBLIC] Filtered to ${singleLegMarkets.length} single-leg markets (parlays removed)`);
+    console.log(`[PUBLIC] Filtered to ${sourceList.length} single-leg markets (parlays ${includeParlays ? 'included' : 'removed'})`);
     
     // Normalize Kalshi markets to match our Market interface
-    const normalizedMarkets = (singleLegMarkets.map((market: any) => {
+    const normalizedMarkets = (sourceList.map((market: any) => {
       // Helpers to convert price from number or *_dollars string to integer cents
       const toCents = (num: unknown, dollars: unknown): number | null => {
         if (typeof num === 'number' && !isNaN(num)) return Math.round(num);
