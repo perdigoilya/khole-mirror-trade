@@ -707,31 +707,55 @@ const MarketDetail = () => {
               </div>
             </div>
 
-            {/* Title and Info */}
-            <div className={`mb-6 border-l-4 ${platformAccentClass} pl-4`}>
-              <div className="flex items-center gap-3 mb-3">
+            {/* Title Section */}
+            <div className="mb-6">
+              <div className="flex items-start gap-4 mb-4">
                 {market.image && (
                   <img 
                     src={market.image} 
                     alt={market.title}
-                    className="w-12 h-12 rounded-lg object-cover"
+                    className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
                   />
                 )}
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h1 className="text-2xl font-bold flex-1">{market.title}</h1>
-                    <Badge variant="outline" className={`${platformBadgeClass} text-sm px-3 py-1`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Badge variant="outline" className={`${platformBadgeClass} text-xs px-2.5 py-0.5`}>
                       {platformName}
                     </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {market.category}
+                    </Badge>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{market.volume} Vol.</span>
-                  </div>
+                  <h1 className="text-3xl font-bold mb-2">{market.title}</h1>
                 </div>
               </div>
+
+              {/* Market Metrics Card */}
+              <Card className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Volume</p>
+                    <p className="text-xl font-bold">{market.volume}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Liquidity</p>
+                    <p className="text-xl font-bold">{market.liquidity}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">End Date</p>
+                    <p className="text-xl font-bold">{new Date(market.endDate).toLocaleDateString()}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</p>
+                    <Badge variant={market.status === 'open' ? 'default' : 'secondary'} className="text-sm">
+                      {market.status}
+                    </Badge>
+                  </div>
+                </div>
+              </Card>
             </div>
 
             {/* Charts and Outcomes - Single column layout */}
@@ -749,14 +773,14 @@ const MarketDetail = () => {
                   return (
                   <Card key={outcome.id} className="overflow-hidden">
                     {/* Outcome Header */}
-                    <div className="p-3 border-b border-border">
-                      <div className="flex items-center justify-between">
+                    <div className="p-4 border-b border-border">
+                      <div className="flex items-start gap-4 mb-4">
                         <div className="flex items-center gap-3 flex-1">
                           {outcome.image ? (
                             <img 
                               src={outcome.image}
                               alt={outcome.title}
-                              className="w-10 h-10 rounded object-cover"
+                              className="w-12 h-12 rounded object-cover flex-shrink-0"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                                 const fallback = e.currentTarget.nextElementSibling as HTMLElement;
@@ -765,41 +789,45 @@ const MarketDetail = () => {
                             />
                           ) : null}
                           <div 
-                            className={`w-10 h-10 rounded flex items-center justify-center font-bold text-background text-sm ${colorClasses[idx % 4]} ${outcome.image ? 'hidden' : ''}`}
+                            className={`w-12 h-12 rounded flex items-center justify-center font-bold text-background ${colorClasses[idx % 4]} ${outcome.image ? 'hidden' : ''}`}
                           >
                             {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-sm mb-1">{outcome.title}</h3>
-                            <p className="text-xs text-muted-foreground">{outcome.volume} Vol.</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-emerald-400">
-                              {(typeof outcome.yesPrice === 'number' && outcome.yesPrice > 0) ? `${outcome.yesPrice}%` : '—'}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-base mb-1">{outcome.title}</h3>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>{outcome.volume} Vol.</span>
+                              {outcome.liquidity && <span>{outcome.liquidity} Liq.</span>}
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm"
-                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              onClick={() => {
-                                setSelectedSubMarket(outcome);
-                                handleTrade(outcome.title, 'yes', outcome.yesPrice || 50);
-                              }}
-                            >
-                              Buy {(typeof outcome.yesPrice === 'number' && outcome.yesPrice > 0) ? `${outcome.yesPrice}¢` : '—'}
-                            </Button>
-                            <Button 
-                              size="sm"
-                              variant="outline"
-                              onClick={() => navigate(`/market/${outcome.id}`, { state: { market: outcome }})}
-                            >
-                              <ExternalLink className="h-4 w-4" />
-                            </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Current Price</p>
+                          <div className="text-3xl font-bold text-emerald-400">
+                            {(typeof outcome.yesPrice === 'number' && outcome.yesPrice > 0) ? `${outcome.yesPrice}¢` : '—'}
                           </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="default"
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                            onClick={() => {
+                              setSelectedSubMarket(outcome);
+                              handleTrade(outcome.title, 'yes', outcome.yesPrice || 50);
+                            }}
+                          >
+                            Buy {(typeof outcome.yesPrice === 'number' && outcome.yesPrice > 0) ? `${outcome.yesPrice}¢` : '—'}
+                          </Button>
+                          <Button 
+                            size="default"
+                            variant="outline"
+                            onClick={() => navigate(`/market/${outcome.id}`, { state: { market: outcome }})}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
