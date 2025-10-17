@@ -56,11 +56,14 @@ const Markets = () => {
   
   // Debounce timer
   const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const userSelectedPlatformRef = useRef(false);
+  const autoSwitchedRef = useRef(false);
 
 useEffect(() => {
-  // Auto-switch to Kalshi when connected
-  if (isKalshiConnected && kalshiCredentials && platform !== 'kalshi') {
+  // Auto-switch to Kalshi once when connected, unless user chose a platform
+  if (isKalshiConnected && kalshiCredentials && platform !== 'kalshi' && !userSelectedPlatformRef.current && !autoSwitchedRef.current) {
     setPlatform('kalshi');
+    autoSwitchedRef.current = true;
     return; // wait for next render to fetch
   }
 
@@ -344,7 +347,7 @@ useEffect(() => {
     const noLabel = typeof n === 'number' ? `${n}¢` : '—';
     
     // Platform-specific styling
-    const isKalshi = platform === 'kalshi';
+    const isKalshi = (market.provider || platform) === 'kalshi';
     const platformBadgeClass = isKalshi 
       ? "bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30" 
       : "bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30";
@@ -650,7 +653,7 @@ useEffect(() => {
                   className={platform === 'polymarket' 
                     ? 'bg-polymarket-purple hover:bg-polymarket-purple-dark text-white' 
                     : 'text-muted-foreground hover:text-foreground'}
-                  onClick={() => setPlatform('polymarket')}
+                  onClick={() => { userSelectedPlatformRef.current = true; setPlatform('polymarket'); }}
                 >
                   <img 
                     src={polymarketLogo} 
@@ -681,6 +684,7 @@ useEffect(() => {
                         ),
                       });
                     } else {
+                      userSelectedPlatformRef.current = true;
                       setPlatform('kalshi');
                     }
                   }}
