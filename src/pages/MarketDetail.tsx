@@ -40,6 +40,7 @@ interface Market {
   liquidityRaw: number;
   clobTokenId?: string;
   ticker?: string;
+  eventTicker?: string;
   isMultiOutcome?: boolean;
   subMarkets?: Market[];
 }
@@ -75,13 +76,21 @@ const MarketDetail = () => {
     : "bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30";
   const platformAccentClass = isKalshi ? "border-kalshi-teal" : "border-polymarket-purple";
   const platformName = isKalshi ? "Kalshi" : "Polymarket";
-  
-  const displayTitle = useMemo(() => {
+
+  const kalshiLegs = useMemo(() => {
+    if (!isKalshi) return [] as string[];
     const raw = (selectedSubMarket || market)?.title || '';
-    if (!raw || !isKalshi) return raw;
-    // For Kalshi: Clean up "yes/no" prefixes
-    return raw.replace(/\b(yes|no)\s+/gi, '').trim();
-  }, [market, selectedSubMarket, isKalshi]);
+    const cleaned = raw.replace(/\b(yes|no)\s+/gi, '').trim();
+    return cleaned.split(',').map(s => s.trim()).filter(Boolean);
+  }, [isKalshi, market, selectedSubMarket]);
+
+  const displayTitle = useMemo(() => {
+    if (isKalshi) {
+      return kalshiLegs[0] || ((selectedSubMarket || market)?.title || '');
+    }
+    const raw = (selectedSubMarket || market)?.title || '';
+    return raw;
+  }, [isKalshi, kalshiLegs, market, selectedSubMarket]);
 
   const marketDetailCacheRef = useRef<Map<string, { market: Market, timestamp: number }>>(new Map());
   const CACHE_DURATION = 60000; // 60 seconds
@@ -734,6 +743,20 @@ const MarketDetail = () => {
                     </Badge>
                   </div>
                   <h1 className="text-3xl font-bold mb-2">{displayTitle}</h1>
+                  {isKalshi && (market.eventTicker) && (
+                    <div className="mt-1">
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/kalshi/event/${market.eventTicker}`)}>
+                        View all markets in this event
+                      </Button>
+                    </div>
+                  )}
+                  {isKalshi && (market.eventTicker) && (
+                    <div className="mt-1">
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/kalshi/event/${market.eventTicker}`)}>
+                        View all markets in this event
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -760,6 +783,19 @@ const MarketDetail = () => {
                   </div>
                 </div>
               </Card>
+
+              {isKalshi && kalshiLegs.length > 1 && (
+                <Card className="mt-4 p-6">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">Legs</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm">
+                      {kalshiLegs.map((leg, idx) => (
+                        <li key={idx}>{leg}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </Card>
+              )}
             </div>
 
             {/* Charts and Outcomes - Single column layout */}
