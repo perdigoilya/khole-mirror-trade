@@ -143,15 +143,22 @@ serve(async (req) => {
     }
     
     // Normalize Kalshi markets to match our Market interface
-    const normalizedMarkets = marketData.markets?.map((market: any) => {
-      // Kalshi returns prices as percentages (0-100), not cents
-      // yes_bid is the current bid price for YES outcome as a percentage
-      const yesPrice = market.yes_bid ?? market.last_price ?? 50;
-      const noPrice = 100 - yesPrice;
+    const normalizedMarkets = (marketData.markets?.map((market: any) => {
+      // Prefer actionable buy prices (asks). Fallback to last or bid. All in cents (0-100)
+      const yesAsk = typeof market.yes_ask === 'number' ? market.yes_ask : undefined;
+      const yesBid = typeof market.yes_bid === 'number' ? market.yes_bid : undefined;
+      const noAsk = typeof market.no_ask === 'number' ? market.no_ask : undefined;
+      const last = typeof market.last_price === 'number' ? market.last_price : undefined;
       
-      // Volume and liquidity are in cents, convert to dollars
-      const volumeCents = market.volume_24h || market.volume || 0;
-      const liquidityCents = market.liquidity || market.open_interest || 0;
+      let yesPrice = yesAsk ?? last ?? yesBid ?? (typeof noAsk === 'number' ? 100 - noAsk : undefined) ?? 50;
+      yesPrice = Math.round(yesPrice);
+      const noPrice = typeof noAsk === 'number' ? Math.round(noAsk) : (100 - yesPrice);
+      
+      // Volumes: use 24h contracts count (not dollars). Liquidity: use provided dollars when available
+      const volumeContracts = Number(market.volume_24h ?? market.volume ?? 0) || 0;
+      const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : (
+        typeof market.liquidity === 'number' ? market.liquidity / 100 : (typeof market.open_interest === 'number' ? market.open_interest / 100 : 0)
+      );
       
       return {
         id: market.ticker,
@@ -159,12 +166,12 @@ serve(async (req) => {
         subtitle: market.subtitle,
         description: market.subtitle || market.title,
         image: undefined, // Kalshi doesn't provide market images
-        yesPrice: yesPrice,
-        noPrice: noPrice,
-        volume: volumeCents > 0 ? `$${(volumeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        liquidity: liquidityCents > 0 ? `$${(liquidityCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: volumeCents / 100,
-        liquidityRaw: liquidityCents / 100,
+        yesPrice,
+        noPrice,
+        volume: volumeContracts > 0 ? `${volumeContracts.toLocaleString('en-US')} contracts` : '—',
+        liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+        volumeRaw: volumeContracts, // contracts count for sorting
+        liquidityRaw: liquidityDollars, // dollars for sorting
         endDate: market.close_time || market.expiration_time || new Date().toISOString(),
         status: market.status === 'active' ? 'Active' : market.status === 'closed' ? 'Closed' : market.status || 'Active',
         category: market.category || 'General',
@@ -174,7 +181,12 @@ serve(async (req) => {
         clobTokenId: market.ticker,
         isMultiOutcome: false,
       };
-    }) || [];
+    }) || []).filter((m: any) => {
+      // Keep only active/meaningful markets
+      const active = (m.status || 'Active').toLowerCase() === 'active';
+      const hasActivity = (m.volumeRaw || 0) > 0 || (m.liquidityRaw || 0) > 0;
+      return active && hasActivity;
+    });
     
     // Group markets by event_ticker (similar to Polymarket's multi-outcome markets)
     const eventGroups = new Map<string, any[]>();

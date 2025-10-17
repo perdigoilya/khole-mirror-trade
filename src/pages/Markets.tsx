@@ -249,8 +249,12 @@ useEffect(() => {
     return result;
   }, [markets, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
   
-  // Group related markets into topics (e.g., Super Bowl 2026)
   const groupedMarkets = React.useMemo(() => {
+    // For Kalshi, the backend response is already event-grouped. Avoid re-grouping here.
+    if (platform === 'kalshi' || filteredAndSortedMarkets.some((m: any) => Array.isArray(m?.subMarkets) && m.subMarkets.length > 0)) {
+      return filteredAndSortedMarkets;
+    }
+
     const groups = new Map<string, any[]>();
 
     const extractTopic = (title: string): string | null => {
@@ -286,7 +290,7 @@ useEffect(() => {
 
     // Preserve overall sorting (already volume-sorted in filteredAndSortedMarkets)
     return result;
-  }, [filteredAndSortedMarkets]);
+  }, [filteredAndSortedMarkets, platform]);
   
   // Get unique categories from markets
   const categories = React.useMemo(() => {
