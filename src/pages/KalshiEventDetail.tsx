@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, TrendingUp, DollarSign } from "lucide-react";
 import Footer from "@/components/Footer";
+import { MarketChart } from "@/components/MarketChart";
 import kalshiSportsImg from "@/assets/kalshi-sports.png";
 import kalshiPoliticsImg from "@/assets/kalshi-politics.png";
 import kalshiEconomicsImg from "@/assets/kalshi-economics.png";
@@ -48,6 +49,8 @@ interface EventDetail {
   description?: string;
   category: string;
   rules: string;
+  image?: string | null;
+  headlineTicker?: string | null;
   markets: Market[];
   totalVolume: string;
   totalLiquidity: string;
@@ -103,7 +106,7 @@ export default function KalshiEventDetail() {
     );
   }
 
-  const categoryImage = getKalshiCategoryImage(event.category);
+  const categoryImage = event.image || getKalshiCategoryImage(event.category);
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
@@ -169,9 +172,19 @@ export default function KalshiEventDetail() {
                 </Card>
               </div>
 
-              {/* Right Column - Outcomes */}
-              <div className="lg:col-span-2">
-                <div className="mb-4">
+              {/* Right Column - Chart + Outcomes */}
+              <div className="lg:col-span-2 space-y-4">
+                {/* Price History Chart for Headline Market */}
+                {event.headlineTicker && (
+                  <Card className="p-4">
+                    <h2 className="text-sm font-medium mb-3">Price History</h2>
+                    <div className="h-64 w-full">
+                      <MarketChart marketId={event.headlineTicker} timeRange="ALL" provider="kalshi" />
+                    </div>
+                  </Card>
+                )}
+
+                <div className="mb-2">
                   <h2 className="text-xl font-bold mb-1">Available Outcomes</h2>
                   <p className="text-sm text-muted-foreground">
                     Select an outcome to trade • {event.markets.length} options available
