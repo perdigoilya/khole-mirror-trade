@@ -47,10 +47,13 @@ const Portfolio = () => {
   const { toast } = useToast();
   const { address, isConnected } = useAccount();
   const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'history'>('overview');
+  const [platformTab, setPlatformTab] = useState<'kalshi' | 'polymarket'>('polymarket');
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [kalshiPositions, setKalshiPositions] = useState<Position[]>([]);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
+  const [kalshiSummary, setKalshiSummary] = useState<PortfolioSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
 
@@ -76,7 +79,7 @@ const Portfolio = () => {
         throw new Error("No active session");
       }
 
-      console.log("Fetching portfolio data...");
+      console.log("Fetching Polymarket portfolio data...");
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-portfolio`,
@@ -94,7 +97,7 @@ const Portfolio = () => {
       }
 
       const data = await response.json();
-      console.log("Portfolio data received:", data);
+      console.log("Polymarket portfolio data received:", data);
 
       if (data.error) {
         throw new Error(data.error);
@@ -111,19 +114,60 @@ const Portfolio = () => {
 
       if (data.positions && data.positions.length > 0) {
         toast({
-          title: "Portfolio loaded",
+          title: "Polymarket portfolio loaded",
           description: `Found ${data.positions.length} active position${data.positions.length > 1 ? 's' : ''}`,
-        });
-      } else {
-        toast({
-          title: "Portfolio loaded",
-          description: "No active positions found",
         });
       }
     } catch (error: any) {
-      console.error("Error fetching portfolio:", error);
+      console.error("Error fetching Polymarket portfolio:", error);
       toast({
-        title: "Error loading portfolio",
+        title: "Error loading Polymarket portfolio",
+        description: error.message || "Failed to load portfolio data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchKalshiPortfolio = async () => {
+    if (!user || !isKalshiConnected) return;
+
+    setLoading(true);
+    try {
+      console.log("Fetching Kalshi portfolio data...");
+
+      const { data, error } = await supabase.functions.invoke('kalshi-portfolio');
+
+      if (error) {
+        throw error;
+      }
+
+      console.log("Kalshi portfolio data received:", data);
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setKalshiPositions(data.positions || []);
+      setKalshiSummary(data.summary || {
+        totalValue: 0,
+        totalPnl: 0,
+        totalRealizedPnl: 0,
+        activePositions: 0,
+        totalInvested: 0,
+      });
+
+      if (data.positions && data.positions.length > 0) {
+        toast({
+          title: "Kalshi portfolio loaded",
+          description: `Found ${data.positions.length} active position${data.positions.length > 1 ? 's' : ''}`,
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching Kalshi portfolio:", error);
+      toast({
+        title: "Error loading Kalshi portfolio",
         description: error.message || "Failed to load portfolio data",
         variant: "destructive",
       });
@@ -137,6 +181,26 @@ const Portfolio = () => {
       fetchPortfolio();
     }
   }, [user, isPolymarketConnected]);
+
+  useEffect(() => {
+    if (user && isKalshiConnected) {
+      fetchKalshiPortfolio();
+    }
+  }, [user, isKalshiConnected]);
+
+  // Set default platform tab based on what's connected
+  useEffect(() => {
+    if (isKalshiConnected && !isPolymarketConnected) {
+      setPlatformTab('kalshi');
+    } else if (isPolymarketConnected && !isKalshiConnected) {
+      setPlatformTab('polymarket');
+    }
+  }, [isKalshiConnected, isPolymarketConnected]);
+
+  // Get current platform data
+  const currentPositions = platformTab === 'kalshi' ? kalshiPositions : positions;
+  const currentSummary = platformTab === 'kalshi' ? kalshiSummary : summary;
+  const isPlatformConnected = platformTab === 'kalshi' ? isKalshiConnected : isPolymarketConnected;
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
@@ -244,6 +308,30 @@ const Portfolio = () => {
             ) : (
               // Has connections - show portfolio data
               <div className="space-y-6">
+                {/* Platform Selector */}
+                {(isKalshiConnected || isPolymarketConnected) && (
+                  <Tabs value={platformTab} onValueChange={(v) => setPlatformTab(v as 'kalshi' | 'polymarket')}>
+                    <TabsList className="grid w-full max-w-md grid-cols-2">
+                      <TabsTrigger 
+                        value="kalshi" 
+                        disabled={!isKalshiConnected}
+                        className="data-[state=active]:bg-kalshi-teal data-[state=active]:text-white"
+                      >
+                        Kalshi
+                        {!isKalshiConnected && <Badge variant="secondary" className="ml-2 text-xs">Not Connected</Badge>}
+                      </TabsTrigger>
+                      <TabsTrigger 
+                        value="polymarket" 
+                        disabled={!isPolymarketConnected}
+                        className="data-[state=active]:bg-polymarket-purple data-[state=active]:text-white"
+                      >
+                        Polymarket
+                        {!isPolymarketConnected && <Badge variant="secondary" className="ml-2 text-xs">Not Connected</Badge>}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                )}
+
                 {/* Chain Selector and Refresh */}
                 <div className="flex justify-between items-center gap-4">
                   <Tabs value={selectedChain.toString()} onValueChange={(v) => setSelectedChain(Number(v))} className="flex-1">
@@ -259,7 +347,11 @@ const Portfolio = () => {
                     variant="outline" 
                     size="sm"
                     onClick={() => {
-                      fetchPortfolio();
+                      if (platformTab === 'kalshi') {
+                        fetchKalshiPortfolio();
+                      } else {
+                        fetchPortfolio();
+                      }
                       refetchBalance();
                     }}
                     disabled={loading}
@@ -270,33 +362,54 @@ const Portfolio = () => {
                 </div>
 
                 {/* Wallet Information Card */}
-                <Card className="p-6 border-l-4 border-l-primary">
+                <Card className={`p-6 border-l-4 ${platformTab === 'kalshi' ? 'border-l-kalshi-teal' : 'border-l-polymarket-purple'}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Wallet className="h-5 w-5 text-primary" />
-                      <h3 className="font-semibold">Connected Wallet</h3>
+                      <h3 className="font-semibold">Connected Account</h3>
                     </div>
-                    <Badge variant="secondary">
-                      {isPolymarketConnected ? "Polymarket" : "Kalshi"}
+                    <Badge 
+                      variant="secondary"
+                      className={platformTab === 'kalshi' 
+                        ? 'bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30' 
+                        : 'bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30'
+                      }
+                    >
+                      {platformTab === 'kalshi' ? "Kalshi" : "Polymarket"}
                     </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Wallet Address
-                  </p>
-                  <p className="font-mono text-sm mb-4">
-                    {polymarketCredentials?.walletAddress 
-                      ? `${polymarketCredentials.walletAddress.slice(0, 6)}...${polymarketCredentials.walletAddress.slice(-4)}`
-                      : "Not connected"}
-                  </p>
-                  {isPolymarketConnected && !isConnected && (
-                    <div className="bg-muted p-3 rounded-lg">
-                      <p className="text-xs text-muted-foreground mb-2">
-                        <strong>Note:</strong> Currently showing Polymarket trading positions only.
+                  {platformTab === 'polymarket' ? (
+                    <>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Wallet Address
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        To see your on-chain wallet balance, connect via WalletConnect button in navigation.
+                      <p className="font-mono text-sm mb-4">
+                        {polymarketCredentials?.walletAddress 
+                          ? `${polymarketCredentials.walletAddress.slice(0, 6)}...${polymarketCredentials.walletAddress.slice(-4)}`
+                          : "Not connected"}
                       </p>
-                    </div>
+                      {isPolymarketConnected && !isConnected && (
+                        <div className="bg-muted p-3 rounded-lg">
+                          <p className="text-xs text-muted-foreground mb-2">
+                            <strong>Note:</strong> Currently showing Polymarket trading positions only.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            To see your on-chain wallet balance, connect via WalletConnect button in navigation.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Connected via API Key
+                      </p>
+                      <div className="bg-muted p-3 rounded-lg">
+                        <p className="text-xs text-muted-foreground">
+                          Kalshi positions are fetched using your API credentials
+                        </p>
+                      </div>
+                    </>
                   )}
                 </Card>
 
@@ -320,13 +433,13 @@ const Portfolio = () => {
                   </Card>
                 )}
 
-                {/* Portfolio Summary Cards - Polymarket Trading Positions */}
-                {summary && (
+                {/* Portfolio Summary Cards */}
+                {currentSummary && (
                   <>
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-semibold">Polymarket Positions</h3>
-                        <p className="text-sm text-muted-foreground">Trading activity from Polymarket API</p>
+                        <h3 className="text-lg font-semibold">{platformTab === 'kalshi' ? 'Kalshi' : 'Polymarket'} Positions</h3>
+                        <p className="text-sm text-muted-foreground">Trading activity from {platformTab === 'kalshi' ? 'Kalshi' : 'Polymarket'} API</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -338,23 +451,23 @@ const Portfolio = () => {
                         </Badge>
                       </div>
                       <p className="text-2xl font-bold text-foreground mb-1">
-                        ${summary?.totalValue?.toFixed(2) || '0.00'}
+                        ${currentSummary?.totalValue?.toFixed(2) || '0.00'}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Initial: ${summary?.totalInvested?.toFixed(2) || '0.00'}
+                        Initial: ${currentSummary?.totalInvested?.toFixed(2) || '0.00'}
                       </p>
                     </Card>
                     
                     <Card className="p-6">
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-sm text-muted-foreground">Total P&L</p>
-                        <TrendingUp className={`h-4 w-4 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                        <TrendingUp className={`h-4 w-4 ${(currentSummary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} />
                       </div>
-                      <p className={`text-2xl font-bold mb-1 ${(summary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {(summary?.totalPnl || 0) >= 0 ? '+' : ''}${summary?.totalPnl?.toFixed(2) || '0.00'}
+                      <p className={`text-2xl font-bold mb-1 ${(currentSummary?.totalPnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {(currentSummary?.totalPnl || 0) >= 0 ? '+' : ''}${currentSummary?.totalPnl?.toFixed(2) || '0.00'}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Realized: ${summary?.totalRealizedPnl?.toFixed(2) || '0.00'}
+                        Realized: ${currentSummary?.totalRealizedPnl?.toFixed(2) || '0.00'}
                       </p>
                     </Card>
                     
@@ -364,7 +477,7 @@ const Portfolio = () => {
                         <BarChart3 className="h-4 w-4 text-primary" />
                       </div>
                       <p className="text-2xl font-bold text-foreground mb-1">
-                        {summary?.activePositions || 0}
+                        {currentSummary?.activePositions || 0}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Open markets
@@ -375,7 +488,7 @@ const Portfolio = () => {
                 )}
 
                 {/* Positions List */}
-                {positions.length === 0 ? (
+                {currentPositions.length === 0 ? (
                   <Card className="p-10 text-center">
                     <div className="max-w-md mx-auto">
                       <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
@@ -383,7 +496,7 @@ const Portfolio = () => {
                         No positions yet
                       </h3>
                       <p className="text-sm text-muted-foreground mb-4">
-                        Start trading on Polymarket to see your positions here
+                        Start trading on {platformTab === 'kalshi' ? 'Kalshi' : 'Polymarket'} to see your positions here
                       </p>
                       <Button onClick={() => window.location.href = '/markets'}>
                         Browse Markets
@@ -397,7 +510,7 @@ const Portfolio = () => {
                       <p className="text-sm text-muted-foreground">Your active market positions</p>
                     </div>
                     <div className="divide-y">
-                      {positions.map((position, index) => (
+                      {currentPositions.map((position, index) => (
                         <div key={index} className="p-6 hover:bg-muted/50 transition-colors">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
