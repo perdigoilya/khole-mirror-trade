@@ -56,16 +56,21 @@ serve(async (req) => {
     }
     
     // Filter out parlay markets - only show single-leg markets
-    // Parlay markets have multiple comma-separated conditions in their title
-    const singleLegMarkets = marketData.markets?.filter((market: any) => {
-      const title = market.title || '';
+    // Heuristics: multiple yes/no legs separated by commas OR event tickers that indicate multi-game bundles
+    const isParlay = (m: any): boolean => {
+      const ticker: string = m.ticker || '';
+      const eventTicker: string = m.event_ticker || '';
+      const title: string = (m.title || '').toString();
       const cleaned = title.replace(/\b(yes|no)\s+/gi, '').trim();
-      const conditions = cleaned.split(',').map((s: string) => s.trim()).filter(Boolean);
-      // Only keep markets with exactly 1 condition (single-leg markets)
-      return conditions.length === 1;
-    }) || [];
+      const parts = cleaned.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const yesNoCount = (title.match(/\b(yes|no)\b/gi) || []).length;
+      const hasMultiGameFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
+      return hasMultiGameFlag || parts.length > 1 || yesNoCount > 1;
+    };
+
+    const singleLegMarkets = (marketData.markets || []).filter((market: any) => !isParlay(market));
     
-    console.log(`[PUBLIC] Filtered to ${singleLegMarkets.length} single-leg markets (removed parlays)`);
+    console.log(`[PUBLIC] Filtered to ${singleLegMarkets.length} single-leg markets (parlays removed)`);
     
     // Normalize Kalshi markets to match our Market interface
     const normalizedMarkets = (singleLegMarkets.map((market: any) => {
