@@ -27,14 +27,7 @@ export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' 
 
   useEffect(() => {
     const fetchPriceHistory = async () => {
-      // For Kalshi markets, show a placeholder message (price history not yet implemented)
-      if (provider === 'kalshi') {
-        setLoading(false);
-        setError("Price history for Kalshi markets coming soon");
-        return;
-      }
-
-      const cacheKey = `${marketId}-${timeRange}`;
+      const cacheKey = `${marketId}-${timeRange}-${provider}`;
       
       // Check cache first
       const cached = cacheRef.current.get(cacheKey);
@@ -47,8 +40,10 @@ export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' 
       setLoading(true);
       setError(null);
       try {
+        const functionName = provider === 'kalshi' ? 'kalshi-price-history' : 'polymarket-price-history';
+        
         const { data: result, error: fetchError } = await supabase.functions.invoke(
-          'polymarket-price-history',
+          functionName,
           {
             body: { marketId, timeRange }
           }

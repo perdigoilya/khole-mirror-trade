@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.kalshi-events]
 verify_jwt = false
 
+[functions.kalshi-price-history]
+verify_jwt = false
+
 [functions.kalshi-portfolio]
 verify_jwt = false
 
