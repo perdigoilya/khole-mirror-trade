@@ -118,61 +118,17 @@ serve(async (req) => {
       };
     }) || []);
     
-    // Sort by trending (volume_24h DESC) first
-    const sortedMarkets = normalizedMarkets.sort((a: any, b: any) => b.volumeRaw - a.volumeRaw);
+    // Each Kalshi market is an independent binary market
+    // Do NOT group by eventTicker - treat each ticker as a separate market
+    const sortedMarkets = normalizedMarkets.sort((a: any, b: any) => 
+      (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0)
+    );
     
-    // Group markets by event_ticker for multi-outcome events
-    const eventGroups = new Map<string, any[]>();
-    const standaloneMarkets: any[] = [];
-    
-    for (const market of sortedMarkets) {
-      if (market.eventTicker) {
-        if (!eventGroups.has(market.eventTicker)) {
-          eventGroups.set(market.eventTicker, []);
-        }
-        eventGroups.get(market.eventTicker)!.push(market);
-      } else {
-        standaloneMarkets.push(market);
-      }
-    }
-    
-    // Convert event groups to multi-outcome markets ONLY if multiple markets per event
-    const groupedMarkets: any[] = [];
-    
-    for (const [eventTicker, markets] of eventGroups.entries()) {
-      if (markets.length > 1) {
-        // TRUE multi-outcome event - multiple markets under same event
-        const mainMarket = markets[0]; // Already sorted by volume
-        const subMarkets = markets.slice(1);
-        
-        // Extract event name from title (remove "Will X" part if present)
-        let eventTitle = mainMarket.title;
-        const match = eventTitle.match(/^Will .+ (win|be|have|reach|exceed|get) (.+)\?/i);
-        if (match) {
-          eventTitle = match[2];
-        }
-        
-        groupedMarkets.push({
-          ...mainMarket,
-          id: eventTicker,
-          title: eventTitle,
-          isMultiOutcome: true,
-          subMarkets: subMarkets,
-        });
-      } else {
-        // Single market - NOT multi-outcome
-        groupedMarkets.push({ ...markets[0], isMultiOutcome: false });
-      }
-    }
-    
-    const finalMarkets = [...groupedMarkets, ...standaloneMarkets]
-      .sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0));
-    
-    console.log(`[PUBLIC] Returning ${finalMarkets.length} formatted markets`);
+    console.log(`[PUBLIC] Returning ${sortedMarkets.length} independent markets`);
     
     return new Response(
       JSON.stringify({ 
-        markets: finalMarkets,
+        markets: sortedMarkets,
         cursor: marketData.cursor 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

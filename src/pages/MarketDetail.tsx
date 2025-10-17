@@ -78,12 +78,10 @@ const MarketDetail = () => {
   
   const displayTitle = useMemo(() => {
     const raw = (selectedSubMarket || market)?.title || '';
-    if (!raw) return '';
-    const cleaned = raw.replace(/\b(yes|no)\s+/gi, '').trim();
-    const parts = cleaned.split(',').map(s => s.trim()).filter(Boolean);
-    if (parts.length <= 2) return cleaned;
-    return `${parts.slice(0, 2).join(', ')} +${parts.length - 2} more`;
-  }, [market, selectedSubMarket]);
+    if (!raw || !isKalshi) return raw;
+    // For Kalshi: Clean up "yes/no" prefixes
+    return raw.replace(/\b(yes|no)\s+/gi, '').trim();
+  }, [market, selectedSubMarket, isKalshi]);
 
   const marketDetailCacheRef = useRef<Map<string, { market: Market, timestamp: number }>>(new Map());
   const CACHE_DURATION = 60000; // 60 seconds
