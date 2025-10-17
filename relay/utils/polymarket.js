@@ -46,10 +46,14 @@ export async function attemptTrade(address, apiKey, secret, passphrase, signedOr
   console.log(`→ Attempting trade with address ${address.slice(0, 6)}...${address.slice(-4)}`);
   
   try {
+    // Add more browser-like fetch options to bypass Cloudflare
     const response = await fetch(`${CLOB_BASE_URL}/order`, {
       method: 'POST',
       headers,
-      body
+      body,
+      // Browser-like options
+      redirect: 'follow',
+      referrerPolicy: 'strict-origin-when-cross-origin'
     });
     
     const responseText = await response.text();
