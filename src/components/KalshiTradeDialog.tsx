@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useTrading } from "@/contexts/TradingContext";
 import { Loader2 } from "lucide-react";
 
 interface KalshiTradeDialogProps {
@@ -29,6 +30,7 @@ export function KalshiTradeDialog({
   const [limitPrice, setLimitPrice] = useState<string>(currentPrice.toString());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { kalshiCredentials } = useTrading();
 
   const calculateTotal = () => {
     const qty = parseInt(quantity) || 0;
@@ -39,6 +41,16 @@ export function KalshiTradeDialog({
   const handleTrade = async () => {
     try {
       setIsSubmitting(true);
+
+      // Check if credentials are available
+      if (!kalshiCredentials) {
+        toast({
+          title: "Not Connected",
+          description: "Please connect your Kalshi account first",
+          variant: "destructive",
+        });
+        return;
+      }
 
       const count = parseInt(quantity);
       if (isNaN(count) || count <= 0) {
@@ -62,15 +74,29 @@ export function KalshiTradeDialog({
         }
       }
 
+      // Map side to action and kalshi side
+      // side 'buy' -> action: 'buy', side: 'yes'
+      // side 'sell' -> action: 'sell', side: 'no'
+      const kalshiAction = side;
+      const kalshiSide = side === 'buy' ? 'yes' : 'no';
+
       const payload: any = {
+        apiKeyId: kalshiCredentials.apiKeyId,
+        privateKey: kalshiCredentials.privateKey,
         ticker: marketTicker,
-        action: side,
-        type: orderType,
+        action: kalshiAction,
+        side: kalshiSide,
         count,
+        type: orderType,
       };
 
       if (orderType === "limit") {
-        payload.yes_price = parseFloat(limitPrice);
+        // For limit orders, set the price based on which side we're buying
+        if (kalshiSide === 'yes') {
+          payload.yesPrice = Math.round(parseFloat(limitPrice));
+        } else {
+          payload.noPrice = Math.round(parseFloat(limitPrice));
+        }
       }
 
       console.log("Submitting Kalshi trade:", payload);
