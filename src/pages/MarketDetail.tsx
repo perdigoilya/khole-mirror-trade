@@ -75,6 +75,15 @@ const MarketDetail = () => {
     : "bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30";
   const platformAccentClass = isKalshi ? "border-kalshi-teal" : "border-polymarket-purple";
   const platformName = isKalshi ? "Kalshi" : "Polymarket";
+  
+  const displayTitle = useMemo(() => {
+    const raw = (selectedSubMarket || market)?.title || '';
+    if (!raw) return '';
+    const cleaned = raw.replace(/\b(yes|no)\s+/gi, '').trim();
+    const parts = cleaned.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length <= 2) return cleaned;
+    return `${parts.slice(0, 2).join(', ')} +${parts.length - 2} more`;
+  }, [market, selectedSubMarket]);
 
   const marketDetailCacheRef = useRef<Map<string, { market: Market, timestamp: number }>>(new Map());
   const CACHE_DURATION = 60000; // 60 seconds
@@ -108,12 +117,9 @@ const MarketDetail = () => {
       
       let result;
       if (provider === 'kalshi') {
-        // Fetch Kalshi market using credentials
-        if (!kalshiCredentials) {
-          throw new Error('Kalshi credentials not found');
-        }
+        // Fetch Kalshi market using PUBLIC endpoint (no credentials)
         result = await supabase.functions.invoke('kalshi-markets', {
-          body: kalshiCredentials
+          body: {}
         });
       } else {
         // Fetch Polymarket market
@@ -729,7 +735,7 @@ const MarketDetail = () => {
                       {market.category}
                     </Badge>
                   </div>
-                  <h1 className="text-3xl font-bold mb-2">{market.title}</h1>
+                  <h1 className="text-3xl font-bold mb-2">{displayTitle}</h1>
                 </div>
               </div>
 
@@ -794,7 +800,7 @@ const MarketDetail = () => {
                             {outcome.title.split(':')[0].slice(0, 3).toUpperCase()}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-base mb-1">{outcome.title}</h3>
+                            <h3 className="font-semibold text-base mb-1">{outcome.title.replace(/\b(yes|no)\s+/gi, '').trim()}</h3>
                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
                               <span>{outcome.volume} Vol.</span>
                               {outcome.liquidity && <span>{outcome.liquidity} Liq.</span>}
@@ -853,11 +859,17 @@ const MarketDetail = () => {
                       </div>
                     </div>
                     <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
-                      <MarketChart 
-                        marketId={outcome.clobTokenId || outcome.id} 
-                        timeRange={timeRange}
-                        provider={market.provider}
-                      />
+                      {market.provider === 'kalshi' ? (
+                        <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                          Price history for Kalshi markets coming soon
+                        </div>
+                      ) : (
+                        <MarketChart 
+                          marketId={outcome.clobTokenId || outcome.id} 
+                          timeRange={timeRange}
+                          provider={market.provider}
+                        />
+                      )}
                     </div>
                   </Card>
                   );
@@ -887,11 +899,17 @@ const MarketDetail = () => {
                     </div>
                     
                     <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
-                      <MarketChart 
-                        marketId={market.clobTokenId || market.id} 
-                        timeRange={timeRange}
-                        provider={market.provider}
-                      />
+                      {isKalshi ? (
+                        <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                          Price history for Kalshi markets coming soon
+                        </div>
+                      ) : (
+                        <MarketChart 
+                          marketId={market.clobTokenId || market.id} 
+                          timeRange={timeRange}
+                          provider={market.provider}
+                        />
+                      )}
                     </div>
                   </Card>
                   
