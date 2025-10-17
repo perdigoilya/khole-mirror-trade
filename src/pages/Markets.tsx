@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import * as React from "react";
 import Footer from "@/components/Footer";
 import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
+import polymarketLogo from "@/assets/polymarket-logo.png";
+import kalshiLogo from "@/assets/kalshi-logo.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -640,12 +642,11 @@ const Markets = () => {
                     : 'text-muted-foreground hover:text-foreground'}
                   onClick={() => setPlatform('polymarket')}
                 >
-                  <Badge 
-                    variant="outline" 
-                    className="mr-2 bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30"
-                  >
-                    P
-                  </Badge>
+                  <img 
+                    src={polymarketLogo} 
+                    alt="Polymarket" 
+                    className="w-5 h-5 mr-2"
+                  />
                   Polymarket
                 </Button>
                 <Button
@@ -674,12 +675,11 @@ const Markets = () => {
                     }
                   }}
                 >
-                  <Badge 
-                    variant="outline" 
-                    className="mr-2 bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30"
-                  >
-                    K
-                  </Badge>
+                  <img 
+                    src={kalshiLogo} 
+                    alt="Kalshi" 
+                    className="w-5 h-5 mr-2"
+                  />
                   Kalshi
                   {!isKalshiConnected && (
                     <Badge variant="outline" className="ml-2 text-xs">
