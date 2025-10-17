@@ -12,19 +12,39 @@ async function createKalshiSignature(
   method: string,
   path: string
 ): Promise<string> {
-  // Import the private key
-  const pemHeader = "-----BEGIN PRIVATE KEY-----";
-  const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = privateKeyPem
-    .replace(pemHeader, "")
-    .replace(pemFooter, "")
-    .replace(/\s/g, "");
+  // Import the private key - support both PKCS#1 (RSA PRIVATE KEY) and PKCS#8 (PRIVATE KEY)
+  let pemContents = privateKeyPem;
   
-  const binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  // Remove PKCS#1 headers (BEGIN RSA PRIVATE KEY)
+  pemContents = pemContents.replace("-----BEGIN RSA PRIVATE KEY-----", "");
+  pemContents = pemContents.replace("-----END RSA PRIVATE KEY-----", "");
+  
+  // Remove PKCS#8 headers (BEGIN PRIVATE KEY)
+  pemContents = pemContents.replace("-----BEGIN PRIVATE KEY-----", "");
+  pemContents = pemContents.replace("-----END PRIVATE KEY-----", "");
+  
+  // Remove all whitespace including newlines
+  pemContents = pemContents.replace(/\s/g, "");
+  
+  if (!pemContents) {
+    throw new Error("Invalid private key format. Please ensure you've copied the entire key including headers.");
+  }
+  
+  let binaryDer: Uint8Array;
+  try {
+    binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  } catch (e) {
+    throw new Error("Failed to decode base64. Please ensure your private key is correctly formatted and not corrupted.");
+  }
+  
+  // Create an ArrayBuffer from the Uint8Array
+  const arrayBuffer = new ArrayBuffer(binaryDer.length);
+  const view = new Uint8Array(arrayBuffer);
+  view.set(binaryDer);
   
   const key = await crypto.subtle.importKey(
     "pkcs8",
-    binaryDer,
+    arrayBuffer,
     {
       name: "RSA-PSS",
       hash: "SHA-256",

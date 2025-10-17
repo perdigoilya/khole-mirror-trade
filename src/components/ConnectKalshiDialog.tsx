@@ -165,11 +165,11 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
               id="privateKey"
               value={privateKey}
               onChange={(e) => setPrivateKey(e.target.value)}
-              placeholder="Paste your private key here or upload a file -----BEGIN RSA PRIVATE KEY----- ... -----END RSA PRIVATE KEY-----"
+              placeholder="Paste your private key here or upload a file&#10;&#10;-----BEGIN RSA PRIVATE KEY-----&#10;(or BEGIN PRIVATE KEY)&#10;...&#10;-----END RSA PRIVATE KEY-----"
               className="bg-background border-border text-foreground font-mono text-sm min-h-[200px]"
             />
             <p className="text-sm text-muted-foreground">
-              The RSA Private Key in PEM format (downloaded when you created the API key)
+              The RSA Private Key in PEM format (downloaded when you created the API key). Both PKCS#1 and PKCS#8 formats are supported.
             </p>
           </div>
 
