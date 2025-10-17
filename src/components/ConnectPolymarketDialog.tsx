@@ -633,65 +633,67 @@ export const ConnectPolymarketDialog = ({ open, onOpenChange }: ConnectPolymarke
                     )}
                   </div>
                   
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div className="text-xs">
-                            <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked</p>
-                            <ul className="space-y-0.5 text-red-600 dark:text-red-400">
-                              {diagnostics.serverClosedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
-                              {!diagnostics.serverHasKey && <li>• Missing API key</li>}
-                              {!diagnostics.serverHasSecret && <li>• Missing API secret</li>}
-                              {!diagnostics.serverHasPassphrase && <li>• Missing API passphrase</li>}
-                              {!diagnostics.serverOwnerMatch && <li>• Owner address doesn't match connected EOA</li>}
-                            </ul>
+{!diagnostics.serverTradingEnabled && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex flex-col gap-3">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                            <div className="text-xs">
+                              <p className="font-medium text-red-600 dark:text-red-400 mb-1">Trading Blocked</p>
+                              <ul className="space-y-0.5 text-red-600 dark:text-red-400">
+                                {diagnostics.serverClosedOnly && <li>• Account in closed-only mode (can't open new positions)</li>}
+                                {!diagnostics.serverHasKey && <li>• Missing API key</li>}
+                                {!diagnostics.serverHasSecret && <li>• Missing API secret</li>}
+                                {!diagnostics.serverHasPassphrase && <li>• Missing API passphrase</li>}
+                                {!diagnostics.serverOwnerMatch && <li>• Owner address doesn't match connected EOA</li>}
+                              </ul>
+                            </div>
                           </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                            onClick={() => window.open('https://polymarket.com', '_blank')}
+                          >
+                            Open Polymarket
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleWalletConnect}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? 'Retrying...' : 'Retry'}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                if (!user?.id) throw new Error('Not signed in');
+                                await supabase
+                                  .from('user_polymarket_credentials')
+                                  .update({
+                                    api_credentials_key: null,
+                                    api_credentials_secret: null,
+                                    api_credentials_passphrase: null,
+                                    api_key: null,
+                                  })
+                                  .eq('user_id', user.id);
+                                toast({ title: 'Credentials cleared', description: 'Recreating credentials...' });
+                                await handleWalletConnect();
+                              } catch (e: any) {
+                                toast({ title: 'Failed to refresh credentials', description: e.message || 'Try again', variant: 'destructive' });
+                              }
+                            }}
+                          >
+                            Force fresh creds
+                          </Button>
                         </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                          onClick={() => window.open('https://polymarket.com', '_blank')}
-                        >
-                          Open Polymarket
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={handleWalletConnect}
-                          disabled={isLoading}
-                        >
-                          {isLoading ? 'Retrying...' : 'Retry'}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              if (!user?.id) throw new Error('Not signed in');
-                              await supabase
-                                .from('user_polymarket_credentials')
-                                .update({
-                                  api_credentials_key: null,
-                                  api_credentials_secret: null,
-                                  api_credentials_passphrase: null,
-                                  api_key: null,
-                                })
-                                .eq('user_id', user.id);
-                              toast({ title: 'Credentials cleared', description: 'Recreating credentials...' });
-                              await handleWalletConnect();
-                            } catch (e: any) {
-                              toast({ title: 'Failed to refresh credentials', description: e.message || 'Try again', variant: 'destructive' });
-                            }
-                          }}
-                        >
-                          Force fresh creds
-                        </Button>
                       </div>
                     </div>
-                  </div>
+                  )}
                   
                   {diagnostics.serverL2Debug && (
                     <div className="mt-3 pt-3 border-t border-border space-y-1">
