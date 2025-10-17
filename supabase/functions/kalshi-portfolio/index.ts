@@ -126,7 +126,7 @@ serve(async (req) => {
 
       if (response.ok) {
         portfolioData = await response.json();
-        console.log(`Successfully fetched portfolio from ${base} with ${portfolioData.positions?.length || 0} positions`);
+        console.log(`Successfully fetched portfolio from ${base} with ${portfolioData.market_positions?.length || 0} positions`);
         break;
       } else {
         lastError = await response.text();
@@ -142,8 +142,49 @@ serve(async (req) => {
       );
     }
     
+    // Transform Kalshi portfolio data to match our expected format
+    const marketPositions = portfolioData.market_positions || [];
+    const eventPositions = portfolioData.event_positions || [];
+    
+    // Normalize Kalshi positions to match Portfolio interface
+    const positions = marketPositions.map((pos: any) => {
+      const contracts = pos.market_result?.market_outcome === 'yes' ? pos.position : -pos.position;
+      const avgPrice = pos.total_cost / Math.abs(contracts) / 100; // Kalshi uses cents
+      const currentPrice = pos.market_result?.yes_price || pos.position > 0 ? 50 : 50; // fallback to 50 if no price
+      const currentValue = Math.abs(contracts) * currentPrice / 100;
+      const cashPnl = currentValue - (pos.total_cost / 100);
+      const percentPnl = pos.total_cost > 0 ? (cashPnl / (pos.total_cost / 100)) * 100 : 0;
+      
+      return {
+        title: pos.market_ticker || 'Unknown Market',
+        outcome: contracts > 0 ? 'Yes' : 'No',
+        size: Math.abs(contracts),
+        avgPrice: avgPrice,
+        currentValue: currentValue,
+        cashPnl: cashPnl,
+        percentPnl: percentPnl,
+        curPrice: currentPrice / 100,
+        slug: pos.market_ticker || '',
+        icon: undefined,
+      };
+    });
+    
+    // Calculate summary
+    const totalInvested = marketPositions.reduce((sum: number, pos: any) => sum + (pos.total_cost / 100), 0);
+    const totalValue = positions.reduce((sum: number, pos: any) => sum + pos.currentValue, 0);
+    const totalPnl = positions.reduce((sum: number, pos: any) => sum + pos.cashPnl, 0);
+    const totalRealizedPnl = portfolioData.realized_pnl ? portfolioData.realized_pnl / 100 : 0;
+    
+    const summary = {
+      totalValue,
+      totalPnl,
+      totalRealizedPnl,
+      activePositions: positions.length,
+      totalInvested,
+    };
+    
     return new Response(
-      JSON.stringify(portfolioData),
+      JSON.stringify({ positions, summary }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
