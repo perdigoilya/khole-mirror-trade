@@ -6,6 +6,26 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft } from "lucide-react";
 import Footer from "@/components/Footer";
+import kalshiSportsImg from "@/assets/kalshi-sports.png";
+import kalshiPoliticsImg from "@/assets/kalshi-politics.png";
+import kalshiEconomicsImg from "@/assets/kalshi-economics.png";
+import kalshiWeatherImg from "@/assets/kalshi-weather.png";
+import kalshiGeneralImg from "@/assets/kalshi-general.png";
+
+// Utility function to get category image for Kalshi markets
+const getKalshiCategoryImage = (category: string): string => {
+  const categoryLower = category.toLowerCase();
+  if (categoryLower.includes('sport') || categoryLower.includes('football') || categoryLower.includes('basketball') || categoryLower.includes('baseball')) {
+    return kalshiSportsImg;
+  } else if (categoryLower.includes('polit') || categoryLower.includes('election') || categoryLower.includes('government')) {
+    return kalshiPoliticsImg;
+  } else if (categoryLower.includes('econom') || categoryLower.includes('market') || categoryLower.includes('stock') || categoryLower.includes('financ')) {
+    return kalshiEconomicsImg;
+  } else if (categoryLower.includes('weather') || categoryLower.includes('climate') || categoryLower.includes('temperature')) {
+    return kalshiWeatherImg;
+  }
+  return kalshiGeneralImg;
+};
 
 interface Market {
   ticker: string;
@@ -16,6 +36,8 @@ interface Market {
   liquidity: string;
   volumeRaw: number;
   liquidityRaw: number;
+  category: string;
+  image: string;
 }
 
 interface EventDetail {
@@ -47,16 +69,21 @@ export default function KalshiEventDetail() {
         
         const markets: Market[] = (data?.markets || [])
           .filter((m: any) => m.eventTicker === eventTicker)
-          .map((m: any) => ({
-            ticker: m.ticker || m.id,
-            title: m.title,
-            yesPrice: m.yesPrice || 50,
-            noPrice: m.noPrice || 50,
-            volume: m.volume,
-            liquidity: m.liquidity,
-            volumeRaw: m.volumeRaw || 0,
-            liquidityRaw: m.liquidityRaw || 0,
-          }))
+          .map((m: any) => {
+            const category = m.category || 'General';
+            return {
+              ticker: m.ticker || m.id,
+              title: m.title,
+              yesPrice: m.yesPrice || 50,
+              noPrice: m.noPrice || 50,
+              volume: m.volume,
+              liquidity: m.liquidity,
+              volumeRaw: m.volumeRaw || 0,
+              liquidityRaw: m.liquidityRaw || 0,
+              category,
+              image: getKalshiCategoryImage(category),
+            };
+          })
           .sort((a: Market, b: Market) => b.volumeRaw - a.volumeRaw);
 
         if (markets.length > 0) {
@@ -66,7 +93,7 @@ export default function KalshiEventDetail() {
           setEvent({
             eventTicker: eventTicker || '',
             title: markets[0].title.split(/will|wins|gets/i)[0]?.trim() || eventTicker || 'Event',
-            category: 'General',
+            category: markets[0].category || 'General',
             markets,
             totalVolume: totalVol > 0 ? `${totalVol.toLocaleString()} contracts` : '$0',
             totalLiquidity: totalLiq > 0 ? `$${totalLiq.toLocaleString()}` : '$0',
@@ -162,7 +189,7 @@ export default function KalshiEventDetail() {
                         id: market.ticker,
                         provider: 'kalshi',
                         eventTicker: event.eventTicker,
-                        category: event.category,
+                        category: market.category,
                         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
                         status: 'Active',
                         clobTokenId: market.ticker,
@@ -171,13 +198,20 @@ export default function KalshiEventDetail() {
                   })}
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-base mb-1 line-clamp-2">
-                        {market.title}
-                      </h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{market.volume} Vol.</span>
-                        <span>{market.liquidity} Liq.</span>
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <img 
+                        src={market.image} 
+                        alt={market.category}
+                        className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-base mb-1 line-clamp-2">
+                          {market.title}
+                        </h3>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>{market.volume} Vol.</span>
+                          <span>{market.liquidity} Liq.</span>
+                        </div>
                       </div>
                     </div>
                     
