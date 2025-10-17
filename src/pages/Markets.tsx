@@ -916,7 +916,9 @@ const Markets = () => {
                   </div>
                   <h3 className="text-xl font-semibold mb-2">No markets found</h3>
                   <p className="text-muted-foreground mb-6">
-                    No {platform === 'kalshi' ? 'Kalshi' : 'Polymarket'} markets match your current filters. Try adjusting your search criteria.
+                    {platform === 'kalshi'
+                      ? 'No single-leg Kalshi markets are available right now. Try another category, clear filters, or check back soon.'
+                      : 'No Polymarket markets match your current filters. Try adjusting your search criteria.'}
                   </p>
                   <Button 
                     variant="outline" 

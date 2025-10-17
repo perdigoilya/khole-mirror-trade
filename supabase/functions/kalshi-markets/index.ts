@@ -56,16 +56,15 @@ serve(async (req) => {
     }
     
     // Filter out parlay markets - only show single-leg markets
-    // Heuristics: multiple yes/no legs separated by commas OR event tickers that indicate multi-game bundles
     const isParlay = (m: any): boolean => {
       const ticker: string = m.ticker || '';
       const eventTicker: string = m.event_ticker || '';
       const title: string = (m.title || '').toString();
-      const cleaned = title.replace(/\b(yes|no)\s+/gi, '').trim();
-      const parts = cleaned.split(',').map((s: string) => s.trim()).filter(Boolean);
-      const yesNoCount = (title.match(/\b(yes|no)\b/gi) || []).length;
-      const hasMultiGameFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
-      return hasMultiGameFlag || parts.length > 1 || yesNoCount > 1;
+      const hasComma = title.includes(',');
+      const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
+      // Treat as parlay if title lists multiple legs (comma-separated) or has explicit multi flags
+      // Allow SINGLEGAME as single-leg only when there is no comma in the title
+      return hasComma || multiFlag;
     };
 
     const singleLegMarkets = (marketData.markets || []).filter((market: any) => !isParlay(market));
