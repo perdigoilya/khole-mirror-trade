@@ -70,10 +70,35 @@ serve(async (req) => {
       }
     }
 
-    if (!candlestickData || !candlestickData.candlesticks) {
-      console.error('[Kalshi Price History] Failed to fetch candlestick data:', lastError);
+    if (!candlestickData || !candlestickData.candlesticks || candlestickData.candlesticks.length === 0) {
+      console.warn('[Kalshi Price History] No candlesticks, falling back to last_price for', marketId);
+      // Fallback: fetch market detail and return a single data point using last_price/yes_bid
+      let fallbackPrice: number | null = null;
+      for (const base of baseUrls) {
+        try {
+          const detailResp = await fetch(`${base}/trade-api/v2/markets/${marketId}`, { headers: { 'Accept': 'application/json' } });
+          if (detailResp.ok) {
+            const detail = await detailResp.json();
+            const m = detail?.market || {};
+            const toCents = (num: unknown, dollars: unknown): number | null => {
+              if (typeof num === 'number' && !isNaN(num)) return Math.round(num);
+              if (typeof dollars === 'string') {
+                const f = parseFloat(dollars);
+                if (!isNaN(f)) return Math.round(f * 100);
+              }
+              return null;
+            };
+            fallbackPrice = toCents(m.last_price, m.last_price_dollars) ?? toCents(m.yes_bid, m.yes_bid_dollars) ?? 50;
+            break;
+          }
+        } catch (e) {
+          // ignore, try next base
+        }
+      }
+      const now = Date.now();
+      const chartData = fallbackPrice !== null ? [{ timestamp: now, date: new Date(now).toISOString(), price: fallbackPrice }] : [];
       return new Response(
-        JSON.stringify({ data: [] }),
+        JSON.stringify({ data: chartData }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

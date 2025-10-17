@@ -880,17 +880,11 @@ const MarketDetail = () => {
                       </div>
                     </div>
                     <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
-                      {market.provider === 'kalshi' ? (
-                        <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                          Price history for Kalshi markets coming soon
-                        </div>
-                      ) : (
-                        <MarketChart 
-                          marketId={outcome.clobTokenId || outcome.id} 
-                          timeRange={timeRange}
-                          provider={market.provider}
-                        />
-                      )}
+                      <MarketChart 
+                        marketId={(outcome as any).clobTokenId || (outcome as any).ticker || (outcome as any).id}
+                        timeRange={timeRange}
+                        provider={market.provider}
+                      />
                     </div>
                   </Card>
                   );
@@ -920,17 +914,11 @@ const MarketDetail = () => {
                     </div>
                     
                     <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
-                      {isKalshi ? (
-                        <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                          Price history for Kalshi markets coming soon
-                        </div>
-                      ) : (
-                        <MarketChart 
-                          marketId={market.clobTokenId || market.id} 
-                          timeRange={timeRange}
-                          provider={market.provider}
-                        />
-                      )}
+                      <MarketChart 
+                        marketId={market.clobTokenId || (market as any).ticker || market.id} 
+                        timeRange={timeRange}
+                        provider={market.provider}
+                      />
                     </div>
                   </Card>
                   
