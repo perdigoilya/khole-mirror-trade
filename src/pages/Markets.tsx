@@ -35,7 +35,7 @@ const Markets = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   
-  const [platform, setPlatform] = useState(isKalshiConnected ? "kalshi" : "polymarket");
+  const [platform, setPlatform] = useState<'kalshi' | 'polymarket'>("polymarket");
   const [sortBy, setSortBy] = useState("trending");
   const [timeFilter, setTimeFilter] = useState("all-time");
   const [showFilters, setShowFilters] = useState(false);
@@ -56,41 +56,6 @@ const Markets = () => {
   
   // Debounce timer
   const debounceTimerRef = useRef<NodeJS.Timeout>();
-  const userSelectedPlatformRef = useRef(false);
-  const autoSwitchedRef = useRef(false);
-
-useEffect(() => {
-  // Auto-switch to Kalshi once when connected, unless user chose a platform
-  if (isKalshiConnected && kalshiCredentials && platform !== 'kalshi' && !userSelectedPlatformRef.current && !autoSwitchedRef.current) {
-    setPlatform('kalshi');
-    autoSwitchedRef.current = true;
-    return; // wait for next render to fetch
-  }
-
-  // Debounce search changes
-  if (debounceTimerRef.current) {
-    clearTimeout(debounceTimerRef.current);
-  }
-
-  debounceTimerRef.current = setTimeout(() => {
-    setOffset(0);
-    const searchTerm = searchParams.get("search");
-    
-    if (platform === 'kalshi') {
-      if (isKalshiConnected && kalshiCredentials) {
-        fetchMarkets(searchTerm, 'kalshi', 0, false);
-      }
-    } else {
-      fetchMarkets(searchTerm, 'polymarket', 0, false);
-    }
-  }, 300); // 300ms debounce
-
-  return () => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-  };
-}, [platform, isKalshiConnected, kalshiCredentials, searchParams]);
 
   const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
     // Generate cache key
@@ -174,6 +139,33 @@ useEffect(() => {
       }
     }
   }, [kalshiCredentials, toast]);
+
+  useEffect(() => {
+    // Debounce search changes
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      setOffset(0);
+      const searchTerm = searchParams.get("search");
+      
+      // Only fetch if the necessary credentials are available
+      if (platform === 'kalshi') {
+        if (isKalshiConnected && kalshiCredentials) {
+          fetchMarkets(searchTerm, 'kalshi', 0, false);
+        }
+      } else {
+        fetchMarkets(searchTerm, 'polymarket', 0, false);
+      }
+    }, 300); // 300ms debounce
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [platform, isKalshiConnected, kalshiCredentials, searchParams, fetchMarkets]);
   
   const loadMoreMarkets = () => {
     const searchTerm = searchParams.get("search");
@@ -653,7 +645,10 @@ useEffect(() => {
                   className={platform === 'polymarket' 
                     ? 'bg-polymarket-purple hover:bg-polymarket-purple-dark text-white' 
                     : 'text-muted-foreground hover:text-foreground'}
-                  onClick={() => { userSelectedPlatformRef.current = true; setPlatform('polymarket'); }}
+                  onClick={() => { 
+                    setPlatform('polymarket'); 
+                    setMarkets([]); // Clear markets to force refresh
+                  }}
                 >
                   <img 
                     src={polymarketLogo} 
@@ -684,8 +679,8 @@ useEffect(() => {
                         ),
                       });
                     } else {
-                      userSelectedPlatformRef.current = true;
                       setPlatform('kalshi');
+                      setMarkets([]); // Clear markets to force refresh
                     }
                   }}
                 >

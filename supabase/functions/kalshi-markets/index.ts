@@ -183,11 +183,10 @@ serve(async (req) => {
         isMultiOutcome: false,
       };
     }) || []).filter((m: any) => {
-      // Keep only active markets with activity OR clear quotes
+      // Keep markets that are active or have quotes
       const active = (m.status || 'Active').toLowerCase() === 'active';
-      const hasActivity = (m.volumeRaw || 0) > 0 || (m.liquidityRaw || 0) > 0;
       const hasQuotes = typeof m.yesPrice === 'number' && typeof m.noPrice === 'number';
-      return active && (hasActivity || hasQuotes);
+      return active || hasQuotes;
     });
     
     // Group markets by event_ticker (similar to Polymarket's multi-outcome markets)
