@@ -136,7 +136,7 @@ const MarketDetail = () => {
       
       // For Kalshi, find market by ticker; for Polymarket, find by id
       const foundMarket = data?.markets?.find((m: Market) => 
-        provider === 'kalshi' ? m.ticker === marketId : m.id === marketId
+        provider === 'kalshi' ? (m.ticker === marketId || m.id === marketId) : m.id === marketId
       );
       
       if (foundMarket) {
@@ -146,6 +146,10 @@ const MarketDetail = () => {
           timestamp: Date.now()
         });
         setMarket(foundMarket);
+      } else if (provider === 'kalshi') {
+        // If this looks like an event ticker, redirect to the event detail page
+        navigate(`/kalshi/event/${marketId}`);
+        return;
       }
     } catch (error) {
       console.error('Error fetching market:', error);

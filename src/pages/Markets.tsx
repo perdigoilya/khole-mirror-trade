@@ -373,6 +373,11 @@ const Markets = () => {
         <div
           className={`hidden lg:grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer group ${isSubMarket ? 'bg-card/20 pl-16' : ''}`}
           onClick={() => {
+            const isKalshiEvent = isKalshi && (market.marketCount || (!market.ticker && !market.clobTokenId));
+            if (isKalshiEvent) {
+              navigate(`/kalshi/event/${market.eventTicker || market.id}`);
+              return;
+            }
             const marketToNavigate = {
               ...market,
               image: market.image || (isKalshi ? getKalshiCategoryImage(market.category || 'General') : undefined),
@@ -564,6 +569,11 @@ const Markets = () => {
         <div
           className={`lg:hidden p-4 border-b border-border hover:bg-card/50 transition-colors cursor-pointer ${isSubMarket ? 'bg-card/20 ml-4' : ''}`}
           onClick={() => {
+            const isKalshiEvent = isKalshi && (market.marketCount || (!market.ticker && !market.clobTokenId));
+            if (isKalshiEvent) {
+              navigate(`/kalshi/event/${market.eventTicker || market.id}`);
+              return;
+            }
             const marketToNavigate = {
               ...market,
               image: market.image || (isKalshi ? getKalshiCategoryImage(market.category || 'General') : undefined),
