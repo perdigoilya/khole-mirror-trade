@@ -23,6 +23,13 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        // Platform brand colors
+        'kalshi-teal': "hsl(var(--kalshi-teal))",
+        'kalshi-teal-dark': "hsl(var(--kalshi-teal-dark))",
+        'kalshi-teal-light': "hsl(var(--kalshi-teal-light))",
+        'polymarket-purple': "hsl(var(--polymarket-purple))",
+        'polymarket-purple-dark': "hsl(var(--polymarket-purple-dark))",
+        'polymarket-purple-light': "hsl(var(--polymarket-purple-light))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

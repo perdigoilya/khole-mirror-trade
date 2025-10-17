@@ -66,6 +66,14 @@ const MarketDetail = () => {
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<{outcome: string, side: 'yes' | 'no', price: number} | null>(null);
 
+  // Platform-specific styling (after market state is declared)
+  const isKalshi = market?.provider === 'kalshi';
+  const platformBadgeClass = isKalshi 
+    ? "bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30" 
+    : "bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30";
+  const platformAccentClass = isKalshi ? "border-kalshi-teal" : "border-polymarket-purple";
+  const platformName = isKalshi ? "Kalshi" : "Polymarket";
+
   const marketDetailCacheRef = useRef<Map<string, { market: Market, timestamp: number }>>(new Map());
   const CACHE_DURATION = 60000; // 60 seconds
   
@@ -670,7 +678,7 @@ const MarketDetail = () => {
             </div>
 
             {/* Title and Info */}
-            <div className="mb-6">
+            <div className={`mb-6 border-l-4 ${platformAccentClass} pl-4`}>
               <div className="flex items-center gap-3 mb-3">
                 {market.image && (
                   <img 
@@ -682,8 +690,13 @@ const MarketDetail = () => {
                     }}
                   />
                 )}
-                <div>
-                  <h1 className="text-2xl font-bold mb-1">{market.title}</h1>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h1 className="text-2xl font-bold flex-1">{market.title}</h1>
+                    <Badge variant="outline" className={`${platformBadgeClass} text-sm px-3 py-1`}>
+                      {platformName}
+                    </Badge>
+                  </div>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>{market.volume} Vol.</span>
                   </div>

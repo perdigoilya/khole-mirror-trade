@@ -331,6 +331,13 @@ const Markets = () => {
     const yesLabel = typeof y === 'number' ? `${y}¢` : '—';
     const noLabel = typeof n === 'number' ? `${n}¢` : '—';
     
+    // Platform-specific styling
+    const isKalshi = platform === 'kalshi';
+    const platformBadgeClass = isKalshi 
+      ? "bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30" 
+      : "bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30";
+    const platformName = isKalshi ? "Kalshi" : "Polymarket";
+    
     return (
       <>
         {/* Desktop Table Row */}
@@ -375,6 +382,9 @@ const Markets = () => {
               <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
                 {market.title || market.ticker}
               </h3>
+              <Badge variant="outline" className={`text-xs px-2 py-0.5 ${platformBadgeClass}`}>
+                {platformName}
+              </Badge>
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -554,9 +564,14 @@ const Markets = () => {
 
             {/* Content */}
             <div className="flex-1 min-w-0 space-y-2">
-              <h3 className="text-sm font-medium text-foreground line-clamp-2">
-                {market.title || market.ticker}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium text-foreground line-clamp-2 flex-1">
+                  {market.title || market.ticker}
+                </h3>
+                <Badge variant="outline" className={`text-xs px-2 py-0.5 flex-shrink-0 ${platformBadgeClass}`}>
+                  {platformName}
+                </Badge>
+              </div>
               
               {!market.isMultiOutcome && (
                 <>
