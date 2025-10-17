@@ -47,6 +47,8 @@ serve(async (req) => {
     const apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
     const apiSecret: string | null = credsRow.api_credentials_secret || null;
     const apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
+    const funderAddress: string | null = (credsRow.funder_address || null);
+
 
     if (!apiKey || !apiSecret || !apiPassphrase) {
       return new Response(
@@ -78,7 +80,7 @@ serve(async (req) => {
     const requestPath = '/auth/ban-status/closed-only';
     const preimage = `${method}${requestPath}${timestamp}`;
 
-    const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
+    const attemptSanityCheck = async (addr: string, key: string, secret: string, pass: string): Promise<Response> => {
       // Detect if secret is base64 (Polymarket returns base64 secrets)
       const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
       const encoder = new TextEncoder();
@@ -112,7 +114,7 @@ serve(async (req) => {
       const sigB64A1 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sigA1))));
 
       console.log('[ORDERS-ACTIVE:A1] Standard format:', { 
-        eoa: ownerAddress,
+        addr,
         ts,
         preimage: preimageA1.slice(0, 120),
         sig: sigB64A1.slice(0, 12),
@@ -122,7 +124,7 @@ serve(async (req) => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'POLY_ADDRESS': ownerAddress,
+          'POLY_ADDRESS': addr,
           'POLY_SIGNATURE': sigB64A1,
           'POLY_TIMESTAMP': ts.toString(),
           'POLY_API_KEY': key,
@@ -131,7 +133,7 @@ serve(async (req) => {
       });
 
       if (r1.ok) {
-        console.log('[ORDERS-ACTIVE:A1] ✓ Standard format worked');
+        console.log('[ORDERS-ACTIVE:A1] ✓ Standard format worked for', addr);
         return r1;
       }
 
@@ -144,6 +146,7 @@ serve(async (req) => {
       const sigB64A2 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sigA2))));
 
       console.log('[ORDERS-ACTIVE:A2] Alt format (ts+method+path):', {
+        addr,
         preimage: preimageA2.slice(0, 120),
         sig: sigB64A2.slice(0, 12),
       });
@@ -152,7 +155,7 @@ serve(async (req) => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'POLY_ADDRESS': ownerAddress,
+          'POLY_ADDRESS': addr,
           'POLY_SIGNATURE': sigB64A2,
           'POLY_TIMESTAMP': ts.toString(),
           'POLY_API_KEY': key,
@@ -161,15 +164,19 @@ serve(async (req) => {
       });
 
       if (r2.ok) {
-        console.log('[ORDERS-ACTIVE:A2] ✓ Alt format worked');
+        console.log('[ORDERS-ACTIVE:A2] ✓ Alt format worked for', addr);
       } else {
-        console.error('[ORDERS-ACTIVE:A2] Both formats failed:', r2.status);
+        console.error('[ORDERS-ACTIVE:A2] Both formats failed for', addr, r2.status);
       }
 
       return r2;
     };
 
-    let sanityResponse = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase);
+    let sanityResponse = await attemptSanityCheck(ownerAddress, apiKey, apiSecret, apiPassphrase);
+    if (!sanityResponse.ok && funderAddress && funderAddress.toLowerCase() !== ownerAddress) {
+      console.log('Primary address failed, trying funder address:', funderAddress);
+      sanityResponse = await attemptSanityCheck(funderAddress.toLowerCase(), apiKey, apiSecret, apiPassphrase);
+    }
 
     if (!sanityResponse.ok) {
       const errorText = await sanityResponse.text();
@@ -225,7 +232,7 @@ serve(async (req) => {
                 const newApiPassphrase = deriveData.passphrase;
                 
                 console.log('Retrying sanity check with derived credentials...');
-                sanityResponse = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase);
+                sanityResponse = await attemptSanityCheck(ownerAddress, newApiKey, newApiSecret, newApiPassphrase);
                 
                 // If retry succeeds, continue to success handler below
                 if (sanityResponse.ok) {
