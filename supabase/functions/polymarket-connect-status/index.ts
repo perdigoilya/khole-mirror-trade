@@ -137,55 +137,98 @@ serve(async (req) => {
       return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
     }
 
-    // L2 sanity check: GET /auth/ban-status/closed-only
-    const method = 'GET';
-    const path = '/auth/ban-status/closed-only';
-    const ts = Math.floor(Date.now() / 1000);
-    const preimage = `${method}${path}${ts}`;
-    (globalThis as any).__PREIMAGE = preimage;
+    // Step 1: Validate credentials with GET /auth/api-keys (most reliable)
+    let tradingEnabled = false;
+    let closed_only = false;
+    let apiKeysCheck = { ok: false, status: 0, body: null as any };
+    let banStatusCheck = { ok: false, status: 0, body: null as any };
 
-    const sig = await hmacBase64(secret, preimage);
-    const hdrs: Record<string, string> = {
+    const method1 = 'GET';
+    const path1 = '/auth/api-keys';
+    const ts1 = Math.floor(Date.now() / 1000);
+    const preimage1 = `${method1}${path1}${ts1}`;
+    const sig1 = await hmacBase64(secret, preimage1);
+    
+    const hdrs1: Record<string, string> = {
       'Accept': 'application/json',
       'POLY_ADDRESS': ownerAddress,
       'POLY_API_KEY': key,
       'POLY_PASSPHRASE': passphrase,
-      'POLY_TIMESTAMP': ts.toString(),
-      'POLY_SIGNATURE': sig,
+      'POLY_TIMESTAMP': ts1.toString(),
+      'POLY_SIGNATURE': sig1,
     };
 
-    console.log('[L2-SANITY] Before fetch:', {
+    console.log('[API-KEYS-CHECK] Validating credentials:', {
       eoa: ownerAddress,
       keySuffix: suffix(key),
       passSuffix: suffix(passphrase),
-      ts,
-      preimageFirst120: preimage.slice(0, 120),
-      sigB64First12: sig.slice(0, 12),
-      dbKey
+      ts: ts1,
+      preimage: preimage1.slice(0, 120),
+      sig: sig1.slice(0, 12),
     });
 
-    let r = await fetch(`${CLOB}${path}`, { method, headers: hdrs });
-    const text = await r.text();
-    let upstream = tryJson(text);
-    const cf = {
-      'cf-ray': r.headers.get('cf-ray') || '',
-      'cf-cache-status': r.headers.get('cf-cache-status') || '',
-      'server': r.headers.get('server') || '',
-      'content-type': r.headers.get('content-type') || ''
-    };
+    try {
+      const r1 = await fetch(`${CLOB}${path1}`, { method: method1, headers: hdrs1 });
+      const text1 = await r1.text();
+      const body1 = tryJson(text1);
+      apiKeysCheck = { ok: r1.ok, status: r1.status, body: body1 };
 
-    let closed_only = false;
-    let tradingEnabled = false;
-
-    // NO auto-derive on 401: user should Re-sign L1 via UI
-
-    if (r.ok) {
-      closed_only = upstream?.closed_only === true || upstream?.closedOnly === true;
-      tradingEnabled = hasKey && hasSecret && hasPassphrase && ownerMatch && !closed_only;
-      console.log('[L2-SANITY] ✓ Success:', { closed_only, tradingEnabled });
-    } else {
-      console.error('[L2-SANITY] FAILED:', r.status, upstream);
+      if (r1.ok) {
+        console.log('[API-KEYS-CHECK] ✓ Credentials valid');
+        tradingEnabled = true; // Key tuple is valid
+      } else {
+        console.error('[API-KEYS-CHECK] ✗ Invalid credentials:', r1.status, body1);
+      }
+    } catch (e: any) {
+      console.error('[API-KEYS-CHECK] Request failed:', e.message);
     }
+
+    // Step 2: Check ban-status (only if credentials are valid)
+    if (tradingEnabled) {
+      const method2 = 'GET';
+      const path2 = '/auth/ban-status/closed-only';
+      const ts2 = Math.floor(Date.now() / 1000);
+      const preimage2 = `${method2}${path2}${ts2}`;
+      const sig2 = await hmacBase64(secret, preimage2);
+      
+      const hdrs2: Record<string, string> = {
+        'Accept': 'application/json',
+        'POLY_ADDRESS': ownerAddress,
+        'POLY_API_KEY': key,
+        'POLY_PASSPHRASE': passphrase,
+        'POLY_TIMESTAMP': ts2.toString(),
+        'POLY_SIGNATURE': sig2,
+      };
+
+      console.log('[BAN-STATUS-CHECK] Checking account status:', {
+        eoa: ownerAddress,
+        ts: ts2,
+      });
+
+      try {
+        const r2 = await fetch(`${CLOB}${path2}`, { method: method2, headers: hdrs2 });
+        const text2 = await r2.text();
+        const body2 = tryJson(text2);
+        banStatusCheck = { ok: r2.ok, status: r2.status, body: body2 };
+
+        if (r2.ok) {
+          closed_only = body2?.closed_only === true || body2?.closedOnly === true;
+          if (closed_only) {
+            tradingEnabled = false; // Account restricted
+            console.log('[BAN-STATUS-CHECK] ⚠️ Account in closed-only mode');
+          } else {
+            console.log('[BAN-STATUS-CHECK] ✓ Account unrestricted');
+          }
+        } else {
+          // If ban-status fails but api-keys worked, keep tradingEnabled=true with warning
+          console.warn('[BAN-STATUS-CHECK] ⚠️ Could not check ban status:', r2.status);
+        }
+      } catch (e: any) {
+        console.error('[BAN-STATUS-CHECK] Request failed:', e.message);
+      }
+    }
+
+    (globalThis as any).__PREIMAGE = apiKeysCheck.ok ? `${method1}${path1}${ts1}` : '';
 
     return out({
       hasKey,
@@ -196,20 +239,21 @@ serve(async (req) => {
       ownerMatch,
       closed_only,
       tradingEnabled,
-      url: `${CLOB}${path}`,
-      method,
-      sent: {
-        POLY_ADDRESS: ownerAddress,
-        POLY_API_KEY_suffix: suffix(key),
-        POLY_PASSPHRASE_suffix: suffix(passphrase),
-        POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
-        POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
-        preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
-      },
-      status: r.status,
-      statusText: r.statusText,
-      cf,
-      upstream
+      validation: {
+        apiKeysCheck: {
+          ok: apiKeysCheck.ok,
+          status: apiKeysCheck.status,
+          message: apiKeysCheck.ok ? 'Credentials valid' : 'Invalid credentials'
+        },
+        banStatusCheck: {
+          ok: banStatusCheck.ok,
+          status: banStatusCheck.status,
+          closed_only,
+          message: banStatusCheck.ok 
+            ? (closed_only ? 'Account restricted' : 'Account unrestricted') 
+            : 'Could not verify ban status'
+        }
+      }
     });
 
   } catch (e: any) {
