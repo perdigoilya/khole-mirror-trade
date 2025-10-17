@@ -98,8 +98,9 @@ serve(async (req) => {
 
     // Try both Demo and Production environments
     const baseUrls = [
-      'https://demo-api.kalshi.co',
-      'https://api.kalshi.com'
+      'https://api.elections.kalshi.com',
+      'https://api.kalshi.com',
+      'https://demo-api.kalshi.co'
     ];
 
     let portfolioData = null;
