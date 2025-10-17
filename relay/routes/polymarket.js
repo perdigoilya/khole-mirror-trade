@@ -116,18 +116,27 @@ router.post('/trade', authenticateRequest, rateLimiter, async (req, res) => {
   try {
     const { userId, signedOrder, walletAddress, funderAddress, credentials: providedCreds } = req.body;
     
+    console.log('📝 Trade request received:', {
+      hasUserId: !!userId,
+      hasSignedOrder: !!signedOrder,
+      hasWalletAddress: !!walletAddress,
+      hasProvidedCreds: !!providedCreds,
+      credsKeys: providedCreds ? Object.keys(providedCreds) : []
+    });
+    
     if (!signedOrder || !walletAddress) {
       return res.status(400).json({ error: 'Missing required fields: signedOrder, walletAddress' });
     }
     
     let credentials;
     
-    // If credentials provided directly, use them
-    if (providedCreds) {
+    // PRIORITY 1: Use credentials provided directly in request body
+    if (providedCreds && providedCreds.api_key && providedCreds.secret && providedCreds.passphrase) {
       credentials = providedCreds;
-      console.log('Using provided credentials from request');
+      console.log('✅ Using provided credentials from request body');
     } else if (userId) {
-      // Otherwise try to fetch from database
+      // PRIORITY 2: Try to fetch from database as fallback
+      console.log('🔍 No valid credentials in request, trying database lookup...');
       const db = getDb();
       
       if (isPostgres()) {
@@ -136,15 +145,21 @@ router.post('/trade', authenticateRequest, rateLimiter, async (req, res) => {
       } else {
         credentials = db.prepare('SELECT * FROM user_credentials WHERE user_id = ?').get(userId);
       }
-      console.log('Fetched credentials from database');
+      
+      if (credentials) {
+        console.log('✅ Fetched credentials from database');
+      } else {
+        console.log('❌ No credentials found in database');
+      }
     }
     
     if (!credentials) {
-      return res.status(404).json({ error: 'No credentials provided or found in database' });
+      console.error('❌ CREDENTIALS ERROR: No credentials available');
+      return res.status(404).json({ error: 'Credentials not found. Please connect your wallet first.' });
     }
     
     if (!credentials.api_key || !credentials.secret || !credentials.passphrase) {
-      console.error('Incomplete credentials:', { 
+      console.error('❌ INCOMPLETE CREDENTIALS:', { 
         hasApiKey: !!credentials.api_key, 
         hasSecret: !!credentials.secret, 
         hasPassphrase: !!credentials.passphrase 
