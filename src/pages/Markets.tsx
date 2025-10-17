@@ -355,8 +355,9 @@ const Markets = () => {
       y = 100 - n;
     }
     const outcome = getOutcomeBadge(typeof y === 'number' ? y : 50);
-    const yesLabel = typeof y === 'number' ? `${y}¢` : '—';
-    const noLabel = typeof n === 'number' ? `${n}¢` : '—';
+    // Treat 0 as missing data (demo accounts often have no pricing)
+    const yesLabel = (typeof y === 'number' && y > 0) ? `${y}¢` : '—';
+    const noLabel = (typeof n === 'number' && n > 0 && n < 100) ? `${n}¢` : '—';
     
     // Platform-specific styling
     const isKalshi = (market.provider || platform) === 'kalshi';
