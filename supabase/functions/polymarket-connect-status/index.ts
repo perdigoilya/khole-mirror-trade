@@ -137,7 +137,7 @@ serve(async (req) => {
       return out({ error: 'OwnerMismatch', details: { ownerAddress, eoaLower } }, 400);
     }
 
-    // Step 1: Validate credentials with GET /auth/api-keys (most reliable)
+    // Step 1: Validate credentials with GET /auth/api-keys (try both preimage formats)
     let tradingEnabled = false;
     let closed_only = false;
     let apiKeysCheck = { ok: false, status: 0, body: null as any };
@@ -146,6 +146,8 @@ serve(async (req) => {
     const method1 = 'GET';
     const path1 = '/auth/api-keys';
     const ts1 = Math.floor(Date.now() / 1000);
+
+    // Try standard format first: method+path+timestamp
     const preimage1 = `${method1}${path1}${ts1}`;
     const sig1 = await hmacBase64(secret, preimage1);
     
@@ -158,7 +160,7 @@ serve(async (req) => {
       'POLY_SIGNATURE': sig1,
     };
 
-    console.log('[API-KEYS-CHECK] Validating credentials:', {
+    console.log('[API-KEYS-CHECK:A1] Standard format:', {
       eoa: ownerAddress,
       keySuffix: suffix(key),
       passSuffix: suffix(passphrase),
@@ -174,10 +176,40 @@ serve(async (req) => {
       apiKeysCheck = { ok: r1.ok, status: r1.status, body: body1 };
 
       if (r1.ok) {
-        console.log('[API-KEYS-CHECK] ✓ Credentials valid');
-        tradingEnabled = true; // Key tuple is valid
+        console.log('[API-KEYS-CHECK:A1] ✓ Standard format worked');
+        tradingEnabled = true;
       } else {
-        console.error('[API-KEYS-CHECK] ✗ Invalid credentials:', r1.status, body1);
+        console.warn('[API-KEYS-CHECK:A1] Standard format failed:', r1.status);
+        
+        // Try alternative format: timestamp+method+path
+        const preimage2 = `${ts1}${method1}${path1}`;
+        const sig2 = await hmacBase64(secret, preimage2);
+        
+        const hdrs2: Record<string, string> = {
+          'Accept': 'application/json',
+          'POLY_ADDRESS': ownerAddress,
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': passphrase,
+          'POLY_TIMESTAMP': ts1.toString(),
+          'POLY_SIGNATURE': sig2,
+        };
+
+        console.log('[API-KEYS-CHECK:A2] Trying alt format (ts+method+path):', {
+          preimage: preimage2.slice(0, 120),
+          sig: sig2.slice(0, 12),
+        });
+
+        const r2 = await fetch(`${CLOB}${path1}`, { method: method1, headers: hdrs2 });
+        const text2 = await r2.text();
+        const body2 = tryJson(text2);
+        apiKeysCheck = { ok: r2.ok, status: r2.status, body: body2 };
+
+        if (r2.ok) {
+          console.log('[API-KEYS-CHECK:A2] ✓ Alt format worked');
+          tradingEnabled = true;
+        } else {
+          console.error('[API-KEYS-CHECK:A2] ✗ Both formats failed:', r2.status, body2);
+        }
       }
     } catch (e: any) {
       console.error('[API-KEYS-CHECK] Request failed:', e.message);
