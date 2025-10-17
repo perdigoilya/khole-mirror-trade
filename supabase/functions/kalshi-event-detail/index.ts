@@ -116,11 +116,30 @@ serve(async (req) => {
         category: m.category || 'General',
         endDate: m.close_time || m.expiration_time,
         status: m.status || 'open',
+        rules_primary: m.rules_primary || '',
+        rules_secondary: m.rules_secondary || '',
       };
     }).sort((a: any, b: any) => b.volumeRaw - a.volumeRaw);
 
     const totalVolume = markets.reduce((sum: number, m: any) => sum + m.volumeRaw, 0);
     const totalLiquidity = markets.reduce((sum: number, m: any) => sum + m.liquidityRaw, 0);
+
+    // Fetch event metadata for image
+    let eventImage: string | null = null;
+    for (const base of baseUrls) {
+      const metaUrl = `${base}/trade-api/v2/events/${eventTicker}/metadata`;
+      const metaResp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
+      if (metaResp.ok) {
+        const metadata = await metaResp.json();
+        eventImage = metadata?.image_url || null;
+        console.log(`[Kalshi Event Detail] Event image: ${eventImage}`);
+        break;
+      }
+    }
+
+    // Choose headline market (most liquid/volume) and get its rules
+    const headline = markets[0];
+    const rulesCombined = [headline?.rules_primary, headline?.rules_secondary].filter(Boolean).join('\n\n');
 
     return new Response(
       JSON.stringify({
@@ -129,8 +148,10 @@ serve(async (req) => {
           title: event.title,
           subtitle: event.sub_title,
           category: event.category || 'General',
-          rules: event.rules || event.mutually_exclusive || 'No rules available',
+          rules: rulesCombined || 'No rules available for this event',
           description: event.sub_title || event.title,
+          image: eventImage,
+          headlineTicker: headline?.ticker || null,
           totalVolume: totalVolume > 0 ? `${totalVolume.toLocaleString()} contracts` : '$0',
           totalLiquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString()}` : '$0',
           markets,
