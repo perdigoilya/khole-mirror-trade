@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -432,22 +433,33 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
 
                 {/* Balance Card - Kalshi USD balance or Polymarket chain balance */}
                 {platformTab === 'kalshi' && kalshiBalance > 0 && (
-                  <Card className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm text-muted-foreground">
-                        Kalshi Account Balance
+                  <>
+                    {/* Demo Account Disclaimer */}
+                    {kalshiBalance <= 1000 && kalshiPositions.length === 0 && (
+                      <Alert className="bg-yellow-500/10 border-yellow-500/30">
+                        <AlertDescription className="text-sm">
+                          <strong>Demo Account Notice:</strong> You appear to be using a Kalshi demo account. Demo balances and positions are for testing only and don't represent real funds or trades. To trade with real money, connect a production Kalshi account.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    
+                    <Card className="p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm text-muted-foreground">
+                          Kalshi Account Balance
+                        </p>
+                        <Badge variant="outline" className="text-xs bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30">
+                          {kalshiBalance <= 1000 && kalshiPositions.length === 0 ? 'DEMO' : 'USD'}
+                        </Badge>
+                      </div>
+                      <p className="text-2xl font-bold text-foreground">
+                        ${kalshiBalance.toFixed(2)}
                       </p>
-                      <Badge variant="outline" className="text-xs bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30">
-                        USD
-                      </Badge>
-                    </div>
-                    <p className="text-2xl font-bold text-foreground">
-                      ${kalshiBalance.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Available for trading on Kalshi
-                    </p>
-                  </Card>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Available for trading on Kalshi
+                      </p>
+                    </Card>
+                  </>
                 )}
 
                 {/* Chain Balance Card - only shown for Polymarket if wallet is connected via WalletConnect */}
