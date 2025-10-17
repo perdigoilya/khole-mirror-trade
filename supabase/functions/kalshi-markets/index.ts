@@ -146,40 +146,41 @@ serve(async (req) => {
     
     // Normalize Kalshi markets to match our Market interface
     const normalizedMarkets = (marketData.markets?.map((market: any) => {
-      // Kalshi prices are in cents (0-100). Prefer last_price, fallback to midpoint of bid/ask
-      const lastPrice = typeof market.last_price === 'number' ? market.last_price : null;
-      const yesAsk = typeof market.yes_ask === 'number' ? market.yes_ask : null;
-      const yesBid = typeof market.yes_bid === 'number' ? market.yes_bid : null;
-      const noAsk = typeof market.no_ask === 'number' ? market.no_ask : null;
-      const noBid = typeof market.no_bid === 'number' ? market.no_bid : null;
-      
-      // Calculate yes and no prices
+      // Helpers to convert price from number or *_dollars string to integer cents
+      const toCents = (num: unknown, dollars: unknown): number | null => {
+        if (typeof num === 'number' && !isNaN(num)) return Math.round(num);
+        if (typeof dollars === 'string') {
+          const f = parseFloat(dollars);
+          if (!isNaN(f)) return Math.round(f * 100);
+        }
+        return null;
+      };
+
+      const lastPrice = toCents(market.last_price, market.last_price_dollars);
+      const yesAsk = toCents(market.yes_ask, market.yes_ask_dollars);
+      const yesBid = toCents(market.yes_bid, market.yes_bid_dollars);
+      const noAsk  = toCents(market.no_ask, market.no_ask_dollars);
+      const noBid  = toCents(market.no_bid, market.no_bid_dollars);
+
+      // Calculate yes and no prices with sensible fallbacks
       let yesPrice = lastPrice;
-      if (yesPrice === null && yesAsk !== null && yesBid !== null) {
-        yesPrice = Math.round((yesAsk + yesBid) / 2);
-      } else if (yesPrice === null && yesAsk !== null) {
-        yesPrice = yesAsk;
-      } else if (yesPrice === null && yesBid !== null) {
-        yesPrice = yesBid;
-      }
-      
-      let noPrice = yesPrice !== null ? (100 - yesPrice) : null;
-      if (noPrice === null && noAsk !== null && noBid !== null) {
-        noPrice = Math.round((noAsk + noBid) / 2);
-      } else if (noPrice === null && noAsk !== null) {
-        noPrice = noAsk;
-      } else if (noPrice === null && noBid !== null) {
-        noPrice = noBid;
-      }
-      
+      if (yesPrice === null && yesAsk !== null && yesBid !== null) yesPrice = Math.round((yesAsk + yesBid) / 2);
+      if (yesPrice === null && yesAsk !== null) yesPrice = yesAsk;
+      if (yesPrice === null && yesBid !== null) yesPrice = yesBid;
+
+      let noPrice: number | null = yesPrice !== null ? (100 - yesPrice) : null;
+      if (noPrice === null && noAsk !== null && noBid !== null) noPrice = Math.round((noAsk + noBid) / 2);
+      if (noPrice === null && noAsk !== null) noPrice = noAsk;
+      if (noPrice === null && noBid !== null) noPrice = noBid;
+
       // Default to 50/50 if no pricing data
       if (yesPrice === null) yesPrice = 50;
       if (noPrice === null) noPrice = 50;
-      
-      // Volume is 24h contract count, liquidity_dollars is a string like "0.2300"
-      const volume24h = typeof market.volume_24h === 'number' ? market.volume_24h : 0;
+
+      // Use 24h contract volume if available, else fall back to lifetime volume
+      const volume24h = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
       const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
-      
+
       return {
         id: market.ticker,
         title: market.title || market.ticker,
@@ -193,7 +194,7 @@ serve(async (req) => {
         volumeRaw: volume24h,
         liquidityRaw: liquidityDollars,
         endDate: market.close_time || market.expiration_time || new Date().toISOString(),
-        status: market.status === 'open' ? 'Active' : market.status === 'closed' ? 'Closed' : 'Active',
+        status: (market.status || '').toLowerCase() === 'open' ? 'Active' : (market.status || 'open'),
         category: market.category || 'General',
         provider: 'kalshi' as const,
         ticker: market.ticker,
@@ -250,7 +251,8 @@ serve(async (req) => {
       }
     }
     
-    const finalMarkets = [...groupedMarkets, ...standaloneMarkets];
+    const finalMarkets = [...groupedMarkets, ...standaloneMarkets]
+      .sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0));
     
     return new Response(
       JSON.stringify({ 
