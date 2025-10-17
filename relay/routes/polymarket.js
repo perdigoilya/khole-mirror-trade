@@ -114,25 +114,28 @@ router.delete('/credentials/:userId', authenticateRequest, async (req, res) => {
  */
 router.post('/trade', authenticateRequest, rateLimiter, async (req, res) => {
   try {
-    const { userId, signedOrder, walletAddress, funderAddress } = req.body;
+    const { userId, signedOrder, walletAddress, funderAddress, credentials: providedCreds } = req.body;
     
-    if (!userId || !signedOrder || !walletAddress) {
-      return res.status(400).json({ error: 'Missing required fields: userId, signedOrder, walletAddress' });
+    if (!signedOrder || !walletAddress) {
+      return res.status(400).json({ error: 'Missing required fields: signedOrder, walletAddress' });
     }
     
-    // Fetch credentials
-    const db = getDb();
-    let credentials;
+    let credentials = providedCreds;
     
-    if (isPostgres()) {
-      const { rows } = await db.query('SELECT * FROM user_credentials WHERE user_id = $1', [userId]);
-      credentials = rows[0];
-    } else {
-      credentials = db.prepare('SELECT * FROM user_credentials WHERE user_id = ?').get(userId);
+    // If credentials not provided, try to fetch from database
+    if (!credentials && userId) {
+      const db = getDb();
+      
+      if (isPostgres()) {
+        const { rows } = await db.query('SELECT * FROM user_credentials WHERE user_id = $1', [userId]);
+        credentials = rows[0];
+      } else {
+        credentials = db.prepare('SELECT * FROM user_credentials WHERE user_id = ?').get(userId);
+      }
     }
     
-    if (!credentials) {
-      return res.status(404).json({ error: 'Credentials not found. Please connect your wallet first.' });
+    if (!credentials || !credentials.api_key || !credentials.secret || !credentials.passphrase) {
+      return res.status(404).json({ error: 'Credentials not found or incomplete. Please provide credentials.' });
     }
     
     console.log(`📝 Executing trade for user ${userId.slice(0, 8)}...`);

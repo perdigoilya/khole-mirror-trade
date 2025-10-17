@@ -259,20 +259,22 @@ serve(async (req) => {
       try {
         const relayResponse = await fetch(`${RELAY_URL}/api/polymarket/trade`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('API_SECRET_KEY') || 'dev-secret-key'}`
+          },
           body: JSON.stringify({
+            userId: userId,
+            signedOrder: orderPayload.order,
+            walletAddress: usedAddress,
+            funderAddress: funderAddress || null,
             credentials: {
-              apiKey: key,
+              api_key: key,
               secret: secret,
               passphrase: passphrase,
-              walletAddress: usedAddress,
-              funderAddress: funderAddress || undefined
-            },
-            orderData: signedOrder,
-            side,
-            size,
-            price,
-            tokenId
+              wallet_address: ownerAddress,
+              funder_address: funderAddress
+            }
           })
         });
 
@@ -283,7 +285,8 @@ serve(async (req) => {
           return out({
             success: true,
             viaRelay: true,
-            ...relayResult
+            orderId: relayResult.orderId,
+            attemptedWith: relayResult.attemptedWith
           });
         } else {
           console.error('[TRADE] Relay also failed:', relayResponse.status, relayResult);
