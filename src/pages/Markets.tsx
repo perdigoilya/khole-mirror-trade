@@ -627,26 +627,90 @@ const Markets = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       <main className="flex-1 pt-10 pb-24">
         <div className="container mx-auto px-4 max-w-[1600px]">
+          {/* Platform Selector - Prominent */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-4">Prediction Markets</h1>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex gap-2 p-1 bg-card rounded-lg border border-border">
+                <Button
+                  variant={platform === 'polymarket' ? 'default' : 'ghost'}
+                  size="lg"
+                  className={platform === 'polymarket' 
+                    ? 'bg-polymarket-purple hover:bg-polymarket-purple-dark text-white' 
+                    : 'text-muted-foreground hover:text-foreground'}
+                  onClick={() => setPlatform('polymarket')}
+                >
+                  <Badge 
+                    variant="outline" 
+                    className="mr-2 bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30"
+                  >
+                    P
+                  </Badge>
+                  Polymarket
+                </Button>
+                <Button
+                  variant={platform === 'kalshi' ? 'default' : 'ghost'}
+                  size="lg"
+                  className={platform === 'kalshi' 
+                    ? 'bg-kalshi-teal hover:bg-kalshi-teal-dark text-white' 
+                    : 'text-muted-foreground hover:text-foreground'}
+                  onClick={() => {
+                    if (!isKalshiConnected) {
+                      toast({
+                        title: "Kalshi Connection Required",
+                        description: "Please connect your Kalshi account to view Kalshi markets",
+                        action: (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => navigate('/portfolio')}
+                          >
+                            Connect
+                          </Button>
+                        ),
+                      });
+                    } else {
+                      setPlatform('kalshi');
+                    }
+                  }}
+                >
+                  <Badge 
+                    variant="outline" 
+                    className="mr-2 bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30"
+                  >
+                    K
+                  </Badge>
+                  Kalshi
+                  {!isKalshiConnected && (
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      Not Connected
+                    </Badge>
+                  )}
+                </Button>
+              </div>
+              
+              <div className="text-sm text-muted-foreground">
+                {platform === 'kalshi' ? (
+                  isKalshiConnected ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-kalshi-teal animate-pulse" />
+                      Connected to Kalshi
+                    </span>
+                  ) : (
+                    <span className="text-yellow-500">⚠️ Kalshi not connected</span>
+                  )
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-polymarket-purple animate-pulse" />
+                    Showing Polymarket markets
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Filter Bar */}
           <div className="flex items-center gap-3 mb-6">
-            <Select value={platform} onValueChange={(value) => {
-              if (value === 'kalshi' && !isKalshiConnected) {
-                toast({
-                  title: "Kalshi Connection Required",
-                  description: "Please connect your Kalshi account to view Kalshi markets",
-                });
-              } else {
-                setPlatform(value);
-              }
-            }}>
-              <SelectTrigger className="w-[180px] bg-card/50 border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="kalshi">Kalshi</SelectItem>
-                <SelectItem value="polymarket">Polymarket</SelectItem>
-              </SelectContent>
-            </Select>
 
             <Select value={sortBy} onValueChange={setSortBy}>
               <SelectTrigger className="w-[140px] bg-card/50 border-border">
@@ -801,32 +865,56 @@ const Markets = () => {
             {/* Table Body */}
             {loading ? (
               <div className="p-12 text-center">
-                <p className="text-muted-foreground">Loading markets...</p>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-muted-foreground">Loading {platform === 'kalshi' ? 'Kalshi' : 'Polymarket'} markets...</p>
+                </div>
               </div>
             ) : platform === 'kalshi' && !isKalshiConnected ? (
-              <div className="p-12 text-center">
-                <p className="text-muted-foreground mb-4">
-                  {!user ? (
-                    <>
-                      <a href="/auth" className="text-primary font-semibold hover:underline">Log in</a> to connect your Kalshi account and view Kalshi markets
-                    </>
-                  ) : (
-                    <>Connect your Kalshi account to view Kalshi markets</>
+              <div className="p-12">
+                <div className="max-w-md mx-auto text-center">
+                  <div className="w-16 h-16 rounded-full bg-kalshi-teal/10 flex items-center justify-center mx-auto mb-4">
+                    <Badge className="bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30 text-2xl">
+                      K
+                    </Badge>
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2">Connect to Kalshi</h3>
+                  <p className="text-muted-foreground mb-6">
+                    {!user ? (
+                      <>
+                        <a href="/auth" className="text-kalshi-teal font-semibold hover:underline">Sign in</a> and connect your Kalshi account to view and trade on Kalshi markets
+                      </>
+                    ) : (
+                      <>Connect your Kalshi API credentials to view and trade on Kalshi markets</>
+                    )}
+                  </p>
+                  {user && (
+                    <Button 
+                      className="bg-kalshi-teal hover:bg-kalshi-teal-dark text-white"
+                      onClick={() => navigate('/portfolio')}
+                    >
+                      Connect Kalshi
+                    </Button>
                   )}
-                </p>
-                {user && <ConnectionRequired />}
+                </div>
               </div>
             ) : filteredAndSortedMarkets.length === 0 ? (
               <div className="p-12 text-center">
-                <p className="text-muted-foreground">No markets match your filters</p>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={resetFilters}
-                  className="mt-4"
-                >
-                  Reset Filters
-                </Button>
+                <div className="max-w-md mx-auto">
+                  <div className={`w-16 h-16 rounded-full ${platform === 'kalshi' ? 'bg-kalshi-teal/10' : 'bg-polymarket-purple/10'} flex items-center justify-center mx-auto mb-4`}>
+                    <Filter className={`h-8 w-8 ${platform === 'kalshi' ? 'text-kalshi-teal' : 'text-polymarket-purple'}`} />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2">No markets found</h3>
+                  <p className="text-muted-foreground mb-6">
+                    No {platform === 'kalshi' ? 'Kalshi' : 'Polymarket'} markets match your current filters. Try adjusting your search criteria.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    onClick={resetFilters}
+                  >
+                    Reset All Filters
+                  </Button>
+                </div>
               </div>
             ) : (
               filteredAndSortedMarkets.map((market, index) => {
