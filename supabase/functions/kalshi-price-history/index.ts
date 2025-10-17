@@ -48,20 +48,25 @@ serve(async (req) => {
       const url = `${base}/trade-api/v2/markets/${marketId}/candlesticks?period_interval=${periodInterval}`;
       console.log('[Kalshi Price History] Trying endpoint:', url);
       
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (response.ok) {
-        candlestickData = await response.json();
-        console.log(`[Kalshi Price History] Successfully fetched ${candlestickData.candlesticks?.length || 0} candlesticks from ${base}`);
-        break;
-      } else {
-        lastError = await response.text();
-        console.log(`[Kalshi Price History] Failed ${base}:`, response.status, lastError);
+        if (response.ok) {
+          candlestickData = await response.json();
+          console.log(`[Kalshi Price History] Successfully fetched ${candlestickData.candlesticks?.length || 0} candlesticks from ${base}`);
+          break;
+        } else {
+          lastError = await response.text();
+          console.log(`[Kalshi Price History] Failed ${base}:`, response.status, lastError);
+        }
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Unknown error';
+        console.log(`[Kalshi Price History] DNS/Network error for ${base}:`, lastError);
       }
     }
 
