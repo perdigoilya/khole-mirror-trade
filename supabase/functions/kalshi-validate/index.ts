@@ -119,30 +119,50 @@ serve(async (req) => {
 
     console.log('Testing Kalshi credentials with proper auth headers');
 
-    // Test the credentials by making a simple API call to Kalshi
-    const response = await fetch(`https://api.elections.kalshi.com${path}`, {
-      headers: {
-        'KALSHI-ACCESS-KEY': apiKeyId,
-        'KALSHI-ACCESS-SIGNATURE': signature,
-        'KALSHI-ACCESS-TIMESTAMP': timestamp,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Try both Demo and Production environments
+    const baseUrls = [
+      'https://demo-api.kalshi.co',
+      'https://api.kalshi.com'
+    ];
 
-    if (response.ok) {
+    let success = false;
+    let lastStatus = 0;
+    let lastBody = '';
+
+    for (const base of baseUrls) {
+      const url = `${base}${path}`;
+      console.log('Validating against', url);
+      const response = await fetch(url, {
+        headers: {
+          'KALSHI-ACCESS-KEY': apiKeyId,
+          'KALSHI-ACCESS-SIGNATURE': signature,
+          'KALSHI-ACCESS-TIMESTAMP': timestamp,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      lastStatus = response.status;
+      lastBody = await response.text().catch(() => '');
+
+      if (response.ok) {
+        success = true;
+        break;
+      }
+    }
+
+    if (success) {
       console.log('Credentials validated successfully');
       return new Response(
         JSON.stringify({ valid: true, message: 'Credentials validated successfully' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
-    } else {
-      const error = await response.text();
-      console.error('Kalshi API error:', response.status, error);
-      return new Response(
-        JSON.stringify({ valid: false, error: 'Invalid credentials' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
+
+    console.error('Kalshi API validation failed:', lastStatus, lastBody);
+    return new Response(
+      JSON.stringify({ valid: false, error: 'Invalid credentials or wrong environment (Demo vs Production). We tried both.' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('Validation error:', error);
     return new Response(
