@@ -146,9 +146,10 @@ serve(async (req) => {
         
         if (balanceResponse.ok) {
           balanceData = await balanceResponse.json();
-          console.log(`Successfully fetched balance from ${base}:`, balanceData);
+          console.log(`Successfully fetched balance from ${base}:`, JSON.stringify(balanceData));
         } else {
-          console.log(`Failed to fetch balance from ${base}:`, balanceResponse.status);
+          const balanceError = await balanceResponse.text();
+          console.log(`Failed to fetch balance from ${base}: ${balanceResponse.status} - ${balanceError}`);
         }
         
         break;
@@ -209,6 +210,8 @@ serve(async (req) => {
     
     // Parse Kalshi balance (in cents)
     const balance = balanceData?.balance ? parseFloat(balanceData.balance) / 100 : 0;
+    
+    console.log(`Final balance value: ${balance}, Raw balanceData:`, JSON.stringify(balanceData));
     
     return new Response(
       JSON.stringify({ 
