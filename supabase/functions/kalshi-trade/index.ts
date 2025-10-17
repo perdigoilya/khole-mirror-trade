@@ -45,6 +45,35 @@ async function createKalshiSignature(
   return btoa(String.fromCharCode(...new Uint8Array(signature)));
 }
 
+async function determineKalshiBaseUrl(
+  apiKeyId: string,
+  privateKey: string
+): Promise<string> {
+  const bases = ['https://demo-api.kalshi.co', 'https://api.kalshi.com'];
+  const testPath = '/trade-api/v2/exchange/status';
+  
+  for (const base of bases) {
+    try {
+      const timestamp = Date.now().toString();
+      const sig = await createKalshiSignature(privateKey, timestamp, 'GET', testPath);
+      const res = await fetch(`${base}${testPath}`, {
+        headers: {
+          'KALSHI-ACCESS-KEY': apiKeyId,
+          'KALSHI-ACCESS-SIGNATURE': sig,
+          'KALSHI-ACCESS-TIMESTAMP': timestamp,
+        },
+      });
+      if (res.ok) {
+        console.log(`Using Kalshi API: ${base}`);
+        return base;
+      }
+    } catch (_) {
+      // try next
+    }
+  }
+  throw new Error('Could not connect to Kalshi API (Demo or Production)');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -61,6 +90,9 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
+
+    // Determine which Kalshi environment to use (Demo or Production)
+    const baseUrl = await determineKalshiBaseUrl(apiKeyId, privateKey);
 
     // Validate count
     if (count <= 0) {
@@ -92,7 +124,7 @@ serve(async (req) => {
     );
 
     console.log('Checking Kalshi balance...');
-    const balanceResponse = await fetch(`https://api.kalshi.com${balancePath}`, {
+    const balanceResponse = await fetch(`${baseUrl}${balancePath}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -184,7 +216,7 @@ serve(async (req) => {
 
     console.log('Submitting order to Kalshi:', orderPayload);
 
-    const orderResponse = await fetch(`https://api.kalshi.com${path}`, {
+    const orderResponse = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',

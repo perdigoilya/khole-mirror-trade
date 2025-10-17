@@ -75,30 +75,48 @@ serve(async (req) => {
 
     console.log('Fetching markets from Kalshi API');
 
-    // Fetch markets from Kalshi API
-    const response = await fetch(`https://api.elections.kalshi.com${path}`, {
-      headers: {
-        'KALSHI-ACCESS-KEY': apiKeyId,
-        'KALSHI-ACCESS-SIGNATURE': signature,
-        'KALSHI-ACCESS-TIMESTAMP': timestamp,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Try both Demo and Production environments
+    const baseUrls = [
+      'https://demo-api.kalshi.co',
+      'https://api.kalshi.com'
+    ];
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Kalshi API error:', response.status, error);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch markets' }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let marketData = null;
+    let lastError = '';
+
+    for (const base of baseUrls) {
+      const url = `${base}${path}`;
+      console.log('Trying', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'KALSHI-ACCESS-KEY': apiKeyId,
+          'KALSHI-ACCESS-SIGNATURE': signature,
+          'KALSHI-ACCESS-TIMESTAMP': timestamp,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        marketData = await response.json();
+        console.log(`Successfully fetched ${marketData.markets?.length || 0} markets from ${base}`);
+        break;
+      } else {
+        lastError = await response.text();
+        console.log(`Failed ${base}:`, response.status, lastError);
+      }
     }
 
-    const data = await response.json();
-    console.log(`Successfully fetched ${data.markets?.length || 0} markets`);
+    if (!marketData) {
+      console.error('All Kalshi API attempts failed:', lastError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch markets from Demo or Production.' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     // Normalize Kalshi markets to match our Market interface
-    const normalizedMarkets = data.markets?.map((market: any) => {
+    const normalizedMarkets = marketData.markets?.map((market: any) => {
       // Kalshi returns prices in cents (0-100), we need to match that format
       const yesPrice = market.yes_bid || market.last_price || 50; // Default to 50 if no price
       const noPrice = 100 - yesPrice;
@@ -131,7 +149,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         markets: normalizedMarkets,
-        cursor: data.cursor 
+        cursor: marketData.cursor 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -75,30 +75,48 @@ serve(async (req) => {
 
     console.log('Fetching portfolio from Kalshi API');
 
-    // Fetch portfolio/positions from Kalshi API
-    const response = await fetch(`https://api.elections.kalshi.com${path}`, {
-      headers: {
-        'KALSHI-ACCESS-KEY': apiKeyId,
-        'KALSHI-ACCESS-SIGNATURE': signature,
-        'KALSHI-ACCESS-TIMESTAMP': timestamp,
-        'Content-Type': 'application/json',
-      },
-    });
+    // Try both Demo and Production environments
+    const baseUrls = [
+      'https://demo-api.kalshi.co',
+      'https://api.kalshi.com'
+    ];
 
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('Kalshi API error:', response.status, error);
-      return new Response(
-        JSON.stringify({ error: 'Failed to fetch portfolio' }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    let portfolioData = null;
+    let lastError = '';
+
+    for (const base of baseUrls) {
+      const url = `${base}${path}`;
+      console.log('Trying', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'KALSHI-ACCESS-KEY': apiKeyId,
+          'KALSHI-ACCESS-SIGNATURE': signature,
+          'KALSHI-ACCESS-TIMESTAMP': timestamp,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        portfolioData = await response.json();
+        console.log(`Successfully fetched portfolio from ${base} with ${portfolioData.positions?.length || 0} positions`);
+        break;
+      } else {
+        lastError = await response.text();
+        console.log(`Failed ${base}:`, response.status, lastError);
+      }
     }
 
-    const data = await response.json();
-    console.log(`Successfully fetched portfolio with ${data.positions?.length || 0} positions`);
+    if (!portfolioData) {
+      console.error('All Kalshi API attempts failed:', lastError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch portfolio from Demo or Production. Wrong credentials or environment?' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify(portfolioData),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

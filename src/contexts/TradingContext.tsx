@@ -134,6 +134,8 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         user_id: user.id,
         api_key_id: creds.apiKeyId,
         private_key: creds.privateKey,
+      }, {
+        onConflict: 'user_id'
       });
 
     if (error) throw error;
