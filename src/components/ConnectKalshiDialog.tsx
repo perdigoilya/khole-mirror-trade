@@ -169,7 +169,7 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
               className="bg-background border-border text-foreground font-mono text-sm min-h-[200px]"
             />
             <p className="text-sm text-muted-foreground">
-              The RSA Private Key in PEM format (downloaded when you created the API key). Both PKCS#1 and PKCS#8 formats are supported.
+              Unencrypted PKCS#8 keys are supported. If your file shows “BEGIN RSA PRIVATE KEY” or contains Proc-Type/DEK-Info, please convert to “BEGIN PRIVATE KEY”.
             </p>
           </div>
 

@@ -12,22 +12,29 @@ async function createKalshiSignature(
   method: string,
   path: string
 ): Promise<string> {
-  // Import the private key - support both PKCS#1 (RSA PRIVATE KEY) and PKCS#8 (PRIVATE KEY)
+  // Import the private key - expect unencrypted PKCS#8 (BEGIN PRIVATE KEY).
+  // If PKCS#1 (BEGIN RSA PRIVATE KEY) is provided, return a helpful error.
+  if (privateKeyPem.includes('BEGIN RSA PRIVATE KEY')) {
+    if (/Proc-Type:/i.test(privateKeyPem) || /DEK-Info:/i.test(privateKeyPem)) {
+      throw new Error('Encrypted RSA keys are not supported. Please provide an unencrypted PKCS#8 private key (BEGIN PRIVATE KEY).');
+    }
+    throw new Error('PKCS#1 RSA keys are not supported. Please convert to unencrypted PKCS#8 (BEGIN PRIVATE KEY).');
+  }
+
   let pemContents = privateKeyPem;
   
-  // Remove PKCS#1 headers (BEGIN RSA PRIVATE KEY)
-  pemContents = pemContents.replace("-----BEGIN RSA PRIVATE KEY-----", "");
-  pemContents = pemContents.replace("-----END RSA PRIVATE KEY-----", "");
-  
   // Remove PKCS#8 headers (BEGIN PRIVATE KEY)
-  pemContents = pemContents.replace("-----BEGIN PRIVATE KEY-----", "");
-  pemContents = pemContents.replace("-----END PRIVATE KEY-----", "");
+  pemContents = pemContents.replace('-----BEGIN PRIVATE KEY-----', '');
+  pemContents = pemContents.replace('-----END PRIVATE KEY-----', '');
   
-  // Remove all whitespace including newlines
-  pemContents = pemContents.replace(/\s/g, "");
+  // Remove potential OpenSSL metadata lines and sanitize non-base64 chars
+  pemContents = pemContents
+    .replace(/Proc-Type:[^\n]*\n?/gi, '')
+    .replace(/DEK-Info:[^\n]*\n?/gi, '')
+    .replace(/[^A-Za-z0-9+/=]/g, '');
   
   if (!pemContents) {
-    throw new Error("Invalid private key format. Please ensure you've copied the entire key including headers.");
+    throw new Error('Invalid private key format. Ensure it is the full PEM content.');
   }
   
   let binaryDer: Uint8Array;
@@ -91,7 +98,16 @@ serve(async (req) => {
     const method = "GET";
     const path = "/trade-api/v2/exchange/status";
     
-    const signature = await createKalshiSignature(privateKey, timestamp, method, path);
+    let signature: string;
+    try {
+      signature = await createKalshiSignature(privateKey, timestamp, method, path);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Invalid private key';
+      return new Response(
+        JSON.stringify({ valid: false, error: msg }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     console.log('Testing Kalshi credentials with proper auth headers');
 
