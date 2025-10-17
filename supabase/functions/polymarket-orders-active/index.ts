@@ -47,8 +47,6 @@ serve(async (req) => {
     const apiKey: string | null = credsRow.api_credentials_key || credsRow.api_key || null;
     const apiSecret: string | null = credsRow.api_credentials_secret || null;
     const apiPassphrase: string | null = credsRow.api_credentials_passphrase || null;
-    const funderAddress: string | null = (credsRow.funder_address || null);
-
 
     if (!apiKey || !apiSecret || !apiPassphrase) {
       return new Response(
@@ -80,17 +78,15 @@ serve(async (req) => {
     const requestPath = '/auth/ban-status/closed-only';
     const preimage = `${method}${requestPath}${timestamp}`;
 
-    const attemptSanityCheck = async (addr: string, key: string, secret: string, pass: string): Promise<Response> => {
-      // Normalize base64url to standard base64
-      let normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
-      while (normalized.length % 4 !== 0) normalized += '=';
-      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(normalized);
+    const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
+      // Detect if secret is base64 (Polymarket returns base64 secrets)
+      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
       const encoder = new TextEncoder();
       
       // Decode secret from base64 if needed, otherwise use utf8
       let secretBytes: Uint8Array;
       if (isB64) {
-        const secretRaw = atob(normalized);
+        const secretRaw = atob(secret);
         secretBytes = new Uint8Array(secretRaw.length);
         for (let i = 0; i < secretRaw.length; i++) {
           secretBytes[i] = secretRaw.charCodeAt(i);
@@ -107,78 +103,47 @@ serve(async (req) => {
         ['sign']
       );
 
+      // Fresh timestamp and preimage per attempt
       const ts = Math.floor(Date.now() / 1000);
+      const preimageLocal = `${method}${requestPath}${ts}`;
 
-      // Try standard format: method+path+timestamp
-      const preimageA1 = `${method}${requestPath}${ts}`;
-      const msgA1 = encoder.encode(preimageA1);
-      const sigA1 = await crypto.subtle.sign('HMAC', cryptoKey, msgA1);
-      const sigB64A1 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sigA1))));
+      const messageData = encoder.encode(preimageLocal);
+      const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+      const signatureArray = Array.from(new Uint8Array(signature));
+      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-      console.log('[ORDERS-ACTIVE:A1] Standard format:', { 
-        addr,
+      // Validate standard base64 format
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
+        throw new Error('POLY_SIGNATURE is not standard base64');
+      }
+
+      console.log('L2 sanity check attempt:', { 
+        eoa: ownerAddress,
+        ownerAddress, 
+        polyAddress: ownerAddress,
+        keySuffix: key.slice(-6),
+        passSuffix: pass.slice(-4),
         ts,
-        preimage: preimageA1.slice(0, 120),
-        sig: sigB64A1.slice(0, 12),
+        preimageFirst120: preimageLocal.substring(0, 120),
+        sigB64First12: signatureBase64.substring(0, 12),
+        method,
+        requestPath
       });
 
-      let r1 = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
+      return await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'POLY_ADDRESS': addr,
-          'POLY_SIGNATURE': sigB64A1,
+          'POLY_ADDRESS': ownerAddress,
+          'POLY_SIGNATURE': signatureBase64,
           'POLY_TIMESTAMP': ts.toString(),
           'POLY_API_KEY': key,
           'POLY_PASSPHRASE': pass,
         },
       });
-
-      if (r1.ok) {
-        console.log('[ORDERS-ACTIVE:A1] ✓ Standard format worked for', addr);
-        return r1;
-      }
-
-      console.warn('[ORDERS-ACTIVE:A1] Failed:', r1.status, await r1.text());
-
-      // Try alternative format: timestamp+method+path
-      const preimageA2 = `${ts}${method}${requestPath}`;
-      const msgA2 = encoder.encode(preimageA2);
-      const sigA2 = await crypto.subtle.sign('HMAC', cryptoKey, msgA2);
-      const sigB64A2 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sigA2))));
-
-      console.log('[ORDERS-ACTIVE:A2] Alt format (ts+method+path):', {
-        addr,
-        preimage: preimageA2.slice(0, 120),
-        sig: sigB64A2.slice(0, 12),
-      });
-
-      const r2 = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'POLY_ADDRESS': addr,
-          'POLY_SIGNATURE': sigB64A2,
-          'POLY_TIMESTAMP': ts.toString(),
-          'POLY_API_KEY': key,
-          'POLY_PASSPHRASE': pass,
-        },
-      });
-
-      if (r2.ok) {
-        console.log('[ORDERS-ACTIVE:A2] ✓ Alt format worked for', addr);
-      } else {
-        console.error('[ORDERS-ACTIVE:A2] Both formats failed for', addr, r2.status);
-      }
-
-      return r2;
     };
 
-    let sanityResponse = await attemptSanityCheck(ownerAddress, apiKey, apiSecret, apiPassphrase);
-    if (!sanityResponse.ok && funderAddress && funderAddress.toLowerCase() !== ownerAddress) {
-      console.log('Primary address failed, trying funder address:', funderAddress);
-      sanityResponse = await attemptSanityCheck(funderAddress.toLowerCase(), apiKey, apiSecret, apiPassphrase);
-    }
+    let sanityResponse = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase);
 
     if (!sanityResponse.ok) {
       const errorText = await sanityResponse.text();
@@ -234,7 +199,7 @@ serve(async (req) => {
                 const newApiPassphrase = deriveData.passphrase;
                 
                 console.log('Retrying sanity check with derived credentials...');
-                sanityResponse = await attemptSanityCheck(ownerAddress, newApiKey, newApiSecret, newApiPassphrase);
+                sanityResponse = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase);
                 
                 // If retry succeeds, continue to success handler below
                 if (sanityResponse.ok) {
