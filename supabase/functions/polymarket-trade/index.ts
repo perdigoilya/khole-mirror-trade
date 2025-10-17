@@ -146,6 +146,11 @@ serve(async (req) => {
         'POLY_PASSPHRASE': currentPass,
         'POLY_TIMESTAMP': ts.toString(),
         'POLY_SIGNATURE': sig,
+        // Add browser-like headers to avoid CF WAF blocks
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+        'Origin': 'https://polymarket.com',
+        'Referer': 'https://polymarket.com/',
+        'Accept-Language': 'en-US,en;q=0.9',
       };
 
       console.log('[TRADE] Attempting with:', {
@@ -268,6 +273,10 @@ serve(async (req) => {
       status: r.status,
       statusText: r.statusText,
       cf,
+      cfRay: cf['cf-ray'] || '',
+      cfCache: cf['cf-cache-status'] || '',
+      server: cf['server'] || '',
+      contentType: cf['content-type'] || '',
       upstream
     });
 
