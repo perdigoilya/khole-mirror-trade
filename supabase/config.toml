@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.kalshi-price-history]
 verify_jwt = false
 
+[functions.kalshi-market-detail]
+verify_jwt = false
+
 [functions.kalshi-portfolio]
 verify_jwt = false
 

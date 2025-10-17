@@ -92,6 +92,11 @@ const MarketDetail = () => {
   
   useEffect(() => {
     const passed = (location.state as any)?.market;
+    // Always fetch fresh details for Kalshi to ensure accurate rules
+    if (passed?.provider === 'kalshi') {
+      fetchMarket();
+      return;
+    }
     // Only fetch if we don't have complete market data
     if (!passed || !passed.clobTokenId || !passed.endDate || !passed.status) {
       fetchMarket();
@@ -119,38 +124,41 @@ const MarketDetail = () => {
       
       let result;
       if (provider === 'kalshi') {
-        // Fetch Kalshi market using PUBLIC endpoint (no credentials)
-        result = await supabase.functions.invoke('kalshi-markets', {
-          body: {}
+        const { data, error } = await supabase.functions.invoke('kalshi-market-detail', {
+          body: { ticker: marketId }
         });
+        if (error) throw error;
+        const marketResp = (data as any)?.market;
+        if (marketResp) {
+          marketDetailCacheRef.current.set(marketId, {
+            market: marketResp,
+            timestamp: Date.now()
+          });
+          setMarket(marketResp);
+          return;
+        } else {
+          // If this looks like an event ticker, redirect to the event detail page
+          navigate(`/kalshi/event/${marketId}`);
+          return;
+        }
       } else {
         // Fetch Polymarket market
         result = await supabase.functions.invoke('polymarket-markets', {
           body: { marketId }
         });
+        const { data, error } = result;
+        if (error) throw error;
+        const foundMarket = data?.markets?.find((m: Market) => m.id === marketId);
+        if (foundMarket) {
+          marketDetailCacheRef.current.set(marketId, {
+            market: foundMarket,
+            timestamp: Date.now()
+          });
+          setMarket(foundMarket);
+          return;
+        }
       }
 
-      const { data, error } = result;
-      
-      if (error) throw error;
-      
-      // For Kalshi, find market by ticker; for Polymarket, find by id
-      const foundMarket = data?.markets?.find((m: Market) => 
-        provider === 'kalshi' ? (m.ticker === marketId || m.id === marketId) : m.id === marketId
-      );
-      
-      if (foundMarket) {
-        // Cache the result
-        marketDetailCacheRef.current.set(marketId, {
-          market: foundMarket,
-          timestamp: Date.now()
-        });
-        setMarket(foundMarket);
-      } else if (provider === 'kalshi') {
-        // If this looks like an event ticker, redirect to the event detail page
-        navigate(`/kalshi/event/${marketId}`);
-        return;
-      }
     } catch (error) {
       console.error('Error fetching market:', error);
       toast({
