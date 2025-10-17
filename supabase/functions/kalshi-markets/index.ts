@@ -144,38 +144,81 @@ serve(async (req) => {
     
     // Normalize Kalshi markets to match our Market interface
     const normalizedMarkets = marketData.markets?.map((market: any) => {
-      // Kalshi returns prices in cents (0-100), we need to match that format
-      const yesPrice = market.yes_bid || market.last_price || 50; // Default to 50 if no price
+      // Kalshi returns prices as percentages (0-100), not cents
+      // yes_bid is the current bid price for YES outcome as a percentage
+      const yesPrice = market.yes_bid ?? market.last_price ?? 50;
       const noPrice = 100 - yesPrice;
       
-      // Calculate volume and liquidity from Kalshi fields
-      const volume = market.volume || market.open_interest || 0;
-      const liquidity = market.liquidity || 0;
+      // Volume and liquidity are in cents, convert to dollars
+      const volumeCents = market.volume_24h || market.volume || 0;
+      const liquidityCents = market.liquidity || market.open_interest || 0;
       
       return {
-        id: market.ticker, // Use ticker as unique ID
+        id: market.ticker,
         title: market.title,
+        subtitle: market.subtitle,
         description: market.subtitle || market.title,
-        image: market.image_url || undefined,
+        image: undefined, // Kalshi doesn't provide market images
         yesPrice: yesPrice,
         noPrice: noPrice,
-        volume: volume > 0 ? `$${(volume / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        liquidity: liquidity > 0 ? `$${(liquidity / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: volume / 100, // Convert cents to dollars
-        liquidityRaw: liquidity / 100,
+        volume: volumeCents > 0 ? `$${(volumeCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+        liquidity: liquidityCents > 0 ? `$${(liquidityCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+        volumeRaw: volumeCents / 100,
+        liquidityRaw: liquidityCents / 100,
         endDate: market.close_time || market.expiration_time || new Date().toISOString(),
-        status: market.status === 'active' ? 'open' : market.status === 'closed' ? 'closed' : market.status || 'open',
-        category: market.category || market.series_ticker || 'General',
+        status: market.status === 'active' ? 'Active' : market.status === 'closed' ? 'Closed' : market.status || 'Active',
+        category: market.category || 'General',
         provider: 'kalshi' as const,
         ticker: market.ticker,
-        clobTokenId: market.ticker, // Use ticker as token ID for Kalshi
-        isMultiOutcome: false, // Kalshi markets are typically binary
+        eventTicker: market.event_ticker, // For event grouping
+        clobTokenId: market.ticker,
+        isMultiOutcome: false,
       };
     }) || [];
     
+    // Group markets by event_ticker (similar to Polymarket's multi-outcome markets)
+    const eventGroups = new Map<string, any[]>();
+    const standaloneMarkets: any[] = [];
+    
+    for (const market of normalizedMarkets) {
+      if (market.eventTicker) {
+        if (!eventGroups.has(market.eventTicker)) {
+          eventGroups.set(market.eventTicker, []);
+        }
+        eventGroups.get(market.eventTicker)!.push(market);
+      } else {
+        standaloneMarkets.push(market);
+      }
+    }
+    
+    // Convert event groups to multi-outcome markets
+    const groupedMarkets: any[] = [];
+    
+    for (const [eventTicker, markets] of eventGroups.entries()) {
+      if (markets.length > 1) {
+        // Multi-outcome event - pick the highest volume market as main
+        const sortedByVolume = [...markets].sort((a, b) => b.volumeRaw - a.volumeRaw);
+        const mainMarket = sortedByVolume[0];
+        const subMarkets = sortedByVolume.slice(1);
+        
+        groupedMarkets.push({
+          ...mainMarket,
+          id: eventTicker, // Use event ticker as ID for the group
+          title: mainMarket.title.replace(/Will .+ /, ''), // Extract event name
+          isMultiOutcome: true,
+          subMarkets: subMarkets,
+        });
+      } else {
+        // Single market in event
+        groupedMarkets.push(markets[0]);
+      }
+    }
+    
+    const finalMarkets = [...groupedMarkets, ...standaloneMarkets];
+    
     return new Response(
       JSON.stringify({ 
-        markets: normalizedMarkets,
+        markets: finalMarkets,
         cursor: marketData.cursor 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
