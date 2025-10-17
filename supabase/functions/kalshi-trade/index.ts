@@ -118,7 +118,7 @@ serve(async (req) => {
   }
 
   try {
-    const { apiKeyId, privateKey, ticker, action, side, count, type = 'limit', yesPrice, noPrice } = await req.json();
+    const { apiKeyId, privateKey, ticker, action, side, count, type = 'limit', yesPrice, noPrice, environment } = await req.json();
 
     console.log('Kalshi trade request:', { ticker, action, side, count, type });
 
@@ -129,8 +129,12 @@ serve(async (req) => {
       );
     }
 
-    // Try both Kalshi environments (Demo then Production)
-    const baseUrls = ['https://demo-api.kalshi.co', 'https://api.kalshi.com'];
+    // Route based on environment if provided
+    const baseUrls = environment === 'demo'
+      ? ['https://demo-api.kalshi.co']
+      : environment === 'live'
+        ? ['https://api.kalshi.com']
+        : ['https://demo-api.kalshi.co', 'https://api.kalshi.com'];
 
     // Validate count
     if (count <= 0) {

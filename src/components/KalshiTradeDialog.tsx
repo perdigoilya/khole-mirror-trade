@@ -88,6 +88,7 @@ export function KalshiTradeDialog({
         side: kalshiSide,
         count,
         type: orderType,
+        environment: kalshiCredentials.environment,
       };
 
       if (orderType === "limit") {

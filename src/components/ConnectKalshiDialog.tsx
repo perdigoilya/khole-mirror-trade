@@ -59,10 +59,11 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
       const data = await response.json();
 
       if (data.valid) {
-        connectKalshi({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim() });
+        const environment = data.environment === 'demo' ? 'demo' : 'live';
+        connectKalshi({ apiKeyId: apiKeyId.trim(), privateKey: privateKey.trim(), environment });
         toast({
           title: "Connected to Kalshi",
-          description: "Your credentials have been validated successfully",
+          description: `Your credentials have been validated successfully (${environment.toUpperCase()} environment)`,
         });
         onOpenChange(false);
         handleClear();

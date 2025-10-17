@@ -5,6 +5,7 @@ import type { User, Session } from "@supabase/supabase-js";
 interface KalshiCredentials {
   apiKeyId: string;
   privateKey: string;
+  environment?: 'demo' | 'live';
 }
 
 interface PolymarketCredentials {

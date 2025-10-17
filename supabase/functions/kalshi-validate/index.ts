@@ -119,17 +119,18 @@ serve(async (req) => {
 
     console.log('Testing Kalshi credentials with proper auth headers');
 
-    // Try both Demo and Production environments
+    // Try both Demo and Production environments and report which one works
     const baseUrls = [
-      'https://demo-api.kalshi.co',
-      'https://api.kalshi.com'
+      { base: 'https://demo-api.kalshi.co', env: 'demo' as const },
+      { base: 'https://api.kalshi.com', env: 'live' as const },
     ];
 
     let success = false;
     let lastStatus = 0;
     let lastBody = '';
+    let environmentDetected: 'demo' | 'live' | null = null;
 
-    for (const base of baseUrls) {
+    for (const { base, env } of baseUrls) {
       const url = `${base}${path}`;
       console.log('Validating against', url);
       const response = await fetch(url, {
@@ -146,14 +147,15 @@ serve(async (req) => {
 
       if (response.ok) {
         success = true;
+        environmentDetected = env;
         break;
       }
     }
 
     if (success) {
-      console.log('Credentials validated successfully');
+      console.log('Credentials validated successfully for environment:', environmentDetected);
       return new Response(
-        JSON.stringify({ valid: true, message: 'Credentials validated successfully' }),
+        JSON.stringify({ valid: true, environment: environmentDetected, message: 'Credentials validated successfully' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
