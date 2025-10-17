@@ -55,8 +55,20 @@ serve(async (req) => {
       );
     }
     
+    // Filter out parlay markets - only show single-leg markets
+    // Parlay markets have multiple comma-separated conditions in their title
+    const singleLegMarkets = marketData.markets?.filter((market: any) => {
+      const title = market.title || '';
+      const cleaned = title.replace(/\b(yes|no)\s+/gi, '').trim();
+      const conditions = cleaned.split(',').map((s: string) => s.trim()).filter(Boolean);
+      // Only keep markets with exactly 1 condition (single-leg markets)
+      return conditions.length === 1;
+    }) || [];
+    
+    console.log(`[PUBLIC] Filtered to ${singleLegMarkets.length} single-leg markets (removed parlays)`);
+    
     // Normalize Kalshi markets to match our Market interface
-    const normalizedMarkets = (marketData.markets?.map((market: any) => {
+    const normalizedMarkets = (singleLegMarkets.map((market: any) => {
       // Helpers to convert price from number or *_dollars string to integer cents
       const toCents = (num: unknown, dollars: unknown): number | null => {
         if (typeof num === 'number' && !isNaN(num)) return Math.round(num);

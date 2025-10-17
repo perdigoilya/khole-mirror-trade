@@ -77,20 +77,15 @@ const MarketDetail = () => {
   const platformAccentClass = isKalshi ? "border-kalshi-teal" : "border-polymarket-purple";
   const platformName = isKalshi ? "Kalshi" : "Polymarket";
 
-  const kalshiLegs = useMemo(() => {
-    if (!isKalshi) return [] as string[];
-    const raw = (selectedSubMarket || market)?.title || '';
-    const cleaned = raw.replace(/\b(yes|no)\s+/gi, '').trim();
-    return cleaned.split(',').map(s => s.trim()).filter(Boolean);
-  }, [isKalshi, market, selectedSubMarket]);
-
   const displayTitle = useMemo(() => {
     if (isKalshi) {
-      return kalshiLegs[0] || ((selectedSubMarket || market)?.title || '');
+      // For Kalshi: Clean up "yes/no" prefixes
+      const raw = (selectedSubMarket || market)?.title || '';
+      return raw.replace(/\b(yes|no)\s+/gi, '').trim();
     }
     const raw = (selectedSubMarket || market)?.title || '';
     return raw;
-  }, [isKalshi, kalshiLegs, market, selectedSubMarket]);
+  }, [isKalshi, market, selectedSubMarket]);
 
   const marketDetailCacheRef = useRef<Map<string, { market: Market, timestamp: number }>>(new Map());
   const CACHE_DURATION = 60000; // 60 seconds
@@ -750,13 +745,6 @@ const MarketDetail = () => {
                       </Button>
                     </div>
                   )}
-                  {isKalshi && (market.eventTicker) && (
-                    <div className="mt-1">
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/kalshi/event/${market.eventTicker}`)}>
-                        View all markets in this event
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -783,19 +771,6 @@ const MarketDetail = () => {
                   </div>
                 </div>
               </Card>
-
-              {isKalshi && kalshiLegs.length > 1 && (
-                <Card className="mt-4 p-6">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-muted-foreground">Legs</p>
-                    <ul className="list-disc pl-5 space-y-1 text-sm">
-                      {kalshiLegs.map((leg, idx) => (
-                        <li key={idx}>{leg}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </Card>
-              )}
             </div>
 
             {/* Charts and Outcomes - Single column layout */}
