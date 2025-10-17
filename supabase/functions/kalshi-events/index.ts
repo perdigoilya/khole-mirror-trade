@@ -53,6 +53,26 @@ serve(async (req) => {
       );
     }
 
+    // Fetch event metadata for images in parallel
+    const eventMetadataPromises = (eventData.events || []).map(async (event: any) => {
+      for (const base of baseUrls) {
+        const metaUrl = `${base}/trade-api/v2/events/${event.event_ticker}/metadata`;
+        try {
+          const metaResp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
+          if (metaResp.ok) {
+            const metadata = await metaResp.json();
+            return { ticker: event.event_ticker, image_url: metadata?.image_url || null };
+          }
+        } catch (e) {
+          console.error(`[PUBLIC] Failed to fetch metadata for ${event.event_ticker}:`, e);
+        }
+      }
+      return { ticker: event.event_ticker, image_url: null };
+    });
+
+    const eventMetadata = await Promise.all(eventMetadataPromises);
+    const imageMap = new Map(eventMetadata.map(e => [e.ticker, e.image_url]));
+
     // Normalize events
     const normalizedEvents = (eventData.events || []).map((event: any) => {
       // Find the most liquid/popular market in this event as the "headline"
@@ -89,6 +109,7 @@ serve(async (req) => {
         title: event.title || event.sub_title || event.event_ticker,
         subtitle: event.sub_title,
         description: event.title || event.sub_title,
+        image: imageMap.get(event.event_ticker) || null,
         yesPrice,
         noPrice,
         volume: totalVolume > 0 ? `${totalVolume.toLocaleString('en-US')} contracts` : '$0',
