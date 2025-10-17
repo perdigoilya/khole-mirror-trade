@@ -172,11 +172,9 @@ const Markets = () => {
       setOffset(0);
       const searchTerm = searchParams.get("search");
       
-      // Only fetch if the necessary credentials are available
+      // Fetch public Kalshi data without requiring connection
       if (platform === 'kalshi') {
-        if (isKalshiConnected && kalshiCredentials) {
-          fetchMarkets(searchTerm, 'kalshi', 0, false);
-        }
+        fetchMarkets(searchTerm, 'kalshi', 0, false);
       } else {
         fetchMarkets(searchTerm, 'polymarket', 0, false);
       }
@@ -882,7 +880,7 @@ const Markets = () => {
                   <p className="text-muted-foreground">Loading {platform === 'kalshi' ? 'Kalshi' : 'Polymarket'} markets...</p>
                 </div>
               </div>
-            ) : platform === 'kalshi' && !isKalshiConnected ? (
+            ) : false ? (
               <div className="p-12">
                 <div className="max-w-md mx-auto text-center">
                   <div className="w-16 h-16 rounded-full bg-kalshi-teal/10 flex items-center justify-center mx-auto mb-4">
