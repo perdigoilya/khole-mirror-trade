@@ -81,14 +81,16 @@ serve(async (req) => {
     const preimage = `${method}${requestPath}${timestamp}`;
 
     const attemptSanityCheck = async (addr: string, key: string, secret: string, pass: string): Promise<Response> => {
-      // Detect if secret is base64 (Polymarket returns base64 secrets)
-      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
+      // Normalize base64url to standard base64
+      let normalized = secret.replace(/-/g, '+').replace(/_/g, '/');
+      while (normalized.length % 4 !== 0) normalized += '=';
+      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(normalized);
       const encoder = new TextEncoder();
       
       // Decode secret from base64 if needed, otherwise use utf8
       let secretBytes: Uint8Array;
       if (isB64) {
-        const secretRaw = atob(secret);
+        const secretRaw = atob(normalized);
         secretBytes = new Uint8Array(secretRaw.length);
         for (let i = 0; i < secretRaw.length; i++) {
           secretBytes[i] = secretRaw.charCodeAt(i);
