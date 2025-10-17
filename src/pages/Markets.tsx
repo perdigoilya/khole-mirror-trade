@@ -102,9 +102,10 @@ const Markets = () => {
     try {
       let result;
       
-      if (provider === 'kalshi' && kalshiCredentials) {
+      if (provider === 'kalshi') {
+        // Kalshi public market data - no authentication required
         result = await supabase.functions.invoke('kalshi-markets', {
-          body: kalshiCredentials
+          body: {}
         });
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {
@@ -688,24 +689,8 @@ const Markets = () => {
                     ? 'bg-kalshi-teal hover:bg-kalshi-teal-dark text-white' 
                     : 'text-muted-foreground hover:text-foreground'}
                   onClick={() => {
-                    if (!isKalshiConnected) {
-                      toast({
-                        title: "Kalshi Connection Required",
-                        description: "Please connect your Kalshi account to view Kalshi markets",
-                        action: (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => navigate('/portfolio')}
-                          >
-                            Connect
-                          </Button>
-                        ),
-                      });
-                    } else {
-                      setPlatform('kalshi');
-                      setMarkets([]); // Clear markets to force refresh
-                    }
+                    setPlatform('kalshi');
+                    setMarkets([]); // Clear markets to force refresh
                   }}
                 >
                   <img 
@@ -714,24 +699,18 @@ const Markets = () => {
                     className="w-5 h-5 mr-2"
                   />
                   Kalshi
-                  {!isKalshiConnected && (
-                    <Badge variant="outline" className="ml-2 text-xs">
-                      Not Connected
-                    </Badge>
-                  )}
                 </Button>
               </div>
               
               <div className="text-sm text-muted-foreground">
                 {platform === 'kalshi' ? (
-                  isKalshiConnected ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-kalshi-teal animate-pulse" />
-                      Connected to Kalshi
-                    </span>
-                  ) : (
-                    <span className="text-yellow-500">⚠️ Kalshi not connected</span>
-                  )
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-kalshi-teal animate-pulse" />
+                    Showing Kalshi markets (public data)
+                    {!isKalshiConnected && (
+                      <span className="text-yellow-500 ml-2">• Connect account to trade</span>
+                    )}
+                  </span>
                 ) : (
                   <span className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-polymarket-purple animate-pulse" />
@@ -742,14 +721,6 @@ const Markets = () => {
             </div>
           </div>
 
-          {/* Demo Account Disclaimer for Kalshi */}
-          {platform === 'kalshi' && markets.length > 0 && markets.every(m => m.volumeRaw === 0 && m.yesPrice === 0) && (
-            <Alert className="mb-6 bg-yellow-500/10 border-yellow-500/30">
-              <AlertDescription className="text-sm">
-                <strong>Demo Account Notice:</strong> You're using a Kalshi demo account. Demo accounts don't display real market data (prices, volume, liquidity). To view live market data, please connect a production Kalshi account.
-              </AlertDescription>
-            </Alert>
-          )}
 
           {/* Filter Bar */}
           <div className="flex items-center gap-3 mb-6">
