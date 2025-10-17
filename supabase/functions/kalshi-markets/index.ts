@@ -24,8 +24,9 @@ serve(async (req) => {
     console.log('[PUBLIC] Fetching Kalshi market data from public API - no authentication required');
 
     // Use public unauthenticated endpoint for market data
-    // No API key required for public market data
-    const path = "/trade-api/v2/markets?status=open&limit=200";
+    // Fetch more markets per batch to find single-leg ones (Kalshi max is 1000)
+    const limit = 1000;
+    const path = `/trade-api/v2/markets?status=open&limit=${limit}`;
     
     // Try production endpoints (public data doesn't require authentication)
     const baseUrls = [
