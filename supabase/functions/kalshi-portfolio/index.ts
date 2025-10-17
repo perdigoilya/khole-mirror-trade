@@ -103,10 +103,11 @@ serve(async (req) => {
       'https://demo-api.kalshi.co'
     ];
 
-    let portfolioData = null;
-    let balanceData = null;
+    let portfolioData: any = null;
+    let balanceData: any = null;
     let successfulBase = '';
     let lastError = '';
+    const candidates: Array<{ base: string; portfolioData: any; balanceData: any }> = [];
 
     for (const base of baseUrls) {
       // Fetch positions
@@ -126,15 +127,13 @@ serve(async (req) => {
       });
 
       if (positionsResponse.ok) {
-        portfolioData = await positionsResponse.json();
-        successfulBase = base;
-        console.log(`Successfully fetched positions from ${base} with ${portfolioData.market_positions?.length || 0} positions`);
-        
-        // Also fetch balance
+        const pd = await positionsResponse.json();
+        console.log(`Fetched positions from ${base}: ${pd.market_positions?.length || 0}`);
+        // Also fetch balance for this base
         const timestamp2 = Date.now().toString();
         const balancePath = "/trade-api/v2/portfolio/balance";
         const balanceSignature = await createKalshiSignature(privateKey, timestamp2, "GET", balancePath);
-        
+        let bd: any = null;
         const balanceResponse = await fetch(`${base}${balancePath}`, {
           headers: {
             'KALSHI-ACCESS-KEY': apiKeyId,
@@ -143,20 +142,29 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
         });
-        
         if (balanceResponse.ok) {
-          balanceData = await balanceResponse.json();
-          console.log(`Successfully fetched balance from ${base}:`, JSON.stringify(balanceData));
+          bd = await balanceResponse.json();
+          console.log(`Fetched balance from ${base}: ${JSON.stringify(bd)}`);
         } else {
           const balanceError = await balanceResponse.text();
-          console.log(`Failed to fetch balance from ${base}: ${balanceResponse.status} - ${balanceError}`);
+          console.log(`Balance fetch failed on ${base}: ${balanceResponse.status} - ${balanceError}`);
         }
-        
-        break;
+        candidates.push({ base, portfolioData: pd, balanceData: bd });
+        continue;
       } else {
         lastError = await positionsResponse.text();
         console.log(`Failed ${base}:`, positionsResponse.status, lastError);
       }
+    }
+
+    // Choose best environment among candidates (prefer non-zero positions or balance)
+    if (candidates.length > 0) {
+      const withData = candidates.find(c => ((c.portfolioData?.market_positions?.length || 0) > 0) || (c.balanceData && parseFloat((c.balanceData.balance ?? '0')) > 0));
+      const chosen = withData || candidates[0];
+      portfolioData = chosen.portfolioData;
+      balanceData = chosen.balanceData;
+      successfulBase = chosen.base;
+      console.log(`Using base ${successfulBase} positions=${portfolioData.market_positions?.length || 0} balance=${balanceData?.balance ?? 'n/a'}`);
     }
 
     if (!portfolioData) {
@@ -167,39 +175,66 @@ serve(async (req) => {
       );
     }
     
-    // Transform Kalshi portfolio data to match our expected format
+    // Fetch market quotes per ticker to compute current prices
     const marketPositions = portfolioData.market_positions || [];
-    const eventPositions = portfolioData.event_positions || [];
-    
-    // Normalize Kalshi positions to match Portfolio interface
+    const tickers: string[] = Array.from(new Set(marketPositions.map((p: any) => p.ticker || p.market_ticker).filter(Boolean)));
+    const priceMap: Record<string, any> = {};
+    for (const t of tickers) {
+      try {
+        const ts = Date.now().toString();
+        const mpath = `/trade-api/v2/markets/${encodeURIComponent(t)}`;
+        const sig = await createKalshiSignature(privateKey, ts, 'GET', mpath);
+        const r = await fetch(`${successfulBase}${mpath}`, {
+          headers: {
+            'KALSHI-ACCESS-KEY': apiKeyId,
+            'KALSHI-ACCESS-SIGNATURE': sig,
+            'KALSHI-ACCESS-TIMESTAMP': ts,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (r.ok) {
+          const md = await r.json();
+          priceMap[t] = md.market || md;
+        }
+      } catch (_) {}
+    }
+
+    // Normalize positions
     const positions = marketPositions.map((pos: any) => {
-      const contracts = pos.market_result?.market_outcome === 'yes' ? pos.position : -pos.position;
-      const avgPrice = pos.total_cost / Math.abs(contracts) / 100; // Kalshi uses cents
-      const currentPrice = pos.market_result?.yes_price || pos.position > 0 ? 50 : 50; // fallback to 50 if no price
-      const currentValue = Math.abs(contracts) * currentPrice / 100;
-      const cashPnl = currentValue - (pos.total_cost / 100);
-      const percentPnl = pos.total_cost > 0 ? (cashPnl / (pos.total_cost / 100)) * 100 : 0;
-      
+      const ticker = pos.ticker || pos.market_ticker || '';
+      const size = Math.abs(Number(pos.position) || 0);
+      const totalTradedCents = Number(pos.total_traded ?? 0);
+      const avgPrice = size > 0 ? (totalTradedCents / size) / 100 : 0;
+      const m = priceMap[ticker] || {};
+      const yesAsk = typeof m.yes_ask === 'number' ? m.yes_ask : undefined;
+      const yesBid = typeof m.yes_bid === 'number' ? m.yes_bid : undefined;
+      const noAsk = typeof m.no_ask === 'number' ? m.no_ask : undefined;
+      const last = typeof m.last_price === 'number' ? m.last_price : undefined;
+      const curPriceCents = yesAsk ?? last ?? yesBid ?? (typeof noAsk === 'number' ? (100 - noAsk) : 50);
+      const currentValue = size * (curPriceCents / 100);
+      const invested = totalTradedCents / 100;
+      const cashPnl = currentValue - invested;
+      const percentPnl = invested > 0 ? (cashPnl / invested) * 100 : 0;
       return {
-        title: pos.market_ticker || 'Unknown Market',
-        outcome: contracts > 0 ? 'Yes' : 'No',
-        size: Math.abs(contracts),
-        avgPrice: avgPrice,
-        currentValue: currentValue,
-        cashPnl: cashPnl,
-        percentPnl: percentPnl,
-        curPrice: currentPrice / 100,
-        slug: pos.market_ticker || '',
+        title: ticker,
+        outcome: (Number(pos.position) || 0) >= 0 ? 'Yes' : 'No',
+        size,
+        avgPrice,
+        currentValue,
+        cashPnl,
+        percentPnl,
+        curPrice: curPriceCents / 100,
+        slug: ticker,
         icon: undefined,
       };
     });
-    
-    // Calculate summary
-    const totalInvested = marketPositions.reduce((sum: number, pos: any) => sum + (pos.total_cost / 100), 0);
+
+    // Summary
+    const totalInvested = marketPositions.reduce((sum: number, pos: any) => sum + (Number(pos.total_traded ?? 0) / 100), 0);
     const totalValue = positions.reduce((sum: number, pos: any) => sum + pos.currentValue, 0);
     const totalPnl = positions.reduce((sum: number, pos: any) => sum + pos.cashPnl, 0);
-    const totalRealizedPnl = portfolioData.realized_pnl ? portfolioData.realized_pnl / 100 : 0;
-    
+    const totalRealizedPnl = marketPositions.reduce((sum: number, pos: any) => sum + (Number(pos.realized_pnl ?? 0) / 100), 0);
+
     const summary = {
       totalValue,
       totalPnl,
