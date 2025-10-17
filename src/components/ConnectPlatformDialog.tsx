@@ -87,16 +87,16 @@ export function ConnectPlatformDialog({
             className={cn(
               "w-full p-5 rounded-lg border-2 transition-all text-left group cursor-pointer",
               isPolymarketConnected
-                ? "border-[hsl(var(--polymarket-blue))]/30 bg-[hsl(var(--polymarket-blue))]/5 hover:border-red-500/50 hover:bg-red-500/5"
-                : "border-[hsl(var(--polymarket-blue))]/40 hover:border-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/10"
+                ? "border-[hsl(var(--polymarket-purple))]/30 bg-[hsl(var(--polymarket-purple))]/5 hover:border-red-500/50 hover:bg-red-500/5"
+                : "border-[hsl(var(--polymarket-purple))]/40 hover:border-[hsl(var(--polymarket-purple))] hover:bg-[hsl(var(--polymarket-purple))]/10"
             )}
           >
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="font-bold text-lg text-[hsl(var(--polymarket-blue))]">Polymarket</span>
+                  <span className="font-bold text-lg text-[hsl(var(--polymarket-purple))]">Polymarket</span>
                   {isPolymarketConnected && (
-                    <Badge className="bg-[hsl(var(--polymarket-blue))]/20 text-[hsl(var(--polymarket-blue))] border-[hsl(var(--polymarket-blue))]/30">
+                    <Badge className="bg-[hsl(var(--polymarket-purple))]/20 text-[hsl(var(--polymarket-purple))] border-[hsl(var(--polymarket-purple))]/30">
                       <Check className="h-3 w-3 mr-1" />
                       Connected
                     </Badge>
@@ -109,16 +109,32 @@ export function ConnectPlatformDialog({
                 </p>
               </div>
               {!isPolymarketConnected && (
-                <ArrowRight className="h-5 w-5 text-[hsl(var(--polymarket-blue))] opacity-0 group-hover:opacity-100 transition-opacity" />
+                <ArrowRight className="h-5 w-5 text-[hsl(var(--polymarket-purple))] opacity-0 group-hover:opacity-100 transition-opacity" />
               )}
             </div>
           </button>
         </div>
 
         {!isKalshiConnected && !isPolymarketConnected && (
-          <p className="text-xs text-muted-foreground text-center mt-6 pb-2">
-            Connect one or both platforms to manage your portfolio
-          </p>
+          <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground text-center">
+              Connect one or both platforms to manage your portfolio and start trading
+            </p>
+          </div>
+        )}
+
+        {(isKalshiConnected || isPolymarketConnected) && (
+          <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+            <p className="text-xs text-center">
+              {isKalshiConnected && isPolymarketConnected ? (
+                <span className="text-foreground font-medium">✓ Both platforms connected</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  You can connect to both platforms simultaneously
+                </span>
+              )}
+            </p>
+          </div>
         )}
       </DialogContent>
     </Dialog>

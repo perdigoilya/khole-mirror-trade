@@ -115,9 +115,33 @@ const Navigation = () => {
                 <Button 
                   onClick={() => setShowPlatformDialog(true)}
                   variant={(isKalshiConnected || isPolymarketConnected) ? "outline" : "default"}
-                  className="font-medium text-sm hidden lg:flex"
+                  className={cn(
+                    "font-medium text-sm hidden lg:flex items-center gap-2",
+                    isKalshiConnected && "border-kalshi-teal text-kalshi-teal hover:bg-kalshi-teal/10",
+                    isPolymarketConnected && !isKalshiConnected && "border-polymarket-purple text-polymarket-purple hover:bg-polymarket-purple/10"
+                  )}
                 >
-                  {(isKalshiConnected || isPolymarketConnected) ? t.nav.connected : t.nav.connect}
+                  {isKalshiConnected && isPolymarketConnected ? (
+                    <>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-kalshi-teal" />
+                        <div className="w-2 h-2 rounded-full bg-polymarket-purple" />
+                      </div>
+                      {t.nav.connected}
+                    </>
+                  ) : isKalshiConnected ? (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-kalshi-teal" />
+                      Kalshi
+                    </>
+                  ) : isPolymarketConnected ? (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-polymarket-purple" />
+                      Polymarket
+                    </>
+                  ) : (
+                    t.nav.connect
+                  )}
                 </Button>
                 <Button 
                   onClick={async () => {
@@ -193,9 +217,33 @@ const Navigation = () => {
                           setMobileMenuOpen(false);
                         }}
                         variant={(isKalshiConnected || isPolymarketConnected) ? "outline" : "default"}
-                        className="w-full font-medium"
+                        className={cn(
+                          "w-full font-medium flex items-center gap-2",
+                          isKalshiConnected && "border-kalshi-teal text-kalshi-teal hover:bg-kalshi-teal/10",
+                          isPolymarketConnected && !isKalshiConnected && "border-polymarket-purple text-polymarket-purple hover:bg-polymarket-purple/10"
+                        )}
                       >
-                        {(isKalshiConnected || isPolymarketConnected) ? t.nav.connected : t.nav.connectPlatform}
+                        {isKalshiConnected && isPolymarketConnected ? (
+                          <>
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-2 rounded-full bg-kalshi-teal" />
+                              <div className="w-2 h-2 rounded-full bg-polymarket-purple" />
+                            </div>
+                            {t.nav.connected}
+                          </>
+                        ) : isKalshiConnected ? (
+                          <>
+                            <div className="w-2 h-2 rounded-full bg-kalshi-teal" />
+                            Kalshi
+                          </>
+                        ) : isPolymarketConnected ? (
+                          <>
+                            <div className="w-2 h-2 rounded-full bg-polymarket-purple" />
+                            Polymarket
+                          </>
+                        ) : (
+                          t.nav.connectPlatform
+                        )}
                       </Button>
                       <Button 
                         onClick={async () => {
