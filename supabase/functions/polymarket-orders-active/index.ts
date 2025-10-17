@@ -63,6 +63,7 @@ serve(async (req) => {
     }
 
     const ownerAddress = walletAddress?.toLowerCase();
+    const funderAddress = (credsRow?.funder_address || '').toLowerCase();
 
     // Assert all 3 credentials present
     if (!apiKey || !apiSecret || !apiPassphrase) {
@@ -78,7 +79,7 @@ serve(async (req) => {
     const requestPath = '/auth/ban-status/closed-only';
     const preimage = `${method}${requestPath}${timestamp}`;
 
-    const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
+    const attemptSanityCheck = async (key: string, secret: string, pass: string, addr: string): Promise<Response> => {
       const encoder = new TextEncoder();
 
       // Normalize possible base64url secrets to standard base64
@@ -119,7 +120,7 @@ serve(async (req) => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'POLY_ADDRESS': ownerAddress,
+          'POLY_ADDRESS': addr,
           'POLY_SIGNATURE': sig1,
           'POLY_TIMESTAMP': ts1.toString(),
           'POLY_API_KEY': key,
@@ -136,7 +137,7 @@ serve(async (req) => {
       const sig2 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sig2Buf))));
 
       console.warn('L2 sanity check first attempt failed, retrying with alt preimage', {
-        ownerAddress,
+        addr,
         keySuffix: key.slice(-6),
         passSuffix: pass.slice(-4),
         ts1,
@@ -149,7 +150,7 @@ serve(async (req) => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'POLY_ADDRESS': ownerAddress,
+          'POLY_ADDRESS': addr,
           'POLY_SIGNATURE': sig2,
           'POLY_TIMESTAMP': ts2.toString(),
           'POLY_API_KEY': key,
@@ -157,9 +158,12 @@ serve(async (req) => {
         },
       });
     };
+    let sanityResponse = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase, ownerAddress);
 
-    let sanityResponse = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase);
-
+    if (!sanityResponse.ok && funderAddress && funderAddress !== ownerAddress) {
+      const altResp = await attemptSanityCheck(apiKey, apiSecret, apiPassphrase, funderAddress);
+      if (altResp.ok) sanityResponse = altResp;
+    }
     if (!sanityResponse.ok) {
       const errorText = await sanityResponse.text();
       const cfRay = sanityResponse.headers.get('cf-ray') || null;
@@ -214,7 +218,12 @@ serve(async (req) => {
                 const newApiPassphrase = deriveData.passphrase;
                 
                 console.log('Retrying sanity check with derived credentials...');
-                sanityResponse = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase);
+                let sanityRetry = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase, ownerAddress);
+                if (!sanityRetry.ok && funderAddress && funderAddress !== ownerAddress) {
+                  const altRetry = await attemptSanityCheck(newApiKey, newApiSecret, newApiPassphrase, funderAddress);
+                  if (altRetry.ok) sanityRetry = altRetry;
+                }
+                sanityResponse = sanityRetry;
                 
                 // If retry succeeds, continue to success handler below
                 if (sanityResponse.ok) {
