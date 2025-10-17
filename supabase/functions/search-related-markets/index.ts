@@ -31,17 +31,19 @@ serve(async (req) => {
     const keywords = extractKeywords(text);
     console.log("Extracted keywords:", keywords);
 
-    let markets = [];
+    // Search both platforms
+    const [polymarketMarkets, kalshiMarkets] = await Promise.all([
+      searchPolymarketEvents(keywords),
+      searchKalshiEvents(keywords)
+    ]);
 
-    if (provider === 'polymarket') {
-      markets = await searchPolymarketEvents(keywords);
-    } else if (provider === 'kalshi') {
-      // TODO: Implement Kalshi search
-      markets = [];
-    }
+    // Combine and sort by volume
+    const allMarkets = [...polymarketMarkets, ...kalshiMarkets]
+      .sort((a, b) => b.volumeRaw - a.volumeRaw)
+      .slice(0, 10);
 
     return new Response(
-      JSON.stringify({ markets, keywords }),
+      JSON.stringify({ markets: allMarkets, keywords }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
@@ -76,6 +78,103 @@ function extractKeywords(text: string): string[] {
 
   // Return unique keywords (top 5)
   return [...new Set(words)].slice(0, 5);
+}
+
+async function searchKalshiEvents(keywords: string[]): Promise<any[]> {
+  try {
+    console.log("Searching Kalshi events with keywords:", keywords);
+    
+    const baseUrls = [
+      'https://api.elections.kalshi.com',
+      'https://api.kalshi.com'
+    ];
+
+    let events: any[] = [];
+    
+    // Try to fetch from Kalshi API
+    for (const base of baseUrls) {
+      try {
+        const url = `${base}/trade-api/v2/events?status=open&limit=100&with_nested_markets=true`;
+        const response = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          events = data.events || [];
+          console.log(`Fetched ${events.length} Kalshi events from ${base}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`Failed to fetch from ${base}:`, e);
+      }
+    }
+
+    if (events.length === 0) {
+      console.log('No Kalshi events fetched');
+      return [];
+    }
+
+    // Filter and format events based on keywords
+    const relevantMarkets: any[] = [];
+    
+    for (const event of events) {
+      const eventText = `${event.title || ''} ${event.subtitle || ''} ${event.category || ''}`.toLowerCase();
+      const hasMatch = keywords.some(keyword => eventText.includes(keyword.toLowerCase()));
+      
+      if (hasMatch && event.markets && event.markets.length > 0) {
+        const market = event.markets[0]; // Use first market as representative
+        
+        const toCents = (num: any, dollars: any) => {
+          if (typeof num === 'number' && !isNaN(num)) return Math.round(num);
+          if (typeof dollars === 'string') {
+            const f = parseFloat(dollars);
+            if (!isNaN(f)) return Math.round(f * 100);
+          }
+          return 50;
+        };
+
+        const yesPrice = toCents(market.yes_bid, market.yes_bid_dollars) || toCents(market.last_price, market.last_price_dollars) || 50;
+        const noPrice = toCents(market.no_bid, market.no_bid_dollars) || (100 - yesPrice);
+        
+        const vol = parseFloat(market.volume || event.volume || 0);
+        const liq = parseFloat(market.open_interest || event.open_interest || 0);
+        
+        const marketData = {
+          id: market.ticker,
+          title: market.title || event.title || 'Unknown Market',
+          description: event.subtitle || market.subtitle || '',
+          yesPrice,
+          noPrice,
+          volume: vol > 1_000_000 ? `${(vol / 1_000_000).toFixed(1)}M contracts` : vol > 1_000 ? `${(vol / 1_000).toFixed(0)}K contracts` : `${vol.toFixed(0)} contracts`,
+          liquidity: liq > 1_000_000 ? `$${(liq / 1_000_000).toFixed(1)}M` : liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
+          endDate: event.close_time || market.close_time || market.expiration_time || 'TBD',
+          status: event.status === 'open' ? 'Active' : 'Closed',
+          category: event.category || 'Other',
+          provider: 'kalshi',
+          volumeRaw: vol,
+          liquidityRaw: liq,
+          clobTokenId: market.ticker,
+          ticker: market.ticker,
+          image: event.series_image || null,
+        };
+        
+        console.log(`Adding Kalshi market: ${marketData.title.substring(0, 50)}...`);
+        relevantMarkets.push(marketData);
+      }
+      
+      if (relevantMarkets.length >= 5) break; // Limit Kalshi results
+    }
+
+    console.log(`Found ${relevantMarkets.length} relevant Kalshi markets`);
+    return relevantMarkets;
+  } catch (error) {
+    console.error("Error fetching from Kalshi:", error);
+    return [];
+  }
 }
 
 async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
