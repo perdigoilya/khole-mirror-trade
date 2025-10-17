@@ -169,7 +169,7 @@ export const ConnectKalshiDialog = ({ open, onOpenChange }: ConnectKalshiDialogP
               className="bg-background border-border text-foreground font-mono text-sm min-h-[200px]"
             />
             <p className="text-sm text-muted-foreground">
-              Unencrypted PKCS#8 keys are supported. If your file shows “BEGIN RSA PRIVATE KEY” or contains Proc-Type/DEK-Info, please convert to “BEGIN PRIVATE KEY”.
+              PKCS#8 and PKCS#1 (RSA) keys are supported. Encrypted keys (with Proc-Type/DEK-Info) are not supported.
             </p>
           </div>
 

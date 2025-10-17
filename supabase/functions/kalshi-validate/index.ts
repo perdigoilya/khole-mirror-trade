@@ -12,52 +12,60 @@ async function createKalshiSignature(
   method: string,
   path: string
 ): Promise<string> {
-  // Import the private key - expect unencrypted PKCS#8 (BEGIN PRIVATE KEY).
-  // If PKCS#1 (BEGIN RSA PRIVATE KEY) is provided, return a helpful error.
-  if (privateKeyPem.includes('BEGIN RSA PRIVATE KEY')) {
-    if (/Proc-Type:/i.test(privateKeyPem) || /DEK-Info:/i.test(privateKeyPem)) {
-      throw new Error('Encrypted RSA keys are not supported. Please provide an unencrypted PKCS#8 private key (BEGIN PRIVATE KEY).');
-    }
-    throw new Error('PKCS#1 RSA keys are not supported. Please convert to unencrypted PKCS#8 (BEGIN PRIVATE KEY).');
+  // Normalize and parse PEM. Support PKCS#8 (BEGIN PRIVATE KEY) and PKCS#1 (BEGIN RSA PRIVATE KEY)
+  const isPkcs1 = /BEGIN RSA PRIVATE KEY/.test(privateKeyPem);
+  const isEncrypted = /Proc-Type:/i.test(privateKeyPem) || /DEK-Info:/i.test(privateKeyPem);
+  if (isEncrypted) {
+    throw new Error('Encrypted private keys are not supported. Please provide an unencrypted key.');
   }
 
-  let pemContents = privateKeyPem;
-  
-  // Remove PKCS#8 headers (BEGIN PRIVATE KEY)
-  pemContents = pemContents.replace('-----BEGIN PRIVATE KEY-----', '');
-  pemContents = pemContents.replace('-----END PRIVATE KEY-----', '');
-  
-  // Remove potential OpenSSL metadata lines and sanitize non-base64 chars
-  pemContents = pemContents
-    .replace(/Proc-Type:[^\n]*\n?/gi, '')
-    .replace(/DEK-Info:[^\n]*\n?/gi, '')
+  // Extract base64 body
+  let b64 = privateKeyPem
+    .replace(/-----BEGIN [^-]+-----/g, '')
+    .replace(/-----END [^-]+-----/g, '')
     .replace(/[^A-Za-z0-9+/=]/g, '');
-  
-  if (!pemContents) {
-    throw new Error('Invalid private key format. Ensure it is the full PEM content.');
-  }
-  
-  let binaryDer: Uint8Array;
+
+  if (!b64) throw new Error('Invalid private key format. Missing body content.');
+
+  // Decode base64 to DER
+  let derBytes: Uint8Array;
   try {
-    binaryDer = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-  } catch (e) {
-    throw new Error("Failed to decode base64. Please ensure your private key is correctly formatted and not corrupted.");
+    derBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  } catch (_) {
+    throw new Error('Failed to decode base64. Ensure the key content is correct.');
   }
-  
-  // Create an ArrayBuffer from the Uint8Array
-  const arrayBuffer = new ArrayBuffer(binaryDer.length);
-  const view = new Uint8Array(arrayBuffer);
-  view.set(binaryDer);
-  
+
+  // If PKCS#1, wrap RSAPrivateKey in PKCS#8 PrivateKeyInfo
+  if (isPkcs1) {
+    const rsaDer = derBytes;
+
+    // DER helpers
+    const derLen = (len: number) => {
+      if (len < 0x80) return new Uint8Array([len]);
+      const bytes: number[] = [];
+      let n = len;
+      while (n > 0) { bytes.unshift(n & 0xff); n >>= 8; }
+      return new Uint8Array([0x80 | bytes.length, ...bytes]);
+    };
+    const derSeq = (content: Uint8Array) => new Uint8Array([0x30, ...derLen(content.length), ...content]);
+    const derInt0 = new Uint8Array([0x02, 0x01, 0x00]); // INTEGER 0
+    const derOidRsa = new Uint8Array([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]); // 1.2.840.113549.1.1.1
+    const derNull = new Uint8Array([0x05, 0x00]);
+    const algId = derSeq(new Uint8Array([...derOidRsa, ...derNull]));
+    const octet = new Uint8Array([0x04, ...derLen(rsaDer.length), ...rsaDer]);
+    const pkcs8 = derSeq(new Uint8Array([...derInt0, ...algId, ...octet]));
+    derBytes = pkcs8;
+  }
+
+  // Import as PKCS#8
+  const ab: ArrayBuffer = new ArrayBuffer(derBytes.length);
+  new Uint8Array(ab).set(derBytes);
   const key = await crypto.subtle.importKey(
-    "pkcs8",
-    arrayBuffer,
-    {
-      name: "RSA-PSS",
-      hash: "SHA-256",
-    },
+    'pkcs8',
+    ab,
+    { name: 'RSA-PSS', hash: 'SHA-256' },
     false,
-    ["sign"]
+    ['sign']
   );
 
   // Create message to sign: timestamp + method + path
