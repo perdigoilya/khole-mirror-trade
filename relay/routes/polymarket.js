@@ -120,10 +120,14 @@ router.post('/trade', authenticateRequest, rateLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: signedOrder, walletAddress' });
     }
     
-    let credentials = providedCreds;
+    let credentials;
     
-    // If credentials not provided, try to fetch from database
-    if (!credentials && userId) {
+    // If credentials provided directly, use them
+    if (providedCreds) {
+      credentials = providedCreds;
+      console.log('Using provided credentials from request');
+    } else if (userId) {
+      // Otherwise try to fetch from database
       const db = getDb();
       
       if (isPostgres()) {
@@ -132,10 +136,20 @@ router.post('/trade', authenticateRequest, rateLimiter, async (req, res) => {
       } else {
         credentials = db.prepare('SELECT * FROM user_credentials WHERE user_id = ?').get(userId);
       }
+      console.log('Fetched credentials from database');
     }
     
-    if (!credentials || !credentials.api_key || !credentials.secret || !credentials.passphrase) {
-      return res.status(404).json({ error: 'Credentials not found or incomplete. Please provide credentials.' });
+    if (!credentials) {
+      return res.status(404).json({ error: 'No credentials provided or found in database' });
+    }
+    
+    if (!credentials.api_key || !credentials.secret || !credentials.passphrase) {
+      console.error('Incomplete credentials:', { 
+        hasApiKey: !!credentials.api_key, 
+        hasSecret: !!credentials.secret, 
+        hasPassphrase: !!credentials.passphrase 
+      });
+      return res.status(400).json({ error: 'Incomplete credentials. Missing api_key, secret, or passphrase.' });
     }
     
     console.log(`📝 Executing trade for user ${userId.slice(0, 8)}...`);
