@@ -7,6 +7,7 @@ const corsHeaders = {
 
 const CLOB = 'https://clob.polymarket.com';
 const ENV = Deno.env.get('DENO_DEPLOYMENT_ID')?.slice(0, 8) || 'local';
+const RELAY_URL = 'https://polymarket-relay-final.onrender.com';
 
 async function hmacBase64(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -252,8 +253,46 @@ serve(async (req) => {
       }
     }
 
+    // If direct attempts failed, try relay server as fallback
     if (!r.ok) {
-      console.error('[TRADE] FAILED:', r.status, upstream);
+      console.log('[TRADE] Direct attempt failed, trying relay server fallback...');
+      try {
+        const relayResponse = await fetch(`${RELAY_URL}/api/polymarket/trade`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            credentials: {
+              apiKey: key,
+              secret: secret,
+              passphrase: passphrase,
+              walletAddress: usedAddress,
+              funderAddress: funderAddress || undefined
+            },
+            orderData: signedOrder,
+            side,
+            size,
+            price,
+            tokenId
+          })
+        });
+
+        const relayResult = await relayResponse.json();
+        
+        if (relayResponse.ok && relayResult.success) {
+          console.log('[TRADE] ✓ Success via relay:', relayResult);
+          return out({
+            success: true,
+            viaRelay: true,
+            ...relayResult
+          });
+        } else {
+          console.error('[TRADE] Relay also failed:', relayResponse.status, relayResult);
+        }
+      } catch (relayError: any) {
+        console.error('[TRADE] Relay error:', relayError.message);
+      }
+      
+      console.error('[TRADE] FAILED (all attempts):', r.status, upstream);
     } else {
       console.log('[TRADE] ✓ Success:', upstream);
     }
