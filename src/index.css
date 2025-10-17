@@ -52,12 +52,12 @@ All colors MUST be HSL.
     --chart-red: 0 84% 60%;
     
     /* Platform brand colors */
-    --kalshi-teal: 174 72% 56%;
-    --kalshi-teal-dark: 174 72% 46%;
-    --kalshi-teal-light: 174 72% 66%;
-    --polymarket-purple: 258 90% 66%;
-    --polymarket-purple-dark: 258 90% 56%;
-    --polymarket-purple-light: 258 90% 76%;
+    --kalshi-teal: 158 69% 45%;
+    --kalshi-teal-dark: 158 69% 35%;
+    --kalshi-teal-light: 158 69% 55%;
+    --polymarket-purple: 222 99% 59%;
+    --polymarket-purple-dark: 222 99% 49%;
+    --polymarket-purple-light: 222 99% 69%;
     
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(var(--terminal-green)), hsl(var(--terminal-green-bright)));
