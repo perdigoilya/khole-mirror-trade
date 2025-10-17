@@ -53,25 +53,8 @@ serve(async (req) => {
       );
     }
 
-    // Fetch event metadata for images in parallel
-    const eventMetadataPromises = (eventData.events || []).map(async (event: any) => {
-      for (const base of baseUrls) {
-        const metaUrl = `${base}/trade-api/v2/events/${event.event_ticker}/metadata`;
-        try {
-          const metaResp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
-          if (metaResp.ok) {
-            const metadata = await metaResp.json();
-            return { ticker: event.event_ticker, image_url: metadata?.image_url || null };
-          }
-        } catch (e) {
-          console.error(`[PUBLIC] Failed to fetch metadata for ${event.event_ticker}:`, e);
-        }
-      }
-      return { ticker: event.event_ticker, image_url: null };
-    });
-
-    const eventMetadata = await Promise.all(eventMetadataPromises);
-    const imageMap = new Map(eventMetadata.map(e => [e.ticker, e.image_url]));
+    // Defer fetching event metadata images until after sorting to avoid heavy parallel requests
+    // We'll enrich only the top N events to reduce rate limits.
 
     // Normalize events
     const normalizedEvents = (eventData.events || []).map((event: any) => {
@@ -109,7 +92,7 @@ serve(async (req) => {
         title: event.title || event.sub_title || event.event_ticker,
         subtitle: event.sub_title,
         description: event.title || event.sub_title,
-        image: imageMap.get(event.event_ticker) || null,
+        image: null,
         yesPrice,
         noPrice,
         volume: totalVolume > 0 ? `${totalVolume.toLocaleString('en-US')} contracts` : '$0',
@@ -133,8 +116,31 @@ serve(async (req) => {
     // Sort by volume
     const sortedEvents = normalizedEvents.sort((a: any, b: any) => b.volumeRaw - a.volumeRaw);
 
-    console.log(`[PUBLIC] Returning ${sortedEvents.length} events`);
+    // Enrich top N events with metadata images (sequential to avoid rate limits)
+    const fetchEventImage = async (ticker: string): Promise<string | null> => {
+      for (const base of baseUrls) {
+        const metaUrl = `${base}/trade-api/v2/events/${ticker}/metadata`;
+        try {
+          const resp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
+          if (resp.ok) {
+            const md = await resp.json();
+            return md?.image_url || null;
+          }
+        } catch (e) {
+          console.log('[PUBLIC] metadata error', ticker, e);
+        }
+      }
+      return null;
+    };
 
+    const TOP_N = Math.min(40, sortedEvents.length);
+    for (let i = 0; i < TOP_N; i++) {
+      const ticker = sortedEvents[i].eventTicker;
+      const img = await fetchEventImage(ticker);
+      if (img) sortedEvents[i].image = img;
+    }
+
+    console.log(`[PUBLIC] Returning ${sortedEvents.length} events`);
     return new Response(
       JSON.stringify({ 
         events: sortedEvents,
