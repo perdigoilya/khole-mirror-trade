@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Fetching public market data from Kalshi API');
+    console.log('[PUBLIC] Fetching Kalshi market data from public API - no authentication required');
 
     // Use public unauthenticated endpoint for market data
     // No API key required for public market data
@@ -28,28 +28,29 @@ serve(async (req) => {
 
     for (const base of baseUrls) {
       const url = `${base}${path}`;
-      console.log('Trying public endpoint:', url);
+      console.log('[PUBLIC] Trying public endpoint:', url);
       
       const response = await fetch(url, {
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
       });
 
       if (response.ok) {
         marketData = await response.json();
-        console.log(`Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
+        console.log(`[PUBLIC] Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
         break;
       } else {
         lastError = await response.text();
-        console.log(`Failed ${base}:`, response.status, lastError);
+        console.log(`[PUBLIC] Failed ${base}:`, response.status, lastError);
       }
     }
 
     if (!marketData) {
-      console.error('All Kalshi API attempts failed:', lastError);
+      console.error('[PUBLIC] All Kalshi public API attempts failed:', lastError);
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch markets from Kalshi public API.' }),
+        JSON.stringify({ error: 'Failed to fetch markets from Kalshi public API.', details: lastError }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -167,6 +168,8 @@ serve(async (req) => {
     const finalMarkets = [...groupedMarkets, ...standaloneMarkets]
       .sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0));
     
+    console.log(`[PUBLIC] Returning ${finalMarkets.length} formatted markets`);
+    
     return new Response(
       JSON.stringify({ 
         markets: finalMarkets,
@@ -175,7 +178,7 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('Markets fetch error:', error);
+    console.error('[PUBLIC] Markets fetch error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
