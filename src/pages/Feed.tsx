@@ -622,8 +622,8 @@ const Feed = () => {
                             variant="outline" 
                             className={`mb-2 text-xs ${
                               market.provider === 'polymarket' 
-                                ? 'bg-polymarket-purple/20 text-polymarket-purple border-polymarket-purple/30' 
-                                : 'bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30'
+                                ? 'text-polymarket-purple border-polymarket-purple' 
+                                : 'text-kalshi-teal border-kalshi-teal'
                             }`}
                           >
                             {market.provider === 'polymarket' ? 'Polymarket' : 'Kalshi'}
