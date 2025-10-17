@@ -26,6 +26,7 @@ import {
   POLYMARKET_ORDER_TYPES 
 } from "@/lib/polymarket-orders";
 import { useEnsurePolymarketCredentials } from "@/hooks/usePolymarketCredentials";
+import { usePolymarketTrade } from "@/hooks/usePolymarketTrade";
 
 const Watchlist = () => {
   const { user, kalshiCredentials, polymarketCredentials } = useTrading();
@@ -35,6 +36,7 @@ const Watchlist = () => {
   const { signTypedDataAsync } = useSignTypedData();
   const { switchChainAsync } = useSwitchChain();
   const { ensureApiCreds } = useEnsurePolymarketCredentials();
+  const { executeTrade: executePolymarketTrade } = usePolymarketTrade();
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
   const [watchedMarkets, setWatchedMarkets] = useState<any[]>([]);
@@ -182,7 +184,7 @@ const Watchlist = () => {
       const market = currentTrade.market;
 
       if (market.provider === 'polymarket') {
-        // Polymarket trading
+        // Browser-only Polymarket trading
         if (!polymarketCredentials?.walletAddress || !isConnected || !address) {
           toast({
             title: "Wallet Not Connected",
@@ -192,14 +194,37 @@ const Watchlist = () => {
           return;
         }
 
-        // Get the token ID for the market
+        // Verify API credentials exist
+        if (!polymarketCredentials?.apiCredentials?.apiKey || 
+            !polymarketCredentials?.apiCredentials?.secret || 
+            !polymarketCredentials?.apiCredentials?.passphrase) {
+          toast({
+            title: "API Credentials Missing",
+            description: "Please reconnect to Polymarket to generate trading credentials",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Check network
+        if (chain?.id !== polygon.id) {
+          console.log('Switching to Polygon network...');
+          try {
+            await switchChainAsync({ chainId: polygon.id });
+          } catch (switchError: any) {
+            toast({
+              title: "Network Switch Required",
+              description: "Please switch to Polygon network in your wallet",
+              variant: "destructive",
+            });
+            return;
+          }
+        }
+
+        // Get token ID
         let tokenId = market.clobTokenId;
-        
-        // Clean up tokenId if it has array brackets or quotes
         if (tokenId && typeof tokenId === 'string') {
-          // Remove array brackets and extra quotes
           tokenId = tokenId.replace(/^\["|"\]$/g, '').replace(/^"|"$/g, '').trim();
-          // If it's still an array string, try to parse it
           if (tokenId.startsWith('[')) {
             try {
               const parsed = JSON.parse(tokenId);
@@ -219,138 +244,28 @@ const Watchlist = () => {
           return;
         }
 
-        try {
-          // Check if wallet is on Polygon network
-          if (chain?.id !== polygon.id) {
-            console.log('Switching to Polygon network...');
-            try {
-              await switchChainAsync({ chainId: polygon.id });
-            } catch (switchError: any) {
-              toast({
-                title: "Network Switch Required",
-                description: "Please switch to Polygon network in your wallet to place trades on Polymarket.",
-                variant: "destructive",
-              });
-              return;
-            }
-          }
+        // Execute browser-only trade
+        const price = currentTrade.price / 100; // Convert to 0-1 range
+        const side = currentTrade.side === 'yes' ? 'BUY' : 'SELL';
+        
+        const result = await executePolymarketTrade({
+          tokenId,
+          price,
+          size: shares,
+          side,
+          walletAddress: address,
+          funderAddress: polymarketCredentials.apiCredentials.funderAddress,
+          apiKey: polymarketCredentials.apiCredentials.apiKey,
+          apiSecret: polymarketCredentials.apiCredentials.secret,
+          apiPassphrase: polymarketCredentials.apiCredentials.passphrase,
+        });
 
-          // Convert price to proper format (0-1 range)
-          const price = currentTrade.price / 100;
-          const side = currentTrade.side === 'yes' ? 'BUY' : 'SELL';
-          
-          console.log('Building order:', {
-            tokenId,
-            price,
-            size: shares,
-            side,
-            walletAddress: address
-          });
-
-          // Build the order structure
-          const funderAddress = polymarketCredentials?.apiCredentials?.funderAddress || address;
-          const order = buildPolymarketOrder({
-            tokenId,
-            price,
-            size: shares,
-            side,
-            walletAddress: address,
-            funderAddress,
-            signatureType: 2, // Browser wallet
-          });
-
-          // Sign the order with the user's wallet
-          console.log('Requesting signature...');
-          const signature = await signTypedDataAsync({
-            account: address,
-            domain: POLYMARKET_ORDER_DOMAIN,
-            types: POLYMARKET_ORDER_TYPES,
-            primaryType: 'Order',
-            message: order,
-          });
-
-          // Format the signed order for API submission
-          const signedOrder = formatSignedOrder(order, signature);
-
-          console.log('Submitting order to Polymarket...');
-          
-          // Submit order via backend (requires L2 API credentials)
-          const apiCreds = polymarketCredentials?.apiCredentials;
-          if (!apiCreds?.apiKey || !apiCreds?.secret || !apiCreds?.passphrase) {
-            throw new Error('Missing Polymarket API credentials. Open Connect and set up trading first.');
-          }
-
-          // Check L2 sanity and closed_only status before trading
-          console.log('Checking L2 credentials and closed_only status...');
-          const { data: sanityData, error: sanityError } = await supabase.functions.invoke('polymarket-orders-active');
-          
-          if (sanityError || !sanityData?.ready) {
-            console.error('L2 sanity check failed:', sanityError || sanityData);
-            throw new Error('Trading not available. Please reconnect in Settings.');
-          }
-
-          if (sanityData.closedOnly === true) {
-            toast({
-              title: "Account in Closed-Only Mode",
-              description: "Your Polymarket account can't open new positions. Visit polymarket.com to resolve.",
-              variant: "destructive",
-            });
-            return;
-          }
-
-          // Submit order via backend (requires L2 API credentials held server-side)
-          const { data, error } = await supabase.functions.invoke('polymarket-trade', {
-            body: {
-              walletAddress: address,
-              tokenId,
-              side,
-              price,
-              size: shares,
-              signedOrder,
-              funderAddress,
-            }
-          });
-
-          if (error || !data?.success) {
-            throw new Error((data as any)?.error || error?.message || 'Trade failed');
-          }
-
-
-          console.log('Order placed successfully:', data);
-
-          toast({
-            title: "Trade Executed Successfully! ✅",
-            description: `Your ${currentTrade.side.toUpperCase()} order for ${shares} shares at $${(price * 100).toFixed(2)}¢ has been placed.`,
-          });
-
+        if (result.success) {
           setTradeDialogOpen(false);
           setTradeAmount('0');
           setCurrentTrade(null);
-
-        } catch (error: any) {
-          console.error('Polymarket trade error:', error);
-          
-          if (error.message?.includes('insufficient') || error.message?.includes('balance')) {
-            toast({
-              title: "Insufficient Funds ❌",
-              description: "Your wallet doesn't have enough USDC to complete this trade. Please deposit funds to your Polymarket wallet.",
-              variant: "destructive",
-            });
-          } else if (error.message?.includes('User rejected') || error.message?.includes('denied')) {
-            toast({
-              title: "Transaction Cancelled",
-              description: "You cancelled the transaction in your wallet.",
-              variant: "destructive",
-            });
-          } else {
-            toast({
-              title: "Trade Failed",
-              description: error.message || "Could not execute trade. Please try again.",
-              variant: "destructive",
-            });
-          }
-          return;
         }
+        return;
 
       } else {
         // Kalshi trading
