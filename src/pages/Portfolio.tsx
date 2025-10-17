@@ -244,7 +244,7 @@ const Portfolio = () => {
                       <Button 
                         size="lg"
                         variant="outline"
-                        className="h-12 border-[hsl(var(--kalshi-teal))] text-[hsl(var(--kalshi-teal))] hover:bg-[hsl(var(--kalshi-teal))]/10 flex-1"
+                        className="h-12 border-kalshi-teal text-kalshi-teal hover:bg-kalshi-teal/10 flex-1"
                         onClick={() => setShowKalshiDialog(true)}
                       >
                         <Key className="h-4 w-4 mr-2" />
@@ -253,7 +253,7 @@ const Portfolio = () => {
                       <Button 
                         size="lg"
                         variant="outline"
-                        className="h-12 border-[hsl(var(--polymarket-blue))] text-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/10 flex-1"
+                        className="h-12 border-polymarket-purple text-polymarket-purple hover:bg-polymarket-purple/10 flex-1"
                         onClick={() => setShowPolymarketDialog(true)}
                       >
                         <Key className="h-4 w-4 mr-2" />
