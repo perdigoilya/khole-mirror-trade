@@ -79,17 +79,23 @@ serve(async (req) => {
     const preimage = `${method}${requestPath}${timestamp}`;
 
     const attemptSanityCheck = async (key: string, secret: string, pass: string): Promise<Response> => {
-      // Detect if secret is base64 (Polymarket returns base64 secrets)
-      const isB64 = /^[A-Za-z0-9+/]+={0,2}$/.test(secret);
       const encoder = new TextEncoder();
-      
-      // Decode secret from base64 if needed, otherwise use utf8
+
+      // Normalize possible base64url secrets to standard base64
+      const normalizeB64 = (s: string) => {
+        let n = s.replace(/-/g, '+').replace(/_/g, '/');
+        while (n.length % 4 !== 0) n += '=';
+        return n;
+      };
+
       let secretBytes: Uint8Array;
-      if (isB64) {
-        const secretRaw = atob(secret);
-        secretBytes = new Uint8Array(secretRaw.length);
-        for (let i = 0; i < secretRaw.length; i++) {
-          secretBytes[i] = secretRaw.charCodeAt(i);
+      const normalized = normalizeB64(secret);
+      const b64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+      if (b64Regex.test(normalized)) {
+        const raw = atob(normalized);
+        secretBytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+          secretBytes[i] = raw.charCodeAt(i);
         }
       } else {
         secretBytes = encoder.encode(secret);
@@ -103,31 +109,40 @@ serve(async (req) => {
         ['sign']
       );
 
-      // Fresh timestamp and preimage per attempt
-      const ts = Math.floor(Date.now() / 1000);
-      const preimageLocal = `${method}${requestPath}${ts}`;
+      // Attempt 1: method+path+timestamp
+      const ts1 = Math.floor(Date.now() / 1000);
+      const preimage1 = `${method}${requestPath}${ts1}`;
+      const sig1Buf = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(preimage1));
+      const sig1 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sig1Buf))));
 
-      const messageData = encoder.encode(preimageLocal);
-      const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
-      const signatureArray = Array.from(new Uint8Array(signature));
-      const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
+      let resp = await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'POLY_ADDRESS': ownerAddress,
+          'POLY_SIGNATURE': sig1,
+          'POLY_TIMESTAMP': ts1.toString(),
+          'POLY_API_KEY': key,
+          'POLY_PASSPHRASE': pass,
+        },
+      });
 
-      // Validate standard base64 format
-      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(signatureBase64) || (signatureBase64.length % 4) !== 0) {
-        throw new Error('POLY_SIGNATURE is not standard base64');
-      }
+      if (resp.ok) return resp;
 
-      console.log('L2 sanity check attempt:', { 
-        eoa: ownerAddress,
-        ownerAddress, 
-        polyAddress: ownerAddress,
+      // Attempt 2: timestamp+method+path (alt order used elsewhere successfully)
+      const ts2 = Math.floor(Date.now() / 1000);
+      const preimage2 = `${ts2}${method}${requestPath}`;
+      const sig2Buf = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(preimage2));
+      const sig2 = btoa(String.fromCharCode(...Array.from(new Uint8Array(sig2Buf))));
+
+      console.warn('L2 sanity check first attempt failed, retrying with alt preimage', {
+        ownerAddress,
         keySuffix: key.slice(-6),
         passSuffix: pass.slice(-4),
-        ts,
-        preimageFirst120: preimageLocal.substring(0, 120),
-        sigB64First12: signatureBase64.substring(0, 12),
-        method,
-        requestPath
+        ts1,
+        ts2,
+        preimage1First24: preimage1.slice(0,24),
+        preimage2First24: preimage2.slice(0,24),
       });
 
       return await fetch('https://clob.polymarket.com/auth/ban-status/closed-only', {
@@ -135,8 +150,8 @@ serve(async (req) => {
         headers: {
           'Accept': 'application/json',
           'POLY_ADDRESS': ownerAddress,
-          'POLY_SIGNATURE': signatureBase64,
-          'POLY_TIMESTAMP': ts.toString(),
+          'POLY_SIGNATURE': sig2,
+          'POLY_TIMESTAMP': ts2.toString(),
           'POLY_API_KEY': key,
           'POLY_PASSPHRASE': pass,
         },
