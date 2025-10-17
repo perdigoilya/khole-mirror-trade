@@ -262,7 +262,7 @@ serve(async (req) => {
       if (ok) break;
     }
 
-    tradingEnabled = banStatusCheck.ok && !closed_only;
+    tradingEnabled = (banStatusCheck.ok ? !closed_only : apiKeysCheck.ok);
 
     (globalThis as any).__PREIMAGE = `${method1}${path1}${ts1}`;
 
