@@ -11,38 +11,70 @@ async function createKalshiSignature(
   method: string,
   path: string
 ): Promise<string> {
-  const pemHeader = "-----BEGIN PRIVATE KEY-----";
-  const pemFooter = "-----END PRIVATE KEY-----";
-  const pemContents = privateKeyPem
-    .replace(pemHeader, "")
-    .replace(pemFooter, "")
-    .replace(/\s/g, "");
+  // Reject encrypted keys
+  if (/Proc-Type:|ENCRYPTED/i.test(privateKeyPem)) {
+    throw new Error('Encrypted private keys are not supported. Please use an unencrypted key.');
+  }
 
-  const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+  const base64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const bytesToBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+  const derLen = (n: number) => {
+    if (n < 128) return new Uint8Array([n]);
+    const bytes: number[] = [];
+    while (n > 0) { bytes.unshift(n & 0xff); n >>= 8; }
+    return new Uint8Array([0x80 | bytes.length, ...bytes]);
+  };
+  const concat = (...arrs: Uint8Array[]) => {
+    const total = arrs.reduce((s, a) => s + a.length, 0);
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const a of arrs) { out.set(a, off); off += a.length; }
+    return out;
+  };
 
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    binaryDer,
-    {
-      name: "RSA-PSS",
-      hash: "SHA-256",
-    },
+  const stripPem = (pem: string, label: string) =>
+    pem
+      .replace(new RegExp(`-----BEGIN ${label}-----`, 'g'), '')
+      .replace(new RegExp(`-----END ${label}-----`, 'g'), '')
+      .replace(/\s+/g, '');
+
+  let pkcs8Der: Uint8Array;
+
+  if (/BEGIN PRIVATE KEY/.test(privateKeyPem)) {
+    // PKCS#8
+    const pem = stripPem(privateKeyPem, 'PRIVATE KEY');
+    pkcs8Der = base64ToBytes(pem);
+  } else if (/BEGIN RSA PRIVATE KEY/.test(privateKeyPem)) {
+    // PKCS#1 -> wrap into PKCS#8
+    const pem = stripPem(privateKeyPem, 'RSA PRIVATE KEY');
+    const pkcs1Der = base64ToBytes(pem);
+
+    // Build: SEQUENCE { version(0), algId(rsaEncryption,NULL), OCTET STRING(pkcs1Der) }
+    const oidRsa = new Uint8Array([0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01]);
+    const nullParams = new Uint8Array([0x05, 0x00]);
+    const algSeqContent = concat(oidRsa, nullParams);
+    const algSeq = concat(new Uint8Array([0x30]), derLen(algSeqContent.length), algSeqContent);
+    const version = new Uint8Array([0x02, 0x01, 0x00]);
+    const pkOctet = concat(new Uint8Array([0x04]), derLen(pkcs1Der.length), pkcs1Der);
+    const p8Content = concat(version, algSeq, pkOctet);
+    pkcs8Der = concat(new Uint8Array([0x30]), derLen(p8Content.length), p8Content);
+  } else {
+    throw new Error('Unsupported key format. Provide PKCS#8 (BEGIN PRIVATE KEY) or PKCS#1 (BEGIN RSA PRIVATE KEY).');
+  }
+
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pkcs8Der.buffer as ArrayBuffer,
+    { name: 'RSA-PSS', hash: 'SHA-256' },
     false,
-    ["sign"]
+    ['sign']
   );
 
-  const message = new TextEncoder().encode(timestamp + method + path);
+  const message = `${timestamp}${method}${path}`;
+  const msgBuffer = new TextEncoder().encode(message);
 
-  const signature = await crypto.subtle.sign(
-    {
-      name: "RSA-PSS",
-      saltLength: 32,
-    },
-    cryptoKey,
-    message
-  );
-
-  return btoa(String.fromCharCode(...new Uint8Array(signature)));
+  const signature = await crypto.subtle.sign({ name: 'RSA-PSS', saltLength: 32 }, key, msgBuffer);
+  return bytesToBase64(new Uint8Array(signature));
 }
 
 async function determineKalshiBaseUrl(
@@ -50,14 +82,17 @@ async function determineKalshiBaseUrl(
   privateKey: string
 ): Promise<string> {
   const bases = ['https://demo-api.kalshi.co', 'https://api.kalshi.com'];
-  const testPath = '/trade-api/v2/exchange/status';
-  
+  const testPath = '/trade-api/v2/portfolio/balance';
+
   for (const base of bases) {
     try {
       const timestamp = Date.now().toString();
       const sig = await createKalshiSignature(privateKey, timestamp, 'GET', testPath);
       const res = await fetch(`${base}${testPath}`, {
+        method: 'GET',
         headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
           'KALSHI-ACCESS-KEY': apiKeyId,
           'KALSHI-ACCESS-SIGNATURE': sig,
           'KALSHI-ACCESS-TIMESTAMP': timestamp,
@@ -66,9 +101,12 @@ async function determineKalshiBaseUrl(
       if (res.ok) {
         console.log(`Using Kalshi API: ${base}`);
         return base;
+      } else {
+        const txt = await res.text();
+        console.log(`Kalshi balance probe failed on ${base}: ${res.status} ${txt}`);
       }
-    } catch (_) {
-      // try next
+    } catch (e) {
+      console.log(`Kalshi balance probe error on ${base}:`, e instanceof Error ? e.message : e);
     }
   }
   throw new Error('Could not connect to Kalshi API (Demo or Production)');
