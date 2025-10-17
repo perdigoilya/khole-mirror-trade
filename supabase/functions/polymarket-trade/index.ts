@@ -64,7 +64,6 @@ serve(async (req) => {
       price,
       size,
       signedOrder,
-      funderAddress,
     } = await req.json();
 
     const eoaLower = String(walletAddress).toLowerCase();
@@ -105,9 +104,10 @@ serve(async (req) => {
     let secret = credsRow.api_credentials_secret;
     let passphrase = credsRow.api_credentials_passphrase;
     const ownerAddress = credsRow.wallet_address?.toLowerCase() || '';
+    const funderAddress = (credsRow.funder_address || '').toLowerCase();
     const dbKey = `polymarket:${ENV}:${ownerAddress}`;
 
-    console.log('[TRADE] DB key used:', dbKey);
+    console.log('[TRADE] Addresses:', { ownerAddress, funderAddress });
 
     if (!key || !secret || !passphrase) {
       return out({ error: 'Missing L2 header(s)', details: { key: !!key, secret: !!secret, passphrase: !!passphrase } }, 400);
@@ -131,40 +131,59 @@ serve(async (req) => {
     const method = 'POST';
     const path = '/order';
     const url = `${CLOB}${path}`;
-    const ts = Math.floor(Date.now() / 1000);
-    const preimage = `${method}${path}${ts}${rawBody}`;
-    (globalThis as any).__PREIMAGE = preimage;
 
-    const sig = await hmacBase64(secret, preimage);
-    const hdrs: Record<string, string> = {
-      'content-type': 'application/json',
-      'accept': 'application/json',
-      'POLY_ADDRESS': ownerAddress,
-      'POLY_API_KEY': key,
-      'POLY_PASSPHRASE': passphrase,
-      'POLY_TIMESTAMP': ts.toString(),
-      'POLY_SIGNATURE': sig,
+    // Helper to attempt trade with a specific address
+    const attemptTrade = async (addr: string, currentKey: string, currentSecret: string, currentPass: string) => {
+      const ts = Math.floor(Date.now() / 1000);
+      const preimage = `${method}${path}${ts}${rawBody}`;
+
+      const sig = await hmacBase64(currentSecret, preimage);
+      const hdrs: Record<string, string> = {
+        'content-type': 'application/json',
+        'accept': 'application/json',
+        'POLY_ADDRESS': addr,
+        'POLY_API_KEY': currentKey,
+        'POLY_PASSPHRASE': currentPass,
+        'POLY_TIMESTAMP': ts.toString(),
+        'POLY_SIGNATURE': sig,
+      };
+
+      console.log('[TRADE] Attempting with:', {
+        addr,
+        keySuffix: suffix(currentKey),
+        passSuffix: suffix(currentPass),
+        ts,
+        preimageFirst120: preimage.slice(0, 120),
+        sigB64First12: sig.slice(0, 12),
+      });
+
+      const r = await fetch(url, { method, headers: hdrs, body: rawBody });
+      const text = await r.text();
+      const upstream = tryJson(text);
+      const cf = {
+        'cf-ray': r.headers.get('cf-ray') || '',
+        'cf-cache-status': r.headers.get('cf-cache-status') || '',
+        'server': r.headers.get('server') || '',
+        'content-type': r.headers.get('content-type') || ''
+      };
+
+      return { response: r, text, upstream, cf, preimage, sig, timestamp: ts };
     };
 
-    console.log('[TRADE] Before fetch:', {
-      eoa: ownerAddress,
-      keySuffix: suffix(key),
-      passSuffix: suffix(passphrase),
-      ts,
-      preimageFirst120: preimage.slice(0, 120),
-      sigB64First12: sig.slice(0, 12),
-      dbKey
-    });
+    // Try with owner address first
+    let result = await attemptTrade(ownerAddress, key, secret, passphrase);
+    let usedAddress = ownerAddress;
 
-    let r = await fetch(url, { method, headers: hdrs, body: rawBody });
-    const text = await r.text();
-    let upstream = tryJson(text);
-    const cf = {
-      'cf-ray': r.headers.get('cf-ray') || '',
-      'cf-cache-status': r.headers.get('cf-cache-status') || '',
-      'server': r.headers.get('server') || '',
-      'content-type': r.headers.get('content-type') || ''
-    };
+    // If failed and we have a different funder address, try with funder
+    if (!result.response.ok && funderAddress && funderAddress !== ownerAddress) {
+      console.log('[TRADE] First attempt failed, trying with funder address...');
+      result = await attemptTrade(funderAddress, key, secret, passphrase);
+      usedAddress = funderAddress;
+    }
+
+    let r = result.response;
+    let upstream = result.upstream;
+    let cf = result.cf;
 
     // On 401: derive → REBIND → retry ONCE
     if (r.status === 401) {
@@ -180,12 +199,12 @@ serve(async (req) => {
           url,
           method,
           sent: {
-            POLY_ADDRESS: ownerAddress,
+            POLY_ADDRESS: usedAddress,
             POLY_API_KEY_suffix: suffix(key),
             POLY_PASSPHRASE_suffix: suffix(passphrase),
-            POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
-            POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
-            preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
+            POLY_TIMESTAMP: result.timestamp.toString(),
+            POLY_SIGNATURE_b64_first12: result.sig.slice(0, 12),
+            preimage_first120: result.preimage.slice(0, 120)
           },
           status: r.status,
           statusText: r.statusText,
@@ -200,28 +219,18 @@ serve(async (req) => {
       secret = dUp.secret;
       passphrase = dUp.passphrase;
 
-      const ts2 = Math.floor(Date.now() / 1000);
-      const pre2 = `${method}${path}${ts2}${rawBody}`;
-      (globalThis as any).__PREIMAGE = pre2;
-      const sig2 = await hmacBase64(secret, pre2);
+      // Retry with derived credentials - try owner first, then funder
+      result = await attemptTrade(ownerAddress, key, secret, passphrase);
+      usedAddress = ownerAddress;
 
-      hdrs['POLY_API_KEY'] = key;
-      hdrs['POLY_PASSPHRASE'] = passphrase;
-      hdrs['POLY_TIMESTAMP'] = ts2.toString();
-      hdrs['POLY_SIGNATURE'] = sig2;
+      if (!result.response.ok && funderAddress && funderAddress !== ownerAddress) {
+        console.log('[TRADE-401-RETRY] Trying derived creds with funder address...');
+        result = await attemptTrade(funderAddress, key, secret, passphrase);
+        usedAddress = funderAddress;
+      }
 
-      console.log('[TRADE-RETRY] After derive:', {
-        eoa: ownerAddress,
-        keySuffix: suffix(key),
-        passSuffix: suffix(passphrase),
-        ts: ts2,
-        preimageFirst120: pre2.slice(0, 120),
-        sigB64First12: sig2.slice(0, 12),
-      });
-
-      r = await fetch(url, { method, headers: hdrs, body: rawBody });
-      const text2 = await r.text();
-      upstream = tryJson(text2);
+      r = result.response;
+      upstream = result.upstream;
 
       if (r.ok) {
         // Persist new tuple atomically
@@ -249,12 +258,12 @@ serve(async (req) => {
       url,
       method,
       sent: {
-        POLY_ADDRESS: ownerAddress,
+        POLY_ADDRESS: usedAddress,
         POLY_API_KEY_suffix: suffix(key),
         POLY_PASSPHRASE_suffix: suffix(passphrase),
-        POLY_TIMESTAMP: hdrs.POLY_TIMESTAMP,
-        POLY_SIGNATURE_b64_first12: hdrs.POLY_SIGNATURE.slice(0, 12),
-        preimage_first120: ((globalThis as any).__PREIMAGE || '').slice(0, 120)
+        POLY_TIMESTAMP: result.timestamp.toString(),
+        POLY_SIGNATURE_b64_first12: result.sig.slice(0, 12),
+        preimage_first120: result.preimage.slice(0, 120)
       },
       status: r.status,
       statusText: r.statusText,
