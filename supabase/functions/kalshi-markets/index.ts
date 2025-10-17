@@ -96,7 +96,8 @@ serve(async (req) => {
     // Create Kalshi authentication headers
     const timestamp = Date.now().toString();
     const method = "GET";
-    const path = "/trade-api/v2/markets";
+    // Request open markets with high limit, sorted by volume
+    const path = "/trade-api/v2/markets?status=open&limit=200";
     
     const signature = await createKalshiSignature(privateKey, timestamp, method, path);
 
@@ -145,55 +146,71 @@ serve(async (req) => {
     
     // Normalize Kalshi markets to match our Market interface
     const normalizedMarkets = (marketData.markets?.map((market: any) => {
-      // Prefer actionable buy prices (asks). Fallback to last or bid. All in cents (0-100)
-      const yesAsk = typeof market.yes_ask === 'number' ? market.yes_ask : undefined;
-      const yesBid = typeof market.yes_bid === 'number' ? market.yes_bid : undefined;
-      const noAsk = typeof market.no_ask === 'number' ? market.no_ask : undefined;
-      const last = typeof market.last_price === 'number' ? market.last_price : undefined;
+      // Kalshi prices are in cents (0-100). Prefer last_price, fallback to midpoint of bid/ask
+      const lastPrice = typeof market.last_price === 'number' ? market.last_price : null;
+      const yesAsk = typeof market.yes_ask === 'number' ? market.yes_ask : null;
+      const yesBid = typeof market.yes_bid === 'number' ? market.yes_bid : null;
+      const noAsk = typeof market.no_ask === 'number' ? market.no_ask : null;
+      const noBid = typeof market.no_bid === 'number' ? market.no_bid : null;
       
-      let yesPrice = yesAsk ?? last ?? yesBid ?? (typeof noAsk === 'number' ? 100 - noAsk : undefined) ?? 50;
-      yesPrice = Math.round(yesPrice);
-      const noPrice = typeof noAsk === 'number' ? Math.round(noAsk) : (100 - yesPrice);
+      // Calculate yes and no prices
+      let yesPrice = lastPrice;
+      if (yesPrice === null && yesAsk !== null && yesBid !== null) {
+        yesPrice = Math.round((yesAsk + yesBid) / 2);
+      } else if (yesPrice === null && yesAsk !== null) {
+        yesPrice = yesAsk;
+      } else if (yesPrice === null && yesBid !== null) {
+        yesPrice = yesBid;
+      }
       
-      // Volumes: use 24h contracts count (not dollars). Liquidity: use provided dollars when available
-      const volumeContracts = Number(market.volume_24h ?? market.volume ?? 0) || 0;
-      const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : (
-        typeof market.liquidity === 'number' ? market.liquidity / 100 : (typeof market.open_interest === 'number' ? market.open_interest / 100 : 0)
-      );
+      let noPrice = yesPrice !== null ? (100 - yesPrice) : null;
+      if (noPrice === null && noAsk !== null && noBid !== null) {
+        noPrice = Math.round((noAsk + noBid) / 2);
+      } else if (noPrice === null && noAsk !== null) {
+        noPrice = noAsk;
+      } else if (noPrice === null && noBid !== null) {
+        noPrice = noBid;
+      }
+      
+      // Default to 50/50 if no pricing data
+      if (yesPrice === null) yesPrice = 50;
+      if (noPrice === null) noPrice = 50;
+      
+      // Volume is 24h contract count, liquidity_dollars is a string like "0.2300"
+      const volume24h = typeof market.volume_24h === 'number' ? market.volume_24h : 0;
+      const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
       
       return {
         id: market.ticker,
-        title: market.title,
+        title: market.title || market.ticker,
         subtitle: market.subtitle,
-        description: market.subtitle || market.title,
-        image: undefined, // Kalshi doesn't provide market images
+        description: market.subtitle || market.title || market.ticker,
+        image: undefined,
         yesPrice,
         noPrice,
-        volume: volumeContracts > 0 ? `${volumeContracts.toLocaleString('en-US')} contracts` : '—',
+        volume: volume24h > 0 ? `${volume24h.toLocaleString('en-US')} contracts` : '$0',
         liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: volumeContracts, // contracts count for sorting
-        liquidityRaw: liquidityDollars, // dollars for sorting
+        volumeRaw: volume24h,
+        liquidityRaw: liquidityDollars,
         endDate: market.close_time || market.expiration_time || new Date().toISOString(),
-        status: market.status === 'active' ? 'Active' : market.status === 'closed' ? 'Closed' : market.status || 'Active',
+        status: market.status === 'open' ? 'Active' : market.status === 'closed' ? 'Closed' : 'Active',
         category: market.category || 'General',
         provider: 'kalshi' as const,
         ticker: market.ticker,
-        eventTicker: market.event_ticker, // For event grouping
+        eventTicker: market.event_ticker,
         clobTokenId: market.ticker,
         isMultiOutcome: false,
       };
-    }) || []).filter((m: any) => {
-      // Keep markets that are active or have quotes
-      const active = (m.status || 'Active').toLowerCase() === 'active';
-      const hasQuotes = typeof m.yesPrice === 'number' && typeof m.noPrice === 'number';
-      return active || hasQuotes;
-    });
+    }) || []);
     
-    // Group markets by event_ticker (similar to Polymarket's multi-outcome markets)
+    // Sort by trending (volume_24h DESC) first
+    const sortedMarkets = normalizedMarkets.sort((a: any, b: any) => b.volumeRaw - a.volumeRaw);
+    
+    // Group markets by event_ticker for multi-outcome events
     const eventGroups = new Map<string, any[]>();
     const standaloneMarkets: any[] = [];
     
-    for (const market of normalizedMarkets) {
+    for (const market of sortedMarkets) {
       if (market.eventTicker) {
         if (!eventGroups.has(market.eventTicker)) {
           eventGroups.set(market.eventTicker, []);
@@ -204,26 +221,32 @@ serve(async (req) => {
       }
     }
     
-    // Convert event groups to multi-outcome markets
+    // Convert event groups to multi-outcome markets ONLY if multiple markets per event
     const groupedMarkets: any[] = [];
     
     for (const [eventTicker, markets] of eventGroups.entries()) {
       if (markets.length > 1) {
-        // Multi-outcome event - pick the highest volume market as main
-        const sortedByVolume = [...markets].sort((a, b) => b.volumeRaw - a.volumeRaw);
-        const mainMarket = sortedByVolume[0];
-        const subMarkets = sortedByVolume.slice(1);
+        // TRUE multi-outcome event - multiple markets under same event
+        const mainMarket = markets[0]; // Already sorted by volume
+        const subMarkets = markets.slice(1);
+        
+        // Extract event name from title (remove "Will X" part if present)
+        let eventTitle = mainMarket.title;
+        const match = eventTitle.match(/^Will .+ (win|be|have|reach|exceed|get) (.+)\?/i);
+        if (match) {
+          eventTitle = match[2];
+        }
         
         groupedMarkets.push({
           ...mainMarket,
-          id: eventTicker, // Use event ticker as ID for the group
-          title: mainMarket.title.replace(/Will .+ /, ''), // Extract event name
+          id: eventTicker,
+          title: eventTitle,
           isMultiOutcome: true,
           subMarkets: subMarkets,
         });
       } else {
-        // Single market in event
-        groupedMarkets.push(markets[0]);
+        // Single market - NOT multi-outcome
+        groupedMarkets.push({ ...markets[0], isMultiOutcome: false });
       }
     }
     
