@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTrading } from "@/contexts/TradingContext";
 import Footer from "@/components/Footer";
 import { MarketChart } from "@/components/MarketChart";
+import { KalshiTradeDialog } from "@/components/KalshiTradeDialog";
 import { useAccount, useSignTypedData, useSwitchChain } from "wagmi";
 import { polygon } from "wagmi/chains";
 import { 
@@ -64,6 +65,7 @@ const MarketDetail = () => {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
+  const [kalshiTradeDialogOpen, setKalshiTradeDialogOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<{outcome: string, side: 'yes' | 'no', price: number} | null>(null);
 
   // Platform-specific styling (after market state is declared)
@@ -156,6 +158,12 @@ const MarketDetail = () => {
         });
       }
       setConnectionDialogOpen(true);
+      return;
+    }
+
+    // For Kalshi: show the dedicated Kalshi trade dialog
+    if (targetMarket?.provider === 'kalshi') {
+      setKalshiTradeDialogOpen(true);
       return;
     }
 
@@ -1035,6 +1043,17 @@ const MarketDetail = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Kalshi Trade Dialog */}
+      {market && market.provider === 'kalshi' && (
+        <KalshiTradeDialog
+          open={kalshiTradeDialogOpen}
+          onOpenChange={setKalshiTradeDialogOpen}
+          marketTicker={market.ticker || ''}
+          marketTitle={market.title}
+          currentPrice={market.yesPrice || 50}
+        />
+      )}
       
       <Footer />
     </div>
