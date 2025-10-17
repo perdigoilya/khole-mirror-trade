@@ -98,9 +98,8 @@ serve(async (req) => {
 
     // Try both Demo and Production environments
     const baseUrls = [
-      'https://api.elections.kalshi.com',
-      'https://api.kalshi.com',
-      'https://demo-api.kalshi.co'
+      'https://demo-api.kalshi.co',
+      'https://api.kalshi.com'
     ];
 
     let portfolioData: any = null;
@@ -110,50 +109,54 @@ serve(async (req) => {
     const candidates: Array<{ base: string; portfolioData: any; balanceData: any }> = [];
 
     for (const base of baseUrls) {
-      // Fetch positions
-      const timestamp1 = Date.now().toString();
-      const positionsPath = "/trade-api/v2/portfolio/positions";
-      const positionsSignature = await createKalshiSignature(privateKey, timestamp1, "GET", positionsPath);
-      
-      console.log('Trying', `${base}${positionsPath}`);
-      
-      const positionsResponse = await fetch(`${base}${positionsPath}`, {
-        headers: {
-          'KALSHI-ACCESS-KEY': apiKeyId,
-          'KALSHI-ACCESS-SIGNATURE': positionsSignature,
-          'KALSHI-ACCESS-TIMESTAMP': timestamp1,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (positionsResponse.ok) {
-        const pd = await positionsResponse.json();
-        console.log(`Fetched positions from ${base}: ${pd.market_positions?.length || 0}`);
-        // Also fetch balance for this base
-        const timestamp2 = Date.now().toString();
-        const balancePath = "/trade-api/v2/portfolio/balance";
-        const balanceSignature = await createKalshiSignature(privateKey, timestamp2, "GET", balancePath);
-        let bd: any = null;
-        const balanceResponse = await fetch(`${base}${balancePath}`, {
+      try {
+        // Fetch positions
+        const timestamp1 = Date.now().toString();
+        const positionsPath = "/trade-api/v2/portfolio/positions";
+        const positionsSignature = await createKalshiSignature(privateKey, timestamp1, "GET", positionsPath);
+        
+        console.log('Trying', `${base}${positionsPath}`);
+        
+        const positionsResponse = await fetch(`${base}${positionsPath}`, {
           headers: {
             'KALSHI-ACCESS-KEY': apiKeyId,
-            'KALSHI-ACCESS-SIGNATURE': balanceSignature,
-            'KALSHI-ACCESS-TIMESTAMP': timestamp2,
+            'KALSHI-ACCESS-SIGNATURE': positionsSignature,
+            'KALSHI-ACCESS-TIMESTAMP': timestamp1,
             'Content-Type': 'application/json',
           },
         });
-        if (balanceResponse.ok) {
-          bd = await balanceResponse.json();
-          console.log(`Fetched balance from ${base}: ${JSON.stringify(bd)}`);
+  
+        if (positionsResponse.ok) {
+          const pd = await positionsResponse.json();
+          console.log(`Fetched positions from ${base}: ${pd.market_positions?.length || 0}`);
+          // Also fetch balance for this base
+          const timestamp2 = Date.now().toString();
+          const balancePath = "/trade-api/v2/portfolio/balance";
+          const balanceSignature = await createKalshiSignature(privateKey, timestamp2, "GET", balancePath);
+          let bd: any = null;
+          const balanceResponse = await fetch(`${base}${balancePath}`, {
+            headers: {
+              'KALSHI-ACCESS-KEY': apiKeyId,
+              'KALSHI-ACCESS-SIGNATURE': balanceSignature,
+              'KALSHI-ACCESS-TIMESTAMP': timestamp2,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (balanceResponse.ok) {
+            bd = await balanceResponse.json();
+            console.log(`Fetched balance from ${base}: ${JSON.stringify(bd)}`);
+          } else {
+            const balanceError = await balanceResponse.text();
+            console.log(`Balance fetch failed on ${base}: ${balanceResponse.status} - ${balanceError}`);
+          }
+          candidates.push({ base, portfolioData: pd, balanceData: bd });
+          continue;
         } else {
-          const balanceError = await balanceResponse.text();
-          console.log(`Balance fetch failed on ${base}: ${balanceResponse.status} - ${balanceError}`);
+          lastError = await positionsResponse.text();
+          console.log(`Failed ${base}:`, positionsResponse.status, lastError);
         }
-        candidates.push({ base, portfolioData: pd, balanceData: bd });
-        continue;
-      } else {
-        lastError = await positionsResponse.text();
-        console.log(`Failed ${base}:`, positionsResponse.status, lastError);
+      } catch (err) {
+        console.error(`Error contacting ${base}:`, err);
       }
     }
 

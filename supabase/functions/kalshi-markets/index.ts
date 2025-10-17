@@ -104,9 +104,9 @@ serve(async (req) => {
 
     // Try both Demo and Production environments
     const baseUrls = [
-      'https://api.elections.kalshi.com',
+      'https://demo-api.kalshi.co',
       'https://api.kalshi.com',
-      'https://demo-api.kalshi.co'
+      'https://api.elections.kalshi.com'
     ];
 
     let marketData = null;
