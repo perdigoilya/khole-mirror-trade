@@ -103,8 +103,8 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi public market data - no authentication required
-        result = await supabase.functions.invoke('kalshi-markets', {
+        // Kalshi: Fetch events instead of individual markets
+        result = await supabase.functions.invoke('kalshi-events', {
           body: {}
         });
       } else {
@@ -115,13 +115,14 @@ const Markets = () => {
 
       const { data, error } = result;
       
-      if (!error && data?.markets) {
-        let filteredMarkets = data.markets;
+      if (!error && (data?.markets || data?.events)) {
+        let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
         
-        if (provider === 'kalshi' && searchTerm) {
+        if (searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
             market.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            market.ticker?.toLowerCase().includes(searchTerm.toLowerCase())
+            market.ticker?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            market.eventTicker?.toLowerCase().includes(searchTerm.toLowerCase())
           );
         }
         
@@ -411,6 +412,11 @@ const Markets = () => {
               <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
                 {market.title || market.ticker}
               </h3>
+              {isKalshi && market.marketCount && (
+                <Badge variant="outline" className="text-xs px-2 py-0.5">
+                  {market.marketCount} markets
+                </Badge>
+              )}
               <Badge variant="outline" className={`text-xs px-2 py-0.5 ${platformBadgeClass}`}>
                 {platformName}
               </Badge>
@@ -914,10 +920,10 @@ const Markets = () => {
                   <div className={`w-16 h-16 rounded-full ${platform === 'kalshi' ? 'bg-kalshi-teal/10' : 'bg-polymarket-purple/10'} flex items-center justify-center mx-auto mb-4`}>
                     <Filter className={`h-8 w-8 ${platform === 'kalshi' ? 'text-kalshi-teal' : 'text-polymarket-purple'}`} />
                   </div>
-                  <h3 className="text-xl font-semibold mb-2">No markets found</h3>
+                  <h3 className="text-xl font-semibold mb-2">No {platform === 'kalshi' ? 'events' : 'markets'} found</h3>
                   <p className="text-muted-foreground mb-6">
                     {platform === 'kalshi'
-                      ? 'No single-leg Kalshi markets are available right now. Try another category, clear filters, or check back soon.'
+                      ? 'No Kalshi events match your current filters. Try adjusting your search criteria.'
                       : 'No Polymarket markets match your current filters. Try adjusting your search criteria.'}
                   </p>
                   <Button 

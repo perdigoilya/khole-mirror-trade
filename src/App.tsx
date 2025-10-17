@@ -17,6 +17,7 @@ import FAQ from "./pages/FAQ";
 import Auth from "./pages/Auth";
 import MarketDetail from "./pages/MarketDetail";
 import KalshiEvent from "./pages/KalshiEvent";
+import KalshiEventDetail from "./pages/KalshiEventDetail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,7 +42,7 @@ const App = () => (
                   <Route path="/portfolio" element={<Portfolio />} />
                   <Route path="/watchlist" element={<Watchlist />} />
                   <Route path="/faq" element={<FAQ />} />
-                  <Route path="/kalshi/event/:eventTicker" element={<KalshiEvent />} />
+                  <Route path="/kalshi/event/:eventTicker" element={<KalshiEventDetail />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
