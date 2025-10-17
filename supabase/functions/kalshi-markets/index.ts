@@ -97,8 +97,42 @@ serve(async (req) => {
     const data = await response.json();
     console.log(`Successfully fetched ${data.markets?.length || 0} markets`);
     
+    // Normalize Kalshi markets to match our Market interface
+    const normalizedMarkets = data.markets?.map((market: any) => {
+      // Kalshi returns prices in cents (0-100), we need to match that format
+      const yesPrice = market.yes_bid || market.last_price || 50; // Default to 50 if no price
+      const noPrice = 100 - yesPrice;
+      
+      // Calculate volume and liquidity from Kalshi fields
+      const volume = market.volume || market.open_interest || 0;
+      const liquidity = market.liquidity || 0;
+      
+      return {
+        id: market.ticker, // Use ticker as unique ID
+        title: market.title,
+        description: market.subtitle || market.title,
+        image: market.image_url || undefined,
+        yesPrice: yesPrice,
+        noPrice: noPrice,
+        volume: volume > 0 ? `$${(volume / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+        liquidity: liquidity > 0 ? `$${(liquidity / 100).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+        volumeRaw: volume / 100, // Convert cents to dollars
+        liquidityRaw: liquidity / 100,
+        endDate: market.close_time || market.expiration_time || new Date().toISOString(),
+        status: market.status === 'active' ? 'open' : market.status === 'closed' ? 'closed' : market.status || 'open',
+        category: market.category || market.series_ticker || 'General',
+        provider: 'kalshi' as const,
+        ticker: market.ticker,
+        clobTokenId: market.ticker, // Use ticker as token ID for Kalshi
+        isMultiOutcome: false, // Kalshi markets are typically binary
+      };
+    }) || [];
+    
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify({ 
+        markets: normalizedMarkets,
+        cursor: data.cursor 
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

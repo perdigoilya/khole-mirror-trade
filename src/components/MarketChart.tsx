@@ -13,9 +13,10 @@ interface ChartData {
 interface MarketChartProps {
   marketId: string;
   timeRange: '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL';
+  provider?: 'kalshi' | 'polymarket';
 }
 
-export const MarketChart = memo(({ marketId, timeRange }: MarketChartProps) => {
+export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' }: MarketChartProps) => {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +27,13 @@ export const MarketChart = memo(({ marketId, timeRange }: MarketChartProps) => {
 
   useEffect(() => {
     const fetchPriceHistory = async () => {
+      // For Kalshi markets, show a placeholder message (price history not yet implemented)
+      if (provider === 'kalshi') {
+        setLoading(false);
+        setError("Price history for Kalshi markets coming soon");
+        return;
+      }
+
       const cacheKey = `${marketId}-${timeRange}`;
       
       // Check cache first
@@ -69,7 +77,7 @@ export const MarketChart = memo(({ marketId, timeRange }: MarketChartProps) => {
     if (marketId) {
       fetchPriceHistory();
     }
-  }, [marketId, timeRange]);
+  }, [marketId, timeRange, provider]);
 
   if (loading) {
     return (

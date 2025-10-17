@@ -102,13 +102,35 @@ const MarketDetail = () => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('polymarket-markets', {
-        body: { marketId }
-      });
+      // Determine provider from passed state or try to detect from marketId format
+      const passedMarket = (location.state as any)?.market;
+      const provider = passedMarket?.provider || (marketId.includes('-') ? 'kalshi' : 'polymarket');
+      
+      let result;
+      if (provider === 'kalshi') {
+        // Fetch Kalshi market using credentials
+        if (!kalshiCredentials) {
+          throw new Error('Kalshi credentials not found');
+        }
+        result = await supabase.functions.invoke('kalshi-markets', {
+          body: kalshiCredentials
+        });
+      } else {
+        // Fetch Polymarket market
+        result = await supabase.functions.invoke('polymarket-markets', {
+          body: { marketId }
+        });
+      }
+
+      const { data, error } = result;
       
       if (error) throw error;
       
-      const foundMarket = data?.markets?.find((m: Market) => m.id === marketId);
+      // For Kalshi, find market by ticker; for Polymarket, find by id
+      const foundMarket = data?.markets?.find((m: Market) => 
+        provider === 'kalshi' ? m.ticker === marketId : m.id === marketId
+      );
+      
       if (foundMarket) {
         // Cache the result
         marketDetailCacheRef.current.set(marketId, {
@@ -806,6 +828,7 @@ const MarketDetail = () => {
                       <MarketChart 
                         marketId={outcome.clobTokenId || outcome.id} 
                         timeRange={timeRange}
+                        provider={market.provider}
                       />
                     </div>
                   </Card>
@@ -839,6 +862,7 @@ const MarketDetail = () => {
                       <MarketChart 
                         marketId={market.clobTokenId || market.id} 
                         timeRange={timeRange}
+                        provider={market.provider}
                       />
                     </div>
                   </Card>
