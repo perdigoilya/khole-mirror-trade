@@ -778,7 +778,7 @@ const MarketDetail = () => {
                         <div className="flex items-center gap-3">
                           <div className="text-right">
                             <div className="text-2xl font-bold text-emerald-400">
-                              {outcome.yesPrice || 50}%
+                              {typeof outcome.yesPrice === 'number' ? `${outcome.yesPrice}%` : '50%'}
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -790,7 +790,7 @@ const MarketDetail = () => {
                                 handleTrade(outcome.title, 'yes', outcome.yesPrice || 50);
                               }}
                             >
-                              Buy {outcome.yesPrice}¢
+                              Buy {typeof outcome.yesPrice === 'number' ? `${outcome.yesPrice}¢` : '50¢'}
                             </Button>
                             <Button 
                               size="sm"
@@ -871,7 +871,9 @@ const MarketDetail = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">YES</div>
-                        <div className="text-3xl font-bold text-emerald-400">{market.yesPrice}¢</div>
+                        <div className="text-3xl font-bold text-emerald-400">
+                          {typeof market.yesPrice === 'number' ? `${market.yesPrice}¢` : '50¢'}
+                        </div>
                         <Button 
                           className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                           onClick={() => handleTrade(market.title, 'yes', market.yesPrice || 50)}
@@ -881,7 +883,9 @@ const MarketDetail = () => {
                       </div>
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">NO</div>
-                        <div className="text-3xl font-bold text-red-400">{market.noPrice}¢</div>
+                        <div className="text-3xl font-bold text-red-400">
+                          {typeof market.noPrice === 'number' ? `${market.noPrice}¢` : '50¢'}
+                        </div>
                         <Button 
                           className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
                           onClick={() => handleTrade(market.title, 'no', market.noPrice || 50)}

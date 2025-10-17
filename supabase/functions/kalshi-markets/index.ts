@@ -181,12 +181,15 @@ serve(async (req) => {
       const volume24h = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
       const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
 
+      // Map category to image (will be resolved in frontend)
+      const category = market.category || 'General';
+
       return {
         id: market.ticker,
         title: market.title || market.ticker,
         subtitle: market.subtitle,
         description: market.subtitle || market.title || market.ticker,
-        image: undefined,
+        image: undefined, // Will be set in frontend based on category
         yesPrice,
         noPrice,
         volume: volume24h > 0 ? `${volume24h.toLocaleString('en-US')} contracts` : '$0',
@@ -195,7 +198,7 @@ serve(async (req) => {
         liquidityRaw: liquidityDollars,
         endDate: market.close_time || market.expiration_time || new Date().toISOString(),
         status: (market.status || '').toLowerCase() === 'open' ? 'Active' : (market.status || 'open'),
-        category: market.category || 'General',
+        category,
         provider: 'kalshi' as const,
         ticker: market.ticker,
         eventTicker: market.event_ticker,

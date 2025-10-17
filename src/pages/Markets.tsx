@@ -4,6 +4,11 @@ import Footer from "@/components/Footer";
 import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
 import polymarketLogo from "@/assets/polymarket-logo.png";
 import kalshiLogo from "@/assets/kalshi-logo.png";
+import kalshiSportsImg from "@/assets/kalshi-sports.png";
+import kalshiPoliticsImg from "@/assets/kalshi-politics.png";
+import kalshiEconomicsImg from "@/assets/kalshi-economics.png";
+import kalshiWeatherImg from "@/assets/kalshi-weather.png";
+import kalshiGeneralImg from "@/assets/kalshi-general.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +28,21 @@ import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams, useNavigate } from "react-router-dom";
+
+// Utility function to get category image for Kalshi markets
+const getKalshiCategoryImage = (category: string): string => {
+  const categoryLower = category.toLowerCase();
+  if (categoryLower.includes('sport') || categoryLower.includes('football') || categoryLower.includes('basketball') || categoryLower.includes('baseball')) {
+    return kalshiSportsImg;
+  } else if (categoryLower.includes('polit') || categoryLower.includes('election') || categoryLower.includes('government')) {
+    return kalshiPoliticsImg;
+  } else if (categoryLower.includes('econom') || categoryLower.includes('market') || categoryLower.includes('stock') || categoryLower.includes('financ')) {
+    return kalshiEconomicsImg;
+  } else if (categoryLower.includes('weather') || categoryLower.includes('climate') || categoryLower.includes('temperature')) {
+    return kalshiWeatherImg;
+  }
+  return kalshiGeneralImg;
+};
 
 const Markets = () => {
   const { isKalshiConnected, kalshiCredentials, user, activeProvider } = useTrading();
@@ -353,6 +373,7 @@ const Markets = () => {
           onClick={() => {
             const marketToNavigate = {
               ...market,
+              image: market.image || (isKalshi ? getKalshiCategoryImage(market.category || 'General') : undefined),
               yesPrice: y,
               noPrice: n,
               volumeRaw: market.volumeRaw || 0,
@@ -367,9 +388,9 @@ const Markets = () => {
         >
           {/* Icon/Image */}
           <div className="flex items-start pt-1">
-            {market.image ? (
+            {(market.image || (isKalshi && market.category)) ? (
               <img 
-                src={market.image} 
+                src={market.image || (isKalshi ? getKalshiCategoryImage(market.category || 'General') : '')} 
                 alt={market.title}
                 className="w-10 h-10 rounded-full object-cover bg-card"
                 onError={(e) => {
@@ -378,7 +399,7 @@ const Markets = () => {
                 }}
               />
             ) : null}
-            <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
+            <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${(market.image || (isKalshi && market.category)) ? 'hidden' : ''}`}>
               {(market.title || market.ticker || '?')[0].toUpperCase()}
             </div>
           </div>
@@ -538,6 +559,7 @@ const Markets = () => {
           onClick={() => {
             const marketToNavigate = {
               ...market,
+              image: market.image || (isKalshi ? getKalshiCategoryImage(market.category || 'General') : undefined),
               yesPrice: y,
               noPrice: n,
               volumeRaw: market.volumeRaw || 0,
@@ -553,9 +575,9 @@ const Markets = () => {
           <div className="flex gap-3">
             {/* Icon/Image */}
             <div className="flex-shrink-0">
-              {market.image ? (
+              {(market.image || (isKalshi && market.category)) ? (
                 <img 
-                  src={market.image} 
+                  src={market.image || (isKalshi ? getKalshiCategoryImage(market.category || 'General') : '')} 
                   alt={market.title}
                   className="w-12 h-12 rounded-full object-cover bg-card"
                   onError={(e) => {
@@ -564,7 +586,7 @@ const Markets = () => {
                   }}
                 />
               ) : null}
-              <div className={`w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold ${market.image ? 'hidden' : ''}`}>
+              <div className={`w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold ${(market.image || (isKalshi && market.category)) ? 'hidden' : ''}`}>
                 {(market.title || market.ticker || '?')[0].toUpperCase()}
               </div>
             </div>
