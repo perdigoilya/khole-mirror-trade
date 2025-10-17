@@ -11,6 +11,7 @@ import kalshiWeatherImg from "@/assets/kalshi-weather.png";
 import kalshiGeneralImg from "@/assets/kalshi-general.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
@@ -740,6 +741,15 @@ const Markets = () => {
               </div>
             </div>
           </div>
+
+          {/* Demo Account Disclaimer for Kalshi */}
+          {platform === 'kalshi' && markets.length > 0 && markets.every(m => m.volumeRaw === 0 && m.yesPrice === 0) && (
+            <Alert className="mb-6 bg-yellow-500/10 border-yellow-500/30">
+              <AlertDescription className="text-sm">
+                <strong>Demo Account Notice:</strong> You're using a Kalshi demo account. Demo accounts don't display real market data (prices, volume, liquidity). To view live market data, please connect a production Kalshi account.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Filter Bar */}
           <div className="flex items-center gap-3 mb-6">
