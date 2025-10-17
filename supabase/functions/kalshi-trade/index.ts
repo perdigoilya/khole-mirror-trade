@@ -129,8 +129,8 @@ serve(async (req) => {
       );
     }
 
-    // Determine which Kalshi environment to use (Demo or Production)
-    const baseUrl = await determineKalshiBaseUrl(apiKeyId, privateKey);
+    // Try both Kalshi environments (Demo then Production)
+    const baseUrls = ['https://demo-api.kalshi.co', 'https://api.kalshi.com'];
 
     // Validate count
     if (count <= 0) {
@@ -151,144 +151,100 @@ serve(async (req) => {
       }
     }
 
-    // Check balance first
-    const balanceTimestamp = Date.now().toString();
-    const balancePath = '/trade-api/v2/portfolio/balance';
-    const balanceSignature = await createKalshiSignature(
-      privateKey,
-      balanceTimestamp,
-      'GET',
-      balancePath
-    );
-
-    console.log('Checking Kalshi balance...');
-    const balanceResponse = await fetch(`${baseUrl}${balancePath}`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'KALSHI-ACCESS-KEY': apiKeyId,
-        'KALSHI-ACCESS-SIGNATURE': balanceSignature,
-        'KALSHI-ACCESS-TIMESTAMP': balanceTimestamp,
-      },
-    });
-
-    if (!balanceResponse.ok) {
-      const errorData = await balanceResponse.text();
-      console.error('Balance check failed:', balanceResponse.status, errorData);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to verify account balance',
-          details: 'Could not connect to Kalshi API. Please check your credentials.'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    const balanceData = await balanceResponse.json();
-    console.log('Balance response:', balanceData);
-
-    const availableBalance = balanceData.balance / 100; // Convert from cents to dollars
-    
-    // Calculate required amount for the trade
+    // Calculate required amount for the trade (USD)
     let requiredAmount = 0;
     if (type === 'limit') {
       const price = side === 'yes' ? yesPrice : noPrice;
-      requiredAmount = (count * price) / 100; // price is in cents, convert to dollars
+      requiredAmount = (count * price) / 100; // cents -> dollars
     } else {
-      // For market orders, estimate with current market price (assuming worst case of 100 cents)
+      // Market order worst-case
       requiredAmount = count;
     }
 
-    // Check for zero balance first
-    if (availableBalance === 0) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'No Funds in Account ❌',
-          details: `Your Kalshi account has $0.00. Please deposit funds to your Kalshi account before trading.\n\n1. Visit kalshi.com\n2. Go to your account settings\n3. Deposit funds\n4. Return here to trade`,
-          required: requiredAmount,
-          available: 0,
-          zeroBalance: true
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
+    let lastError = '';
+    for (const baseUrl of baseUrls) {
+      try {
+        // 1) Check balance on this environment
+        const balanceTimestamp = Date.now().toString();
+        const balancePath = '/trade-api/v2/portfolio/balance';
+        const balanceSignature = await createKalshiSignature(privateKey, balanceTimestamp, 'GET', balancePath);
 
-    if (availableBalance < requiredAmount) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Insufficient Funds ❌',
-          details: `You need $${requiredAmount.toFixed(2)} but only have $${availableBalance.toFixed(2)} in your Kalshi account. Please deposit more funds.`,
-          required: requiredAmount,
-          available: availableBalance
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
+        console.log(`[kalshi-trade] Checking balance on ${baseUrl}`);
+        const balanceResponse = await fetch(`${baseUrl}${balancePath}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'KALSHI-ACCESS-KEY': apiKeyId,
+            'KALSHI-ACCESS-SIGNATURE': balanceSignature,
+            'KALSHI-ACCESS-TIMESTAMP': balanceTimestamp,
+          },
+        });
 
-    // Create the order
-    const timestamp = Date.now().toString();
-    const path = '/trade-api/v2/portfolio/orders';
-    const signature = await createKalshiSignature(
-      privateKey,
-      timestamp,
-      'POST',
-      path
-    );
+        if (!balanceResponse.ok) {
+          const txt = await balanceResponse.text();
+          console.log(`[kalshi-trade] Balance check failed on ${baseUrl}: ${balanceResponse.status} ${txt}`);
+          lastError = `Balance check failed on ${baseUrl}: ${balanceResponse.status}`;
+          continue; // try next environment
+        }
 
-    const orderPayload: any = {
-      ticker,
-      action,
-      side,
-      count,
-      type,
-    };
+        const balanceData = await balanceResponse.json();
+        const availableBalance = Number(balanceData.balance || 0) / 100;
+        console.log(`[kalshi-trade] Balance on ${baseUrl}: $${availableBalance.toFixed(2)}`);
 
-    // Add price for limit orders
-    if (type === 'limit') {
-      if (side === 'yes') {
-        orderPayload.yes_price = yesPrice;
-      } else {
-        orderPayload.no_price = noPrice;
+        if (availableBalance < requiredAmount) {
+          lastError = `Insufficient funds on ${baseUrl}: need $${requiredAmount.toFixed(2)} have $${availableBalance.toFixed(2)}`;
+          continue; // try next environment
+        }
+
+        // 2) Submit order on this environment
+        const timestamp = Date.now().toString();
+        const path = '/trade-api/v2/portfolio/orders';
+        const signature = await createKalshiSignature(privateKey, timestamp, 'POST', path);
+
+        const orderPayload: any = { ticker, action, side, count, type };
+        if (type === 'limit') {
+          if (side === 'yes') orderPayload.yes_price = yesPrice;
+          else orderPayload.no_price = noPrice;
+        }
+
+        console.log(`[kalshi-trade] Submitting order on ${baseUrl}`, orderPayload);
+        const orderResponse = await fetch(`${baseUrl}${path}`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'KALSHI-ACCESS-KEY': apiKeyId,
+            'KALSHI-ACCESS-SIGNATURE': signature,
+            'KALSHI-ACCESS-TIMESTAMP': timestamp,
+          },
+          body: JSON.stringify(orderPayload),
+        });
+
+        const orderData = await orderResponse.json();
+        if (!orderResponse.ok) {
+          console.log(`[kalshi-trade] Order failed on ${baseUrl}: ${orderResponse.status}`, orderData);
+          lastError = orderData?.error || orderData?.message || `HTTP ${orderResponse.status}`;
+          continue; // try next environment
+        }
+
+        console.log('[kalshi-trade] Order submitted successfully:', orderData);
+        return new Response(
+          JSON.stringify({ success: true, order: orderData.order, message: 'Order submitted successfully' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(`[kalshi-trade] Error on ${baseUrl}:`, msg);
+        lastError = msg;
+        continue;
       }
     }
 
-    console.log('Submitting order to Kalshi:', orderPayload);
-
-    const orderResponse = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'KALSHI-ACCESS-KEY': apiKeyId,
-        'KALSHI-ACCESS-SIGNATURE': signature,
-        'KALSHI-ACCESS-TIMESTAMP': timestamp,
-      },
-      body: JSON.stringify(orderPayload),
-    });
-
-    const orderData = await orderResponse.json();
-
-    if (!orderResponse.ok) {
-      console.error('Order submission failed:', orderResponse.status, orderData);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Order submission failed',
-          details: orderData.error || orderData.message || 'Unknown error occurred',
-          kalshiError: orderData
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: orderResponse.status }
-      );
-    }
-
-    console.log('Order submitted successfully:', orderData);
-
+    // If we got here, both environments failed
     return new Response(
-      JSON.stringify({
-        success: true,
-        order: orderData.order,
-        message: 'Order submitted successfully'
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      JSON.stringify({ error: 'Order submission failed', details: lastError || 'Both environments failed' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 }
     );
 
   } catch (error) {
