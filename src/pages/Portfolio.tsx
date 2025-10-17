@@ -54,6 +54,7 @@ const Portfolio = () => {
   const [kalshiPositions, setKalshiPositions] = useState<Position[]>([]);
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [kalshiSummary, setKalshiSummary] = useState<PortfolioSummary | null>(null);
+  const [kalshiBalance, setKalshiBalance] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
 
@@ -159,6 +160,7 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
         activePositions: 0,
         totalInvested: 0,
       });
+      setKalshiBalance(data.balance || 0);
 
       if (data.positions && data.positions.length > 0) {
         toast({
@@ -334,34 +336,47 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                   </Tabs>
                 )}
 
-                {/* Chain Selector and Refresh */}
-                <div className="flex justify-between items-center gap-4">
-                  <Tabs value={selectedChain.toString()} onValueChange={(v) => setSelectedChain(Number(v))} className="flex-1">
-                    <TabsList className="grid w-full grid-cols-5">
-                      {SUPPORTED_CHAINS.map((chain) => (
-                        <TabsTrigger key={chain.id} value={chain.id.toString()}>
-                          {chain.name}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      if (platformTab === 'kalshi') {
-                        fetchKalshiPortfolio();
-                      } else {
+                {/* Chain Selector and Refresh - Only show for Polymarket */}
+                {platformTab === 'polymarket' && (
+                  <div className="flex justify-between items-center gap-4">
+                    <Tabs value={selectedChain.toString()} onValueChange={(v) => setSelectedChain(Number(v))} className="flex-1">
+                      <TabsList className="grid w-full grid-cols-5">
+                        {SUPPORTED_CHAINS.map((chain) => (
+                          <TabsTrigger key={chain.id} value={chain.id.toString()}>
+                            {chain.name}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
                         fetchPortfolio();
-                      }
-                      refetchBalance();
-                    }}
-                    disabled={loading}
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </Button>
-                </div>
+                        refetchBalance();
+                      }}
+                      disabled={loading}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Refresh button only for Kalshi */}
+                {platformTab === 'kalshi' && (
+                  <div className="flex justify-end">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => fetchKalshiPortfolio()}
+                      disabled={loading}
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                )}
 
                 {/* Wallet Information Card */}
                 <Card className={`p-6 border-l-4 ${platformTab === 'kalshi' ? 'border-l-kalshi-teal' : 'border-l-polymarket-purple'}`}>
@@ -415,8 +430,28 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                   )}
                 </Card>
 
-                {/* Chain Balance Card - only shown if wallet is connected via WalletConnect */}
-                {isConnected && balance && (
+                {/* Balance Card - Kalshi USD balance or Polymarket chain balance */}
+                {platformTab === 'kalshi' && kalshiBalance > 0 && (
+                  <Card className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-muted-foreground">
+                        Kalshi Account Balance
+                      </p>
+                      <Badge variant="outline" className="text-xs bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30">
+                        USD
+                      </Badge>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground">
+                      ${kalshiBalance.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Available for trading on Kalshi
+                    </p>
+                  </Card>
+                )}
+
+                {/* Chain Balance Card - only shown for Polymarket if wallet is connected via WalletConnect */}
+                {platformTab === 'polymarket' && isConnected && balance && (
                   <Card className="p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-muted-foreground">

@@ -93,13 +93,7 @@ serve(async (req) => {
       );
     }
 
-    // Create Kalshi authentication headers
-    const timestamp = Date.now().toString();
-    const method = "GET";
-    const path = "/trade-api/v2/portfolio/positions";
-    
-    const signature = await createKalshiSignature(privateKey, timestamp, method, path);
-
+    // Fetch both positions and balance from Kalshi API
     console.log('Fetching portfolio from Kalshi API');
 
     // Try both Demo and Production environments
@@ -109,28 +103,57 @@ serve(async (req) => {
     ];
 
     let portfolioData = null;
+    let balanceData = null;
+    let successfulBase = '';
     let lastError = '';
 
     for (const base of baseUrls) {
-      const url = `${base}${path}`;
-      console.log('Trying', url);
+      // Fetch positions
+      const timestamp1 = Date.now().toString();
+      const positionsPath = "/trade-api/v2/portfolio/positions";
+      const positionsSignature = await createKalshiSignature(privateKey, timestamp1, "GET", positionsPath);
       
-      const response = await fetch(url, {
+      console.log('Trying', `${base}${positionsPath}`);
+      
+      const positionsResponse = await fetch(`${base}${positionsPath}`, {
         headers: {
           'KALSHI-ACCESS-KEY': apiKeyId,
-          'KALSHI-ACCESS-SIGNATURE': signature,
-          'KALSHI-ACCESS-TIMESTAMP': timestamp,
+          'KALSHI-ACCESS-SIGNATURE': positionsSignature,
+          'KALSHI-ACCESS-TIMESTAMP': timestamp1,
           'Content-Type': 'application/json',
         },
       });
 
-      if (response.ok) {
-        portfolioData = await response.json();
-        console.log(`Successfully fetched portfolio from ${base} with ${portfolioData.market_positions?.length || 0} positions`);
+      if (positionsResponse.ok) {
+        portfolioData = await positionsResponse.json();
+        successfulBase = base;
+        console.log(`Successfully fetched positions from ${base} with ${portfolioData.market_positions?.length || 0} positions`);
+        
+        // Also fetch balance
+        const timestamp2 = Date.now().toString();
+        const balancePath = "/trade-api/v2/portfolio/balance";
+        const balanceSignature = await createKalshiSignature(privateKey, timestamp2, "GET", balancePath);
+        
+        const balanceResponse = await fetch(`${base}${balancePath}`, {
+          headers: {
+            'KALSHI-ACCESS-KEY': apiKeyId,
+            'KALSHI-ACCESS-SIGNATURE': balanceSignature,
+            'KALSHI-ACCESS-TIMESTAMP': timestamp2,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (balanceResponse.ok) {
+          balanceData = await balanceResponse.json();
+          console.log(`Successfully fetched balance from ${base}:`, balanceData);
+        } else {
+          console.log(`Failed to fetch balance from ${base}:`, balanceResponse.status);
+        }
+        
         break;
       } else {
-        lastError = await response.text();
-        console.log(`Failed ${base}:`, response.status, lastError);
+        lastError = await positionsResponse.text();
+        console.log(`Failed ${base}:`, positionsResponse.status, lastError);
       }
     }
 
@@ -183,8 +206,16 @@ serve(async (req) => {
       totalInvested,
     };
     
+    // Parse Kalshi balance (in cents)
+    const balance = balanceData?.balance ? parseFloat(balanceData.balance) / 100 : 0;
+    
     return new Response(
-      JSON.stringify({ positions, summary }),
+      JSON.stringify({ 
+        positions, 
+        summary, 
+        balance,
+        balanceFormatted: `$${balance.toFixed(2)}`,
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
