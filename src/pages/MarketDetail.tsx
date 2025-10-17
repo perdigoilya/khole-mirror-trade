@@ -154,42 +154,40 @@ const MarketDetail = () => {
     // For Polymarket: verify trading is enabled via L2 sanity check
     if (targetMarket?.provider === 'polymarket') {
       try {
-        const sanityCheck = await supabase.functions.invoke('polymarket-orders-active', {
-          body: {}
+        const { data, error } = await supabase.functions.invoke('polymarket-connect-status', {
+          body: { connectedEOA: address }
         });
-        
-        if (!sanityCheck.data?.tradingEnabled || sanityCheck.data?.status !== 200) {
-          console.error('Trading not enabled:', sanityCheck.data);
-          
-          if (sanityCheck.data?.closedOnly === true) {
+        if (error) throw error;
+        if (!data?.tradingEnabled) {
+          console.error('Trading not enabled:', data);
+          if (data?.closed_only === true || data?.closedOnly === true) {
             toast({
-              title: "Account in Closed-Only Mode",
+              title: 'Account in Closed-Only Mode',
               description: "Your Polymarket account can't open new positions. Visit Polymarket to resolve restrictions.",
-              variant: "destructive",
+              variant: 'destructive',
             });
-          } else if (sanityCheck.data?.action === 'derive_required') {
+          } else if (data?.ownerMatch === false) {
             toast({
-              title: "Session Expired",
-              description: "Your Polymarket session expired. Please disconnect and reconnect in Portfolio.",
-              variant: "destructive",
+              title: 'Wallet Mismatch',
+              description: 'Connected wallet does not match your Polymarket credentials. Reconnect in Portfolio.',
+              variant: 'destructive',
             });
           } else {
             toast({
-              title: "Trading Not Available",
-              description: sanityCheck.data?.details || "L2 authentication failed. Please reconnect in Portfolio.",
-              variant: "destructive",
+              title: 'Trading Not Available',
+              description: 'L2 authentication failed. Please reconnect in Portfolio.',
+              variant: 'destructive',
             });
           }
           return;
         }
-        
         console.log('✓ Trading enabled - proceeding with trade');
       } catch (e: any) {
         console.error('Sanity check error:', e);
         toast({
-          title: "Connection Check Failed",
-          description: "Unable to verify trading status. Please try reconnecting.",
-          variant: "destructive",
+          title: 'Connection Check Failed',
+          description: 'Unable to verify trading status. Please try reconnecting.',
+          variant: 'destructive',
         });
         return;
       }
