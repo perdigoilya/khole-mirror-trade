@@ -43,7 +43,7 @@ const SUPPORTED_CHAINS = [
 ];
 
 const Portfolio = () => {
-  const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials } = useTrading();
+  const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials, kalshiCredentials } = useTrading();
   const { toast } = useToast();
   const { address, isConnected } = useAccount();
   const [activeTab, setActiveTab] = useState<'overview' | 'positions' | 'history'>('overview');
@@ -137,7 +137,9 @@ const Portfolio = () => {
     try {
       console.log("Fetching Kalshi portfolio data...");
 
-      const { data, error } = await supabase.functions.invoke('kalshi-portfolio');
+const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
+  body: kalshiCredentials,
+});
 
       if (error) {
         throw error;
