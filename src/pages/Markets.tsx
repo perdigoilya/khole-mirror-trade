@@ -661,7 +661,6 @@ const Markets = () => {
         <div className="container mx-auto px-4 max-w-[1600px]">
           {/* Platform Selector - Prominent */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-4">Prediction Markets</h1>
             <div className="flex items-center gap-4 flex-wrap">
               <div className="flex gap-2 p-1 bg-card rounded-lg border border-border">
                 <Button
