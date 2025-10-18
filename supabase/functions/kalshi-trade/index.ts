@@ -209,20 +209,32 @@ serve(async (req) => {
         const path = '/trade-api/v2/portfolio/orders';
         const signature = await createKalshiSignature(privateKey, timestamp, 'POST', path);
 
-        const orderPayload: any = { ticker, action, side, count, type };
+        const orderPayload: any = { ticker, action, side, count };
 
         if (type === 'market') {
-          // True market behavior: do NOT include prices
+          // Market orders: use aggressive pricing + IOC to fill immediately
+          orderPayload.type = 'limit'; // Kalshi uses limit orders with aggressive pricing for "market" behavior
           orderPayload.time_in_force = 'immediate_or_cancel';
-          if (action === 'buy') {
-            // Cap total spend in cents (FoK enforced by API when buy_max_cost is set)
-            orderPayload.buy_max_cost = Math.round(count * 100);
-          } else {
-            // Prevent accidentally flipping position during market sells
+          
+          if (action === 'sell') {
+            // Sell: price at 1¢ to ensure immediate fill (crosses bid-ask spread)
+            if (side === 'yes') {
+              orderPayload.yes_price = 1;
+            } else {
+              orderPayload.no_price = 1;
+            }
             orderPayload.sell_position_capped = true;
+          } else {
+            // Buy: price at 99¢ to ensure immediate fill (crosses bid-ask spread)
+            if (side === 'yes') {
+              orderPayload.yes_price = 99;
+            } else {
+              orderPayload.no_price = 99;
+            }
           }
         } else {
-          // Limit orders: attach exactly one of yes_price/no_price
+          // Limit orders: use client-provided pricing
+          orderPayload.type = 'limit';
           const priceYes = typeof yesPrice === 'number' ? Math.round(yesPrice) : undefined;
           const priceNo = typeof noPrice === 'number' ? Math.round(noPrice) : undefined;
           if (side === 'yes' && priceYes !== undefined) {
