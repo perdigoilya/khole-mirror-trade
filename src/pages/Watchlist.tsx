@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Footer from "@/components/Footer";
-import { Star, TrendingUp, TrendingDown, ShoppingCart, DollarSign, LineChart, Filter, Key } from "lucide-react";
+import { Star, TrendingUp, TrendingDown, DollarSign, Filter, Key } from "lucide-react";
+import { MarketChart } from "@/components/MarketChart";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -452,13 +453,15 @@ const Watchlist = () => {
                         </div>
                       </div>
 
-                      {/* Chart Placeholder */}
+                      {/* Chart Preview */}
                       <div className="lg:col-span-3">
-                        <div className="h-24 rounded-lg bg-gradient-to-r from-card to-muted/30 flex items-center justify-center border border-border/50">
-                          <div className="text-center">
-                            <LineChart className="h-8 w-8 text-muted-foreground mx-auto mb-1" />
-                            <span className="text-xs text-muted-foreground">Chart Preview</span>
-                          </div>
+                        <div className="h-24 rounded-lg overflow-hidden bg-card/30 border border-border/30">
+                          <MarketChart 
+                            marketId={market.id} 
+                            timeRange="1W" 
+                            provider={market.provider}
+                            minimal={true}
+                          />
                         </div>
                       </div>
 
@@ -490,7 +493,6 @@ const Watchlist = () => {
                               size="sm"
                               onClick={() => handleBuy(market, 'yes')}
                             >
-                              <ShoppingCart className="h-3 w-3 mr-1" />
                               Buy Yes
                             </Button>
                           </div>
@@ -520,7 +522,6 @@ const Watchlist = () => {
                               size="sm"
                               onClick={() => handleBuy(market, 'no')}
                             >
-                              <ShoppingCart className="h-3 w-3 mr-1" />
                               Buy No
                             </Button>
                           </div>

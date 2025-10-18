@@ -14,9 +14,10 @@ interface MarketChartProps {
   marketId: string;
   timeRange: '1H' | '6H' | '1D' | '1W' | '1M' | 'ALL';
   provider?: 'kalshi' | 'polymarket';
+  minimal?: boolean;
 }
 
-export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' }: MarketChartProps) => {
+export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket', minimal = false }: MarketChartProps) => {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -134,19 +135,21 @@ export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' 
 
   return (
     <div className="relative w-full h-full">
-      {/* Logo Watermark */}
-      <img 
-        src={fomoLogo}
-        alt=""
-        aria-hidden="true"
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0 select-none"
-        style={{ width: '140px', height: 'auto', opacity: 1, filter: 'invert(1)' }}
-      />
+      {/* Logo Watermark - only show if not minimal */}
+      {!minimal && (
+        <img 
+          src={fomoLogo}
+          alt=""
+          aria-hidden="true"
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-0 select-none"
+          style={{ width: '140px', height: 'auto', opacity: 1, filter: 'invert(1)' }}
+        />
+      )}
       
       {/* Chart */}
       <div className="relative z-10 w-full h-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+          <LineChart data={data} margin={minimal ? { top: 5, right: 5, left: 5, bottom: 5 } : { top: 10, right: 30, left: 10, bottom: 10 }}>
             <defs>
               <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="hsl(var(--chart-orange))" stopOpacity={0.3}/>
@@ -156,7 +159,7 @@ export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' 
             <CartesianGrid 
               strokeDasharray="0" 
               stroke="hsl(var(--border))" 
-              opacity={0.1}
+              opacity={minimal ? 0.05 : 0.1}
               horizontal={true}
               vertical={false}
             />
@@ -172,20 +175,20 @@ export const MarketChart = memo(({ marketId, timeRange, provider = 'polymarket' 
             <YAxis 
               domain={[0, 100]}
               stroke="hsl(var(--muted-foreground))"
-              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+              tick={minimal ? false : { fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
               tickFormatter={(value) => `${value}%`}
               axisLine={false}
               tickLine={false}
-              width={45}
+              width={minimal ? 0 : 45}
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }} />
+            {!minimal && <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }} />}
             <Line 
               type="monotone" 
               dataKey="price" 
               stroke="hsl(var(--chart-green))" 
-              strokeWidth={1.5}
+              strokeWidth={minimal ? 1 : 1.5}
               dot={false}
-              activeDot={{ 
+              activeDot={minimal ? false : { 
                 r: 4, 
                 fill: "hsl(var(--chart-green))",
                 stroke: "hsl(var(--background))",
