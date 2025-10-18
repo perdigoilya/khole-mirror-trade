@@ -218,8 +218,12 @@ serve(async (req) => {
       const invested = totalTradedCents / 100;
       const cashPnl = currentValue - invested;
       const percentPnl = invested > 0 ? (cashPnl / invested) * 100 : 0;
+      
+      // Use the market title if available, otherwise fall back to ticker
+      const marketTitle = m.title || m.market_title || ticker;
+      
       return {
-        title: ticker,
+        title: marketTitle,
         outcome: (Number(pos.position) || 0) >= 0 ? 'Yes' : 'No',
         size,
         avgPrice,
