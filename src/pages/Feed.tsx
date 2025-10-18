@@ -122,12 +122,19 @@ const Feed = () => {
       if (error) throw error;
 
       if (data?.markets) {
+        // Sort markets to show Kalshi first, then Polymarket
+        const sortedMarkets = [...data.markets].sort((a, b) => {
+          if (a.provider === 'kalshi' && b.provider === 'polymarket') return -1;
+          if (a.provider === 'polymarket' && b.provider === 'kalshi') return 1;
+          return 0;
+        });
+        
         // Cache the results
         marketSearchCacheRef.current.set(cacheKey, {
-          markets: data.markets,
+          markets: sortedMarkets,
           timestamp: Date.now()
         });
-        setRelatedMarkets(data.markets);
+        setRelatedMarkets(sortedMarkets);
       }
     } catch (error: any) {
       console.error("Error fetching related markets:", error);
