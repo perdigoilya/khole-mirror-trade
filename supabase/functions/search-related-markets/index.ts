@@ -62,97 +62,225 @@ serve(async (req) => {
 async function rankMarketsBySemantic(tweetText: string, markets: any[]): Promise<any[]> {
   try {
     console.log(`Ranking ${markets.length} markets by semantic relevance to tweet`);
-    
+
+    // Helper: conservative domain guardrails
+    const entertainmentKeywords = [
+      'movie','film','box office','oscars','academy awards','highest grossing',
+      'actor','actress','director','hollywood','cinema','box-office'
+    ];
+    const isEntertainmentTweet = entertainmentKeywords.some((k) =>
+      tweetText.toLowerCase().includes(k)
+    );
+
     // Prepare market summaries for AI analysis
     const marketSummaries = markets.map((m, idx) => ({
       index: idx,
       title: m.title,
       description: m.description || '',
-      category: m.category
+      category: m.category,
     }));
 
-    // Use AI to score relevance with strict criteria
+    // Use AI with function calling to score relevance (robust JSON extraction)
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
+        Authorization: `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [{
-          role: 'user',
-          content: `You are analyzing prediction markets for STRICT relevance to a tweet/news item. Be VERY selective - most markets should score 0-3.
+        messages: [
+          {
+            role: 'user',
+            content:
+              `Score prediction markets for STRICT relevance (0-10) to the tweet.
 
 Tweet/News: "${tweetText}"
 
-Markets to analyze:
+Markets:
 ${marketSummaries.map((m, i) => `${i}. ${m.title} - ${m.description.substring(0, 100)}`).join('\n')}
 
-STRICT scoring criteria (0-10):
-- 9-10: DIRECT match - market is specifically about the exact subject/person/event in the tweet
-- 7-8: STRONG relation - market is about closely related concepts/consequences (e.g., Fed news → inflation markets, China policy → China-related markets)
-- 5-6: MODERATE relation - same industry/domain but different topic (e.g., tech company news → different tech markets)
-- 3-4: WEAK/TANGENTIAL - vaguely same category but different focus (e.g., US politics → unrelated US political markets)
-- 0-2: NOT RELATED - different topic, industry, or geography
+Scoring rules (be ruthless, most should be 0-3):
+- 9-10: DIRECT match to specific subject/person/event
+- 7-8: STRONG relation (closely related consequences)
+- 5-6: MODERATE relation (same domain, different topic)
+- 3-4: WEAK/tangential
+- 0-2: NOT related
 
-IMPORTANT RULES:
-- If a tweet is about Person X, only markets directly about Person X should score 7+
-- Entertainment/movie markets should NEVER score high for political/economic news
-- Sports markets should NEVER score high for non-sports news
-- Generic "2025" timing does NOT make markets related
-- Markets must share specific subjects, not just broad categories
+Hard constraints:
+- If tweet is about Person X, only markets about Person X can be 7+
+- Entertainment/movie markets must NOT score high for non-entertainment tweets
+- Sports must NOT score high for non-sports tweets
+- Generic dates (e.g., 2025) do not imply relation
 
-Return ONLY a JSON array of scores:
-[{"index": 0, "score": 8}, {"index": 1, "score": 3}, ...]
-
-Include ALL ${marketSummaries.length} markets. Be ruthless - most should be 0-3.`
-        }],
-        temperature: 0.3,
-        max_tokens: 2000
-      })
+Return scores via the provided function only.`,
+          },
+        ],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'score_markets',
+              description: 'Return relevance scores for each market.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  scores: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        index: { type: 'integer' },
+                        score: { type: 'number', minimum: 0, maximum: 10 },
+                      },
+                      required: ['index', 'score'],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['scores'],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: { type: 'function', function: { name: 'score_markets' } },
+        temperature: 0.2,
+        max_tokens: 2000,
+      }),
     });
 
     if (!aiResponse.ok) {
       console.error('AI API error:', await aiResponse.text());
-      // Fallback to volume-based sorting
-      return markets.sort((a, b) => b.volumeRaw - a.volumeRaw).slice(0, 10);
+      return conservativeFallback(tweetText, markets, isEntertainmentTweet, entertainmentKeywords);
     }
 
     const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || '';
-    
-    // Extract JSON array from response
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      console.error('Could not parse AI response, falling back to volume sort');
-      return markets.sort((a, b) => b.volumeRaw - a.volumeRaw).slice(0, 10);
+    const choice = aiData.choices?.[0];
+
+    let scores: Array<{ index: number; score: number }> | null = null;
+
+    // Prefer function/tool call output
+    const toolArgs = choice?.message?.tool_calls?.[0]?.function?.arguments;
+    if (toolArgs) {
+      try {
+        const parsed = JSON.parse(toolArgs);
+        if (Array.isArray(parsed?.scores)) scores = parsed.scores;
+      } catch (e) {
+        console.warn('Failed to parse tool call arguments:', e);
+      }
     }
 
-    const scores = JSON.parse(jsonMatch[0]);
-    console.log('AI relevance scores:', scores.slice(0, 10));
+    // Fallback: try to parse raw content JSON array
+    if (!scores) {
+      const content = choice?.message?.content || '';
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        try {
+          const arr = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(arr)) scores = arr;
+        } catch (e) {
+          console.warn('Failed to parse raw JSON content:', e);
+        }
+      }
+    }
 
-    // Combine scores with markets and sort by relevance
+    if (!scores) {
+      console.error('Could not parse AI response, using conservative fallback');
+      return conservativeFallback(tweetText, markets, isEntertainmentTweet, entertainmentKeywords);
+    }
+
+    console.log('AI relevance scores (sample):', scores.slice(0, 10));
+
+    // Combine scores with markets and sort by relevance only
     const scoredMarkets = markets.map((market, idx) => {
-      const scoreObj = scores.find((s: any) => s.index === idx);
-      return {
-        ...market,
-        relevanceScore: scoreObj?.score || 0
-      };
+      const scoreObj = scores!.find((s: any) => s.index === idx);
+      return { ...market, relevanceScore: scoreObj?.score || 0 };
     });
 
-    // Return top 10 markets with score >= 7 (strong relation or better)
-    // Changed from 5 to 7 to only show strongly related markets
-    // Sort purely by relevance - volume is ignored
-    return scoredMarkets
-      .filter(m => m.relevanceScore >= 7)
+    // Domain guardrail: exclude entertainment if tweet isn't entertainment-related
+    const domainFiltered = scoredMarkets.filter((m) => {
+      if (isEntertainmentTweet) return true;
+      const text = `${m.title} ${m.description}`.toLowerCase();
+      const hasEntertainment = entertainmentKeywords.some((k) => text.includes(k));
+      return !hasEntertainment;
+    });
+
+    return domainFiltered
+      .filter((m) => m.relevanceScore >= 7)
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, 10);
-
   } catch (error) {
-    console.error('Error in AI ranking, falling back to volume sort:', error);
-    return markets.sort((a, b) => b.volumeRaw - a.volumeRaw).slice(0, 10);
+    console.error('Error in AI ranking, using conservative fallback:', error);
+    const entertainmentKeywords = [
+      'movie','film','box office','oscars','academy awards','highest grossing',
+      'actor','actress','director','hollywood','cinema','box-office'
+    ];
+    const isEntertainmentTweet = entertainmentKeywords.some((k) =>
+      tweetText.toLowerCase().includes(k)
+    );
+    return conservativeFallback(tweetText, markets, isEntertainmentTweet, entertainmentKeywords);
   }
+}
+
+// Conservative text-based fallback that avoids volume bias entirely
+function conservativeFallback(
+  tweetText: string,
+  markets: any[],
+  isEntertainmentTweet: boolean,
+  entertainmentKeywords: string[],
+): any[] {
+  const stop = new Set([
+    'the','is','are','a','an','and','or','of','to','in','on','for','with','by','at','from','as','that','this','it','be','was','were','will','would','can','could','should','has','have','had','about','into','over','under','after','before','than','then','not','no','yes','do','does','did','up','down','out','off','per','via'
+  ]);
+
+  const normalize = (s: string) => s
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const tweetTokens = normalize(tweetText)
+    .split(' ')
+    .filter((t) => t && !stop.has(t));
+  const tweetSet = new Set(tweetTokens);
+
+  const scoreMarket = (m: any) => {
+    const title = normalize(String(m.title || ''));
+    const desc = normalize(String(m.description || ''));
+    const titleTokens = title.split(' ').filter(Boolean);
+    const descTokens = desc.split(' ').filter(Boolean);
+
+    let score = 0;
+    for (const t of titleTokens) if (tweetSet.has(t)) score += 2; // title weight
+    for (const t of descTokens) if (tweetSet.has(t)) score += 1; // desc weight
+
+    // Domain guardrail: penalize entertainment terms if tweet isn't entertainment
+    if (!isEntertainmentTweet) {
+      const text = `${m.title} ${m.description}`.toLowerCase();
+      if (entertainmentKeywords.some((k) => text.includes(k))) score -= 5;
+    }
+
+    return score;
+  };
+
+  const scored = markets
+    .map((m) => ({ ...m, textScore: scoreMarket(m) }))
+    .filter((m) => m.textScore > 0);
+
+  // Exclude entertainment entirely for non-entertainment tweets
+  const domainFiltered = scored.filter((m) => {
+    if (isEntertainmentTweet) return true;
+    const text = `${m.title} ${m.description}`.toLowerCase();
+    const hasEntertainment = entertainmentKeywords.some((k) => text.includes(k));
+    return !hasEntertainment;
+  });
+
+  return domainFiltered
+    .sort((a, b) => b.textScore - a.textScore)
+    .slice(0, 10)
+    .map(({ textScore, ...rest }) => rest);
 }
 
 async function searchKalshiEvents(tweetText: string): Promise<any[]> {
