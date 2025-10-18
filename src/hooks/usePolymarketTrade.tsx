@@ -2,6 +2,7 @@ import { useSignTypedData } from "wagmi";
 import { useToast } from "@/hooks/use-toast";
 import { buildPolymarketOrder, formatSignedOrder, POLYMARKET_ORDER_DOMAIN, POLYMARKET_ORDER_TYPES } from "@/lib/polymarket-orders";
 import { generatePolymarketHMAC } from "@/lib/polymarket-auth";
+import { ToastAction } from "@/components/ui/toast";
 
 const CLOB_API_URL = "https://clob.polymarket.com";
 
@@ -105,6 +106,11 @@ export function usePolymarketTrade() {
       toast({
         title: "Trade Successful",
         description: `${side} order placed for ${size} shares at $${price}`,
+        action: (
+          <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+            View Portfolio
+          </ToastAction>
+        ),
       });
 
       return { success: true, data: result };

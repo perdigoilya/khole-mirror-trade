@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ToastAction } from "@/components/ui/toast";
 import {
   Select,
   SelectContent,
@@ -317,6 +318,11 @@ const Watchlist = () => {
         toast({
           title: "Order Submitted Successfully! ✅",
           description: `Bought ${shares} shares of ${currentTrade.side.toUpperCase()} at ${currentTrade.price}¢ (Total: $${cost})`,
+          action: (
+            <ToastAction altText="View Portfolio" onClick={() => navigate('/portfolio')}>
+              View Portfolio
+            </ToastAction>
+          ),
         });
       }
 

@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useTrading } from "@/contexts/TradingContext";
 import { Loader2 } from "lucide-react";
+import { ToastAction } from "@/components/ui/toast";
 
 interface KalshiTradeDialogProps {
   open: boolean;
@@ -120,6 +121,11 @@ export function KalshiTradeDialog({
       toast({
         title: "Trade Successful",
         description: `${side.toUpperCase()} order placed for ${count} contracts`,
+        action: (
+          <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+            View Portfolio
+          </ToastAction>
+        ),
       });
 
       onOpenChange(false);
