@@ -99,7 +99,36 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setKalshiCredentials({
           apiKeyId: kalshiData.api_key_id,
           privateKey: kalshiData.private_key,
+          environment: kalshiData.environment as 'demo' | 'live' | undefined,
         });
+
+        // Auto-detect environment for legacy records missing it
+        if (!kalshiData.environment && kalshiData.api_key_id && kalshiData.private_key) {
+          try {
+            const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/kalshi-validate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ apiKeyId: kalshiData.api_key_id, privateKey: kalshiData.private_key })
+            });
+            const json = await resp.json();
+            if (json?.valid && (json.environment === 'demo' || json.environment === 'live')) {
+              // Persist and update local state
+              await supabase.from('user_kalshi_credentials').upsert({
+                user_id: userId,
+                api_key_id: kalshiData.api_key_id,
+                private_key: kalshiData.private_key,
+                environment: json.environment,
+              }, { onConflict: 'user_id' });
+              setKalshiCredentials({
+                apiKeyId: kalshiData.api_key_id,
+                privateKey: kalshiData.private_key,
+                environment: json.environment,
+              });
+            }
+          } catch (e) {
+            console.warn('Kalshi environment autodetect failed:', e);
+          }
+        }
       }
 
       // Load Polymarket credentials
@@ -135,6 +164,7 @@ export const TradingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         user_id: user.id,
         api_key_id: creds.apiKeyId,
         private_key: creds.privateKey,
+        environment: creds.environment ?? null,
       }, {
         onConflict: 'user_id'
       });

@@ -120,6 +120,7 @@ export type Database = {
         Row: {
           api_key_id: string
           created_at: string | null
+          environment: string | null
           id: string
           private_key: string
           user_id: string
@@ -127,6 +128,7 @@ export type Database = {
         Insert: {
           api_key_id: string
           created_at?: string | null
+          environment?: string | null
           id?: string
           private_key: string
           user_id: string
@@ -134,6 +136,7 @@ export type Database = {
         Update: {
           api_key_id?: string
           created_at?: string | null
+          environment?: string | null
           id?: string
           private_key?: string
           user_id?: string

@@ -143,6 +143,8 @@ export function KalshiTradeDialog({
           <DialogTitle className="text-kalshi-primary">Trade on Kalshi</DialogTitle>
           <DialogDescription className="text-sm">
             {marketTitle}
+            <br />
+            <span>Environment: {(kalshiCredentials?.environment ?? 'auto').toUpperCase()}</span>
           </DialogDescription>
         </DialogHeader>
 
