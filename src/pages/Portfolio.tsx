@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
-import { Wallet, TrendingUp, BarChart3, DollarSign, Key, RefreshCw } from "lucide-react";
+import { Wallet, TrendingUp, BarChart3, DollarSign, Key, RefreshCw, ExternalLink } from "lucide-react";
 import { useTrading } from "@/contexts/TradingContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
@@ -48,6 +49,7 @@ const SUPPORTED_CHAINS = [
 ];
 
 const Portfolio = () => {
+  const navigate = useNavigate();
   const { user, isKalshiConnected, isPolymarketConnected, polymarketCredentials, kalshiCredentials } = useTrading();
   const { toast } = useToast();
   const { address, isConnected } = useAccount();
@@ -62,6 +64,7 @@ const Portfolio = () => {
   const [kalshiBalance, setKalshiBalance] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
+  const [sellLoading, setSellLoading] = useState<string | null>(null);
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
 
@@ -196,6 +199,73 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
       fetchKalshiPortfolio();
     }
   }, [user, isKalshiConnected]);
+
+  const handleSellAll = async (position: Position) => {
+    if (!position.size || position.size === 0) {
+      toast({
+        title: "No shares to sell",
+        description: "This position has no filled shares",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSellLoading(position.slug);
+    try {
+      if (platformTab === 'kalshi') {
+        // Sell on Kalshi
+        const { data, error } = await supabase.functions.invoke('kalshi-trade', {
+          body: {
+            ...kalshiCredentials,
+            ticker: position.slug,
+            action: 'sell',
+            side: position.outcome.toLowerCase(),
+            count: Math.floor(position.size),
+            type: 'market',
+          },
+        });
+
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
+
+        toast({
+          title: "Sell order placed",
+          description: `Successfully sold ${Math.floor(position.size)} shares`,
+        });
+
+        // Refresh portfolio after a delay
+        setTimeout(() => fetchKalshiPortfolio(), 2000);
+      } else {
+        // Polymarket sell logic
+        toast({
+          title: "Polymarket sell not yet implemented",
+          description: "Quick sell feature coming soon for Polymarket",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error selling position:", error);
+      toast({
+        title: "Failed to sell position",
+        description: error.message || "An error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setSellLoading(null);
+    }
+  };
+
+  const handlePositionClick = (position: Position) => {
+    if (platformTab === 'kalshi') {
+      // Extract event ticker from market ticker (e.g., KXGOVTCUTS-28-2000 -> KXGOVTCUTS-28)
+      const parts = position.slug.split('-');
+      const eventTicker = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : position.slug;
+      navigate(`/kalshi/event/${eventTicker}`);
+    } else {
+      // For Polymarket, navigate to market detail if we have a market ID
+      // Position interface needs to be updated to include marketId for Polymarket
+      navigate(`/market/${position.slug}`);
+    }
+  };
 
   // Set default platform tab based on what's connected
   useEffect(() => {
@@ -564,14 +634,18 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                     </div>
                     <div className="divide-y">
                       {currentPositions.map((position, index) => (
-                        <div key={index} className="p-6 hover:bg-muted/50 transition-colors">
+                        <div key={index} className="p-6 hover:bg-muted/50 transition-colors group">
                           <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
+                            <div 
+                              className="flex-1 min-w-0 cursor-pointer"
+                              onClick={() => handlePositionClick(position)}
+                            >
                               <div className="flex items-center gap-2 mb-1">
                                 {position.icon && (
                                   <img src={position.icon} alt="" className="h-5 w-5 rounded" />
                                 )}
-                                <h4 className="font-semibold text-sm truncate">{position.title}</h4>
+                                <h4 className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{position.title}</h4>
+                                <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
                               </div>
                               <div className="flex items-center gap-2 mb-2">
                                 <Badge variant="secondary" className="text-xs">
@@ -594,13 +668,29 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                                 <span>Value: ${position.currentValue.toFixed(2)}</span>
                               </div>
                             </div>
-                            <div className="text-right flex-shrink-0">
-                              <div className={`text-lg font-bold ${position.cashPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {position.cashPnl >= 0 ? '+' : ''}${position.cashPnl.toFixed(2)}
+                            <div className="text-right flex-shrink-0 flex flex-col gap-2">
+                              <div>
+                                <div className={`text-lg font-bold ${position.cashPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {position.cashPnl >= 0 ? '+' : ''}${position.cashPnl.toFixed(2)}
+                                </div>
+                                <div className={`text-xs ${position.percentPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {position.percentPnl >= 0 ? '+' : ''}{position.percentPnl.toFixed(2)}%
+                                </div>
                               </div>
-                              <div className={`text-xs ${position.percentPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {position.percentPnl >= 0 ? '+' : ''}{position.percentPnl.toFixed(2)}%
-                              </div>
+                              {position.size > 0 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSellAll(position);
+                                  }}
+                                  disabled={sellLoading === position.slug}
+                                >
+                                  {sellLoading === position.slug ? "Selling..." : "Sell All"}
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
