@@ -25,25 +25,29 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Searching for markets related to: "${text}" on ${provider}`);
-
-    // Extract keywords from tweet (simple implementation)
-    const keywords = extractKeywords(text);
-    console.log("Extracted keywords:", keywords);
+    console.log(`Searching for markets semantically related to: "${text}"`);
 
     // Search both platforms
     const [polymarketMarkets, kalshiMarkets] = await Promise.all([
-      searchPolymarketEvents(keywords),
-      searchKalshiEvents(keywords)
+      searchPolymarketEvents(text),
+      searchKalshiEvents(text)
     ]);
 
-    // Combine and sort by volume
-    const allMarkets = [...polymarketMarkets, ...kalshiMarkets]
-      .sort((a, b) => b.volumeRaw - a.volumeRaw)
-      .slice(0, 10);
+    // Combine all markets for AI ranking
+    const allMarkets = [...polymarketMarkets, ...kalshiMarkets];
+    
+    if (allMarkets.length === 0) {
+      return new Response(
+        JSON.stringify({ markets: [], keywords: [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Use AI to rank markets by semantic relevance
+    const rankedMarkets = await rankMarketsBySemantic(text, allMarkets);
 
     return new Response(
-      JSON.stringify({ markets: allMarkets, keywords }),
+      JSON.stringify({ markets: rankedMarkets }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
@@ -55,34 +59,103 @@ serve(async (req) => {
   }
 });
 
-function extractKeywords(text: string): string[] {
-  // Remove URLs, mentions, hashtags special chars
-  const cleanText = text
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/@\w+/g, "")
-    .replace(/#/g, "")
-    .toLowerCase();
+async function rankMarketsBySemantic(tweetText: string, markets: any[]): Promise<any[]> {
+  try {
+    console.log(`Ranking ${markets.length} markets by semantic relevance to tweet`);
+    
+    // Prepare market summaries for AI analysis
+    const marketSummaries = markets.map((m, idx) => ({
+      index: idx,
+      title: m.title,
+      description: m.description || '',
+      category: m.category
+    }));
 
-  // Split into words and filter common words
-  const stopWords = new Set([
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
-    "been", "being", "have", "has", "had", "do", "does", "did", "will",
-    "would", "should", "could", "may", "might", "can", "this", "that",
-    "these", "those", "i", "you", "he", "she", "it", "we", "they"
-  ]);
+    // Use AI to score relevance
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('LOVABLE_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{
+          role: 'user',
+          content: `You are analyzing prediction markets for relevance to a tweet/news item.
 
-  const words = cleanText
-    .split(/\s+/)
-    .filter(word => word.length > 3 && !stopWords.has(word));
+Tweet/News: "${tweetText}"
 
-  // Return unique keywords (top 5)
-  return [...new Set(words)].slice(0, 5);
+Markets to analyze:
+${marketSummaries.map((m, i) => `${i}. ${m.title} - ${m.description.substring(0, 100)}`).join('\n')}
+
+Score each market from 0-10 based on semantic relevance. Consider:
+- Direct topic match (e.g., if tweet mentions "Trump" and market is about Trump)
+- Industry/domain relevance (e.g., tech news → tech markets, politics → political markets)
+- Related concepts and implications (e.g., Fed rate news → inflation markets, war news → defense/oil markets)
+- Geographic relevance (e.g., China news → China-related markets)
+- Temporal relevance (e.g., upcoming events mentioned)
+
+Return ONLY a JSON array of scores in this exact format:
+[{"index": 0, "score": 8}, {"index": 1, "score": 3}, ...]
+
+Include ALL ${marketSummaries.length} markets. Score 7-10 = highly relevant, 4-6 = somewhat relevant, 0-3 = not relevant.`
+        }],
+        temperature: 0.3,
+        max_tokens: 2000
+      })
+    });
+
+    if (!aiResponse.ok) {
+      console.error('AI API error:', await aiResponse.text());
+      // Fallback to volume-based sorting
+      return markets.sort((a, b) => b.volumeRaw - a.volumeRaw).slice(0, 10);
+    }
+
+    const aiData = await aiResponse.json();
+    const content = aiData.choices?.[0]?.message?.content || '';
+    
+    // Extract JSON array from response
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.error('Could not parse AI response, falling back to volume sort');
+      return markets.sort((a, b) => b.volumeRaw - a.volumeRaw).slice(0, 10);
+    }
+
+    const scores = JSON.parse(jsonMatch[0]);
+    console.log('AI relevance scores:', scores);
+
+    // Combine scores with markets and sort by relevance
+    const scoredMarkets = markets.map((market, idx) => {
+      const scoreObj = scores.find((s: any) => s.index === idx);
+      return {
+        ...market,
+        relevanceScore: scoreObj?.score || 0
+      };
+    });
+
+    // Return top 10 markets with score >= 4 (somewhat relevant or better)
+    return scoredMarkets
+      .filter(m => m.relevanceScore >= 4)
+      .sort((a, b) => {
+        // Primary sort by relevance score
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+        // Secondary sort by volume
+        return b.volumeRaw - a.volumeRaw;
+      })
+      .slice(0, 10);
+
+  } catch (error) {
+    console.error('Error in AI ranking, falling back to volume sort:', error);
+    return markets.sort((a, b) => b.volumeRaw - a.volumeRaw).slice(0, 10);
+  }
 }
 
-async function searchKalshiEvents(keywords: string[]): Promise<any[]> {
+async function searchKalshiEvents(tweetText: string): Promise<any[]> {
   try {
-    console.log("Searching Kalshi events with keywords:", keywords);
+    console.log("Fetching Kalshi events for semantic matching");
     
     const baseUrls = [
       'https://api.elections.kalshi.com',
@@ -94,7 +167,7 @@ async function searchKalshiEvents(keywords: string[]): Promise<any[]> {
     // Try to fetch from Kalshi API
     for (const base of baseUrls) {
       try {
-        const url = `${base}/trade-api/v2/events?status=open&limit=100&with_nested_markets=true`;
+        const url = `${base}/trade-api/v2/events?status=open&limit=200&with_nested_markets=true`;
         const response = await fetch(url, {
           headers: {
             'Accept': 'application/json',
@@ -118,14 +191,11 @@ async function searchKalshiEvents(keywords: string[]): Promise<any[]> {
       return [];
     }
 
-    // Filter and format events based on keywords
-    const relevantMarkets: any[] = [];
+    // Return all markets for AI ranking (limit to top by volume for performance)
+    const allMarkets: any[] = [];
     
-    for (const event of events) {
-      const eventText = `${event.title || ''} ${event.subtitle || ''} ${event.category || ''}`.toLowerCase();
-      const hasMatch = keywords.some(keyword => eventText.includes(keyword.toLowerCase()));
-      
-      if (hasMatch && event.markets && event.markets.length > 0) {
+    for (const event of events.slice(0, 50)) {
+      if (event.markets && event.markets.length > 0) {
         const market = event.markets[0]; // Use first market as representative
         
         const toCents = (num: any, dollars: any) => {
@@ -162,24 +232,21 @@ async function searchKalshiEvents(keywords: string[]): Promise<any[]> {
           image: event.series_image || null,
         };
         
-        console.log(`Adding Kalshi market: ${marketData.title.substring(0, 50)}...`);
-        relevantMarkets.push(marketData);
+        allMarkets.push(marketData);
       }
-      
-      if (relevantMarkets.length >= 5) break; // Limit Kalshi results
     }
 
-    console.log(`Found ${relevantMarkets.length} relevant Kalshi markets`);
-    return relevantMarkets;
+    console.log(`Collected ${allMarkets.length} Kalshi markets for AI ranking`);
+    return allMarkets;
   } catch (error) {
     console.error("Error fetching from Kalshi:", error);
     return [];
   }
 }
 
-async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
+async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
   try {
-    console.log("Searching Polymarket events with keywords:", keywords);
+    console.log("Fetching Polymarket events for semantic matching");
     
     const now = Date.now();
     let events: any[] = [];
@@ -190,8 +257,8 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
       events = eventsCache.data;
       console.log(`Using cached ${events.length} events (age: ${Math.round((now - eventsCache.timestamp) / 1000)}s)`);
     } else {
-      // Fetch events from Gamma API
-      const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=100", {
+      // Fetch events from Gamma API - increased limit for better matching
+      const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=200", {
         method: "GET",
         headers: {
           "Accept": "application/json",
@@ -236,150 +303,142 @@ async function searchPolymarketEvents(keywords: string[]): Promise<any[]> {
       if (cid) byConditionId.set(cid, m);
     }
 
-    // Filter and format events based on keywords
-    const relevantMarkets: any[] = [];
+    // Return all markets for AI ranking (limit to first 50 events for performance)
+    const allMarkets: any[] = [];
     
-    for (const event of events) {
-      const eventText = `${event.title || ''} ${event.description || ''}`.toLowerCase();
-      const hasMatch = keywords.some(keyword => eventText.includes(keyword.toLowerCase()));
+    for (const event of events.slice(0, 50)) {
+      const markets = Array.isArray(event.markets) ? event.markets : [];
+      const mainMarket = markets[0];
       
-      if (hasMatch) {
-        const markets = Array.isArray(event.markets) ? event.markets : [];
-        const mainMarket = markets[0];
+      if (mainMarket) {
+        const cid = mainMarket.conditionId || mainMarket.condition_id;
+        const simp = cid ? byConditionId.get(cid) : undefined;
+        const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
         
-        if (mainMarket) {
-          const cid = mainMarket.conditionId || mainMarket.condition_id;
-          const simp = cid ? byConditionId.get(cid) : undefined;
-          const tokens = Array.isArray(simp?.tokens) ? simp.tokens : [];
+        // Extract pricing - identify YES/NO tokens explicitly
+        let yesPrice = 50;
+        let noPrice = 50;
+        
+        const toNumber = (v: any) => {
+          if (v === null || v === undefined) return undefined;
+          const n = typeof v === 'string' ? parseFloat(v) : v;
+          return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
+        };
+        
+        const extractMid = (t: any) => {
+          if (!t) return undefined;
+          const bid = toNumber(t.bid ?? t.best_bid ?? t.bestBid ?? t.bbo?.BUY ?? t.bbo?.buy ?? t.prices?.buy ?? t.prices?.BUY ?? t.buy);
+          const ask = toNumber(t.ask ?? t.best_ask ?? t.bestAsk ?? t.bbo?.SELL ?? t.bbo?.sell ?? t.prices?.sell ?? t.prices?.SELL ?? t.sell);
+          if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
+          if (ask !== undefined) return ask;
+          if (bid !== undefined) return bid;
+          const p = toNumber(t.price ?? t.last_price ?? t.lastPrice ?? t.last_trade_price ?? t.lastTradePrice ?? t.last);
+          return p;
+        };
+        
+        const toCents = (v: any) => {
+          const n = toNumber(v);
+          if (n === undefined) return undefined;
+          return n <= 1 ? Math.round(n * 100) : Math.round(n);
+        };
+        
+        if (tokens.length >= 1) {
+          // Try to identify YES/NO tokens explicitly
+          const toLower = (v: any) => String(v ?? '').toLowerCase();
+          const labelOf = (t: any) => toLower(t?.outcome ?? t?.label ?? t?.name ?? t?.ticker ?? t?.symbol ?? '');
           
-          // Extract pricing - identify YES/NO tokens explicitly
-          let yesPrice = 50;
-          let noPrice = 50;
+          const yesToken = tokens.find((t: any) => labelOf(t) === 'yes' || labelOf(t).includes('yes'));
+          const noToken = tokens.find((t: any) => labelOf(t) === 'no' || labelOf(t).includes('no')) || (tokens.length === 2 ? tokens.find((t: any) => t !== yesToken) : undefined);
           
-          const toNumber = (v: any) => {
-            if (v === null || v === undefined) return undefined;
-            const n = typeof v === 'string' ? parseFloat(v) : v;
-            return typeof n === 'number' && !Number.isNaN(n) ? n : undefined;
-          };
+          const yesPrice_raw = toCents(extractMid(yesToken || tokens[0]));
+          const noPrice_raw = toCents(extractMid(noToken));
           
-          const extractMid = (t: any) => {
-            if (!t) return undefined;
-            const bid = toNumber(t.bid ?? t.best_bid ?? t.bestBid ?? t.bbo?.BUY ?? t.bbo?.buy ?? t.prices?.buy ?? t.prices?.BUY ?? t.buy);
-            const ask = toNumber(t.ask ?? t.best_ask ?? t.bestAsk ?? t.bbo?.SELL ?? t.bbo?.sell ?? t.prices?.sell ?? t.prices?.SELL ?? t.sell);
-            if (bid !== undefined && ask !== undefined) return (bid + ask) / 2;
-            if (ask !== undefined) return ask;
-            if (bid !== undefined) return bid;
-            const p = toNumber(t.price ?? t.last_price ?? t.lastPrice ?? t.last_trade_price ?? t.lastTradePrice ?? t.last);
-            return p;
-          };
-          
-          const toCents = (v: any) => {
-            const n = toNumber(v);
-            if (n === undefined) return undefined;
-            return n <= 1 ? Math.round(n * 100) : Math.round(n);
-          };
-          
-          if (tokens.length >= 1) {
-            // Try to identify YES/NO tokens explicitly
-            const toLower = (v: any) => String(v ?? '').toLowerCase();
-            const labelOf = (t: any) => toLower(t?.outcome ?? t?.label ?? t?.name ?? t?.ticker ?? t?.symbol ?? '');
-            
-            const yesToken = tokens.find((t: any) => labelOf(t) === 'yes' || labelOf(t).includes('yes'));
-            const noToken = tokens.find((t: any) => labelOf(t) === 'no' || labelOf(t).includes('no')) || (tokens.length === 2 ? tokens.find((t: any) => t !== yesToken) : undefined);
-            
-            const yesPrice_raw = toCents(extractMid(yesToken || tokens[0]));
-            const noPrice_raw = toCents(extractMid(noToken));
-            
-            if (yesPrice_raw !== undefined) yesPrice = yesPrice_raw;
-            if (noPrice_raw !== undefined) {
-              noPrice = noPrice_raw;
-            } else if (tokens.length <= 2 && yesPrice !== undefined) {
-              noPrice = 100 - yesPrice;
-            }
-          }
-          
-          const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
-          const liq = parseFloat(event.liquidity || mainMarket.liquidity || 0);
-          
-          // Get CLOB token ID for charts - try multiple sources
-          let clobTokenId = '';
-          
-          // First, try to get from the main market directly
-          clobTokenId = mainMarket.clobTokenIds?.[0] || mainMarket.clob_token_ids?.[0] || '';
-          
-          // If not found, try from tokens array - prioritize YES token for binary markets
-          if (!clobTokenId && tokens.length > 0) {
-            // Look for YES token first
-            let yesToken = tokens.find((t: any) => {
-              const outcome = String(t?.outcome ?? t?.label ?? t?.name ?? '').toLowerCase();
-              return outcome === 'yes' || outcome.includes('yes');
-            });
-            
-            // If no YES token found, use first token
-            const targetToken = yesToken || tokens[0];
-            
-            // Extract token ID from various possible field names
-            clobTokenId = String(
-              targetToken?.token_id || 
-              targetToken?.tokenId || 
-              targetToken?.id || 
-              ''
-            );
-            
-            console.log(`Extracted token ID from tokens array: ${clobTokenId}`);
-          }
-          
-          // If still no token ID, try from simplified market data
-          if (!clobTokenId && simp) {
-            const simpTokens = Array.isArray(simp.tokens) ? simp.tokens : [];
-            if (simpTokens.length > 0) {
-              const yesToken = simpTokens.find((t: any) => 
-                String(t?.outcome ?? '').toLowerCase() === 'yes'
-              ) || simpTokens[0];
-              clobTokenId = String(yesToken?.token_id || yesToken?.tokenId || '');
-              console.log(`Extracted token ID from simplified market: ${clobTokenId}`);
-            }
-          }
-          
-          // Fallback: use condition ID (will be resolved by price-history function)
-          if (!clobTokenId && cid) {
-            clobTokenId = cid;
-            console.log(`Using condition ID as fallback: ${clobTokenId}`);
-          }
-          
-          // Only add markets with valid condition IDs and token IDs for pricing
-          if (cid && clobTokenId) {
-            const marketData = {
-              id: cid,
-              title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
-              description: event.description || mainMarket.description || '',
-              yesPrice,
-              noPrice,
-              volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
-              liquidity: liq > 1_000_000 ? `$${(liq / 1_000_000).toFixed(1)}M` : liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
-              endDate: event.end_date_iso || event.end_date || mainMarket.end_date_iso || mainMarket.end_date || 'TBD',
-              status: event.active === false || event.closed === true ? 'Closed' : 'Active',
-              category: event.category || 'Other',
-              provider: 'polymarket',
-              volumeRaw: vol,
-              liquidityRaw: liq,
-              clobTokenId: clobTokenId,
-              image: event.image || event.icon || mainMarket.image,
-            };
-            
-            console.log(`Adding market: ${marketData.title.substring(0, 50)}... with tokenId: ${clobTokenId}`);
-            relevantMarkets.push(marketData);
-          } else {
-            console.warn(`Skipping market "${event.title}" - missing ${!cid ? 'condition ID' : 'token ID'}`);
+          if (yesPrice_raw !== undefined) yesPrice = yesPrice_raw;
+          if (noPrice_raw !== undefined) {
+            noPrice = noPrice_raw;
+          } else if (tokens.length <= 2 && yesPrice !== undefined) {
+            noPrice = 100 - yesPrice;
           }
         }
+        
+        const vol = parseFloat(event.volume || mainMarket.volume_usd || mainMarket.volume || 0);
+        const liq = parseFloat(event.liquidity || mainMarket.liquidity || 0);
+        
+        // Get CLOB token ID for charts - try multiple sources
+        let clobTokenId = '';
+        
+        // First, try to get from the main market directly
+        clobTokenId = mainMarket.clobTokenIds?.[0] || mainMarket.clob_token_ids?.[0] || '';
+        
+        // If not found, try from tokens array - prioritize YES token for binary markets
+        if (!clobTokenId && tokens.length > 0) {
+          // Look for YES token first
+          let yesToken = tokens.find((t: any) => {
+            const outcome = String(t?.outcome ?? t?.label ?? t?.name ?? '').toLowerCase();
+            return outcome === 'yes' || outcome.includes('yes');
+          });
+          
+          // If no YES token found, use first token
+          const targetToken = yesToken || tokens[0];
+          
+          // Extract token ID from various possible field names
+          clobTokenId = String(
+            targetToken?.token_id || 
+            targetToken?.tokenId || 
+            targetToken?.id || 
+            ''
+          );
+          
+          console.log(`Extracted token ID from tokens array: ${clobTokenId}`);
+        }
+        
+        // If still no token ID, try from simplified market data
+        if (!clobTokenId && simp) {
+          const simpTokens = Array.isArray(simp.tokens) ? simp.tokens : [];
+          if (simpTokens.length > 0) {
+            const yesToken = simpTokens.find((t: any) => 
+              String(t?.outcome ?? '').toLowerCase() === 'yes'
+            ) || simpTokens[0];
+            clobTokenId = String(yesToken?.token_id || yesToken?.tokenId || '');
+            console.log(`Extracted token ID from simplified market: ${clobTokenId}`);
+          }
+        }
+        
+        // Fallback: use condition ID (will be resolved by price-history function)
+        if (!clobTokenId && cid) {
+          clobTokenId = cid;
+          console.log(`Using condition ID as fallback: ${clobTokenId}`);
+        }
+        
+        // Only add markets with valid condition IDs and token IDs for pricing
+        if (cid && clobTokenId) {
+          const marketData = {
+            id: cid,
+            title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
+            description: event.description || mainMarket.description || '',
+            yesPrice,
+            noPrice,
+            volume: vol > 1_000_000 ? `$${(vol / 1_000_000).toFixed(1)}M` : vol > 1_000 ? `$${(vol / 1_000).toFixed(0)}K` : `$${vol.toFixed(0)}`,
+            liquidity: liq > 1_000_000 ? `$${(liq / 1_000_000).toFixed(1)}M` : liq > 1_000 ? `$${(liq / 1_000).toFixed(0)}K` : `$${liq.toFixed(0)}`,
+            endDate: event.end_date_iso || event.end_date || mainMarket.end_date_iso || mainMarket.end_date || 'TBD',
+            status: event.active === false || event.closed === true ? 'Closed' : 'Active',
+            category: event.category || 'Other',
+            provider: 'polymarket',
+            volumeRaw: vol,
+            liquidityRaw: liq,
+            clobTokenId: clobTokenId,
+            image: event.image || event.icon || mainMarket.image,
+          };
+          
+          allMarkets.push(marketData);
+        } else {
+          console.warn(`Skipping market "${event.title}" - missing ${!cid ? 'condition ID' : 'token ID'}`);
+        }
       }
-      
-      if (relevantMarkets.length >= 10) break;
     }
 
-    console.log(`Found ${relevantMarkets.length} relevant markets`);
-    return relevantMarkets;
+    console.log(`Collected ${allMarkets.length} Polymarket markets for AI ranking`);
+    return allMarkets;
   } catch (error) {
     console.error("Error fetching from Polymarket:", error);
     return [];
