@@ -266,10 +266,15 @@ const Footer = () => {
           </Button>
 
           <Button variant="outline" size="sm" asChild>
-            <Link to="/faq" className="gap-2">
+            <a
+              href="https://x.com/FOMOAPPbet"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="gap-2"
+            >
               <HelpCircle className="h-4 w-4" />
               <span className="text-sm">{t.footer.helpSupport}</span>
-            </Link>
+            </a>
           </Button>
         </div>
       </div>
