@@ -23,6 +23,123 @@ import {
 } from "@/lib/polymarket-orders";
 import { useEnsurePolymarketCredentials } from "@/hooks/usePolymarketCredentials";
 
+// Component to display user's positions for this market
+const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polymarketCredentials }: {
+  marketId: string;
+  ticker?: string;
+  provider: 'kalshi' | 'polymarket';
+  kalshiCredentials: any;
+  polymarketCredentials: any;
+}) => {
+  const [positions, setPositions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    const fetchPositions = async () => {
+      setLoading(true);
+      try {
+        if (provider === 'kalshi' && kalshiCredentials) {
+          const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
+            body: kalshiCredentials,
+          });
+          
+          if (error) throw error;
+          
+          // Filter positions for this specific market ticker
+          const marketPositions = (data.positions || []).filter((p: any) => 
+            p.slug === ticker || p.slug === marketId
+          );
+          setPositions(marketPositions);
+        } else if (provider === 'polymarket' && polymarketCredentials) {
+          // Polymarket position fetching
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-portfolio`,
+            {
+              headers: {
+                Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              },
+            }
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            const marketPositions = (data.positions || []).filter((p: any) => 
+              p.slug === marketId || p.title.toLowerCase().includes(marketId.toLowerCase())
+            );
+            setPositions(marketPositions);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching positions:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if ((kalshiCredentials || polymarketCredentials) && (ticker || marketId)) {
+      fetchPositions();
+    } else {
+      setLoading(false);
+    }
+  }, [marketId, ticker, provider, kalshiCredentials, polymarketCredentials]);
+  
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+        <p className="text-sm text-muted-foreground">Loading positions...</p>
+      </div>
+    );
+  }
+  
+  if (positions.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-sm text-muted-foreground">You have no positions in this market</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-3">
+      {positions.map((position, idx) => (
+        <div key={idx} className="p-4 bg-muted/30 rounded-lg border border-border">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="font-medium">{position.outcome}</p>
+              <p className="text-xs text-muted-foreground">{position.title}</p>
+            </div>
+            <Badge variant={position.percentPnl >= 0 ? "default" : "destructive"}>
+              {position.percentPnl >= 0 ? '+' : ''}{position.percentPnl.toFixed(2)}%
+            </Badge>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-muted-foreground text-xs">Shares</p>
+              <p className="font-medium">{position.size}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Avg Price</p>
+              <p className="font-medium">${position.avgPrice.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">Current Value</p>
+              <p className="font-medium">${position.currentValue.toFixed(2)}</p>
+            </div>
+          </div>
+          {position.pendingCount > 0 && (
+            <div className="mt-2 pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground">
+                Pending: {position.pendingCount} @ ${position.pendingPrice?.toFixed(2)} (resting)
+              </p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 interface Market {
   id: string;
   title: string;
@@ -976,14 +1093,18 @@ const MarketDetail = () => {
                   </TabsContent>
                   
                   <TabsContent value="positions" className="mt-0">
-                    <div className="text-center py-8">
-                      <p className="text-sm text-muted-foreground">No positions yet</p>
-                    </div>
+                    <UserPositionsTab 
+                      marketId={marketId || ''} 
+                      ticker={market.ticker}
+                      provider={market.provider}
+                      kalshiCredentials={kalshiCredentials}
+                      polymarketCredentials={polymarketCredentials}
+                    />
                   </TabsContent>
                   
                   <TabsContent value="trades" className="mt-0">
                     <div className="text-center py-8">
-                      <p className="text-sm text-muted-foreground">No trades yet</p>
+                      <p className="text-sm text-muted-foreground">Trade history coming soon</p>
                     </div>
                   </TabsContent>
                 </Tabs>

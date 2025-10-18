@@ -213,7 +213,11 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
     setSellLoading(position.slug);
     try {
       if (platformTab === 'kalshi') {
-        // Sell on Kalshi
+        // Determine an aggressive price to ensure the order fills
+        // If selling YES, use a low price (1 cent). If selling NO, use a high price (99 cents)
+        const aggressivePrice = position.outcome.toLowerCase() === 'yes' ? 1 : 99;
+        
+        // Sell on Kalshi with aggressive pricing to ensure fill
         const { data, error } = await supabase.functions.invoke('kalshi-trade', {
           body: {
             ...kalshiCredentials,
@@ -222,16 +226,26 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
             side: position.outcome.toLowerCase(),
             count: Math.floor(position.size),
             type: 'market',
+            yes_price: position.outcome.toLowerCase() === 'yes' ? aggressivePrice : undefined,
+            no_price: position.outcome.toLowerCase() === 'no' ? aggressivePrice : undefined,
           },
         });
 
         if (error) throw error;
         if (data.error) throw new Error(data.error);
 
-        toast({
-          title: "Sell order placed",
-          description: `Successfully sold ${Math.floor(position.size)} shares`,
-        });
+        const orderStatus = data.order?.status;
+        if (orderStatus === 'resting') {
+          toast({
+            title: "Sell order placed",
+            description: `Order is pending. It will fill when a buyer is available at ${aggressivePrice}¢`,
+          });
+        } else {
+          toast({
+            title: "Sell order executed",
+            description: `Successfully sold ${Math.floor(position.size)} shares`,
+          });
+        }
 
         // Refresh portfolio after a delay
         setTimeout(() => fetchKalshiPortfolio(), 2000);
