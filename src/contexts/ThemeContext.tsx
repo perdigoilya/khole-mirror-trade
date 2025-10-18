@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type ThemeColor = 'golden' | 'emerald' | 'blue' | 'purple' | 'red' | 'teal';
+type ThemeColor = 'golden' | 'emerald' | 'blue' | 'purple' | 'red' | 'teal' | 'grey';
 
 interface ThemeContextType {
   themeColor: ThemeColor;
@@ -39,6 +39,11 @@ const themeColors = {
     primary: '180 75% 50%',
     primaryBright: '180 80% 60%',
     primaryDim: '180 70% 40%',
+  },
+  grey: {
+    primary: '220 9% 60%',
+    primaryBright: '220 9% 70%',
+    primaryDim: '220 9% 50%',
   },
 };
 

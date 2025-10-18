@@ -50,6 +50,7 @@ const Footer = () => {
     { id: 'purple', name: 'Royal Purple', color: 'hsl(270, 70%, 60%)' },
     { id: 'red', name: 'Crimson Red', color: 'hsl(0, 84%, 60%)' },
     { id: 'teal', name: 'Teal Cyan', color: 'hsl(180, 75%, 50%)' },
+    { id: 'grey', name: 'Light Grey', color: 'hsl(220, 9%, 60%)' },
   ] as const;
 
   const formatTimestamp = (timestamp: string) => {
