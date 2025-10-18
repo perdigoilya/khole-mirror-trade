@@ -167,7 +167,7 @@ async function searchKalshiEvents(tweetText: string): Promise<any[]> {
     // Try to fetch from Kalshi API
     for (const base of baseUrls) {
       try {
-        const url = `${base}/trade-api/v2/events?status=open&limit=200&with_nested_markets=true`;
+        const url = `${base}/trade-api/v2/events?status=open&limit=500&with_nested_markets=true`;
         const response = await fetch(url, {
           headers: {
             'Accept': 'application/json',
@@ -191,10 +191,10 @@ async function searchKalshiEvents(tweetText: string): Promise<any[]> {
       return [];
     }
 
-    // Return all markets for AI ranking (limit to top by volume for performance)
+    // Return all markets for AI ranking (process more events for comprehensive matching)
     const allMarkets: any[] = [];
     
-    for (const event of events.slice(0, 50)) {
+    for (const event of events.slice(0, 150)) {
       if (event.markets && event.markets.length > 0) {
         const market = event.markets[0]; // Use first market as representative
         
@@ -257,8 +257,8 @@ async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
       events = eventsCache.data;
       console.log(`Using cached ${events.length} events (age: ${Math.round((now - eventsCache.timestamp) / 1000)}s)`);
     } else {
-      // Fetch events from Gamma API - increased limit for better matching
-      const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=200", {
+      // Fetch events from Gamma API - fetch maximum available for comprehensive matching
+      const eventsResponse = await fetch("https://gamma-api.polymarket.com/events?closed=false&limit=500", {
         method: "GET",
         headers: {
           "Accept": "application/json",
@@ -303,10 +303,10 @@ async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
       if (cid) byConditionId.set(cid, m);
     }
 
-    // Return all markets for AI ranking (limit to first 50 events for performance)
+    // Return all markets for AI ranking (process more events for better matching)
     const allMarkets: any[] = [];
     
-    for (const event of events.slice(0, 50)) {
+    for (const event of events.slice(0, 150)) {
       const markets = Array.isArray(event.markets) ? event.markets : [];
       const mainMarket = markets[0];
       
