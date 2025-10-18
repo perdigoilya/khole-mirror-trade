@@ -141,18 +141,12 @@ Include ALL ${marketSummaries.length} markets. Be ruthless - most should be 0-3.
       };
     });
 
-    // Return top 10 markets with score >= 5 (moderate relevance or better)
-    // Changed from 4 to 5 to filter out weak/tangential matches
+    // Return top 10 markets with score >= 7 (strong relation or better)
+    // Changed from 5 to 7 to only show strongly related markets
+    // Sort purely by relevance - volume is ignored
     return scoredMarkets
-      .filter(m => m.relevanceScore >= 5)
-      .sort((a, b) => {
-        // Primary sort by relevance score
-        if (b.relevanceScore !== a.relevanceScore) {
-          return b.relevanceScore - a.relevanceScore;
-        }
-        // Secondary sort by volume
-        return b.volumeRaw - a.volumeRaw;
-      })
+      .filter(m => m.relevanceScore >= 7)
+      .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, 10);
 
   } catch (error) {
