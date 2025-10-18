@@ -228,7 +228,7 @@ const Portfolio = () => {
                 <p className="text-muted-foreground mb-6">
                   Track your positions and performance across multiple platforms
                 </p>
-                <Button onClick={() => window.location.href = '/auth'}>
+                <Button onClick={() => navigate('/auth')}>
                   Sign In
                 </Button>
               </Card>
@@ -572,7 +572,7 @@ const Portfolio = () => {
                         }
                       </p>
                       {positionTab === 'open' && (
-                        <Button onClick={() => window.location.href = '/markets'}>
+                        <Button onClick={() => navigate('/markets')}>
                           Browse Markets
                         </Button>
                       )}

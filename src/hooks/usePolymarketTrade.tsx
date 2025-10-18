@@ -16,6 +16,7 @@ interface TradeParams {
   apiKey: string;
   apiSecret: string;
   apiPassphrase: string;
+  onNavigateToPortfolio?: () => void;
 }
 
 export function usePolymarketTrade() {
@@ -34,6 +35,7 @@ export function usePolymarketTrade() {
         apiKey,
         apiSecret,
         apiPassphrase,
+        onNavigateToPortfolio,
       } = params;
 
       // Step 1: Build the order
@@ -111,31 +113,31 @@ export function usePolymarketTrade() {
         toast({
           title: "Trade Successful",
           description: `${side} order filled for ${size} shares at $${price}`,
-          action: (
-            <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+          action: onNavigateToPortfolio ? (
+            <ToastAction altText="View Portfolio" onClick={onNavigateToPortfolio}>
               View Portfolio
             </ToastAction>
-          ),
+          ) : undefined,
         });
       } else if (side === 'SELL') {
         toast({
           title: "Order Placed",
           description: "There aren't enough buy orders to match your sell order size. Your order has been placed on the order book and will fill when matched.",
-          action: (
-            <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+          action: onNavigateToPortfolio ? (
+            <ToastAction altText="View Portfolio" onClick={onNavigateToPortfolio}>
               View Portfolio
             </ToastAction>
-          ),
+          ) : undefined,
         });
       } else {
         toast({
           title: "Order Placed",
           description: `${side} order placed for ${size} shares at $${price}. Waiting for match.`,
-          action: (
-            <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+          action: onNavigateToPortfolio ? (
+            <ToastAction altText="View Portfolio" onClick={onNavigateToPortfolio}>
               View Portfolio
             </ToastAction>
-          ),
+          ) : undefined,
         });
       }
 

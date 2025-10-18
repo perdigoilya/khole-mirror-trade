@@ -208,6 +208,7 @@ const Watchlist = () => {
           apiKey: polymarketCredentials.apiCredentials.apiKey,
           apiSecret: polymarketCredentials.apiCredentials.secret,
           apiPassphrase: polymarketCredentials.apiCredentials.passphrase,
+          onNavigateToPortfolio: () => navigate('/portfolio'),
         });
 
         if (result.success) {
@@ -494,7 +495,7 @@ const Watchlist = () => {
                 <p className="text-muted-foreground mb-4">
                   Add markets to your watchlist to track them here
                 </p>
-                <Button onClick={() => window.location.href = '/markets'}>
+                <Button onClick={() => navigate('/markets')}>
                   Browse Markets
                 </Button>
               </Card>

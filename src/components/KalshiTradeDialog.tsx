@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ export function KalshiTradeDialog({
   marketTitle,
   currentPrice,
 }: KalshiTradeDialogProps) {
+  const navigate = useNavigate();
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState<string>("1");
@@ -122,7 +124,7 @@ export function KalshiTradeDialog({
         title: "Trade Successful",
         description: `${side.toUpperCase()} order placed for ${count} contracts`,
         action: (
-          <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+          <ToastAction altText="View Portfolio" onClick={() => navigate('/portfolio')}>
             View Portfolio
           </ToastAction>
         ),
