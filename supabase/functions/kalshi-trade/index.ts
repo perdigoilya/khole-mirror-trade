@@ -207,9 +207,25 @@ serve(async (req) => {
         const signature = await createKalshiSignature(privateKey, timestamp, 'POST', path);
 
         const orderPayload: any = { ticker, action, side, count, type };
-        if (type === 'limit') {
-          if (side === 'yes') orderPayload.yes_price = yesPrice;
-          else orderPayload.no_price = noPrice;
+
+        // Attach price for both limit and market orders
+        // Kalshi requires exactly one of yes_price/no_price(_dollars)
+        const priceYes = typeof yesPrice === 'number' ? Math.round(yesPrice) : undefined;
+        const priceNo = typeof noPrice === 'number' ? Math.round(noPrice) : undefined;
+
+        if (side === 'yes') {
+          if (priceYes !== undefined) {
+            orderPayload.yes_price = priceYes;
+          } else if (type === 'market') {
+            // Fallback cap for market orders when client didn't provide a price
+            orderPayload.yes_price = 99;
+          }
+        } else if (side === 'no') {
+          if (priceNo !== undefined) {
+            orderPayload.no_price = priceNo;
+          } else if (type === 'market') {
+            orderPayload.no_price = 99;
+          }
         }
 
         console.log(`[kalshi-trade] Submitting order on ${baseUrl}`, orderPayload);
