@@ -29,6 +29,8 @@ createWeb3Modal({
   projectId,
   enableAnalytics: false,
   enableOnramp: false,
+  featuredWalletIds: [],
+  includeWalletIds: [],
 });
 
 interface Web3ProviderProps {
