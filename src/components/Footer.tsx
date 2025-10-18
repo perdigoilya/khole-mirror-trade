@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Languages, Palette } from "lucide-react";
+import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Languages, Palette, Twitter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -260,8 +260,8 @@ const Footer = () => {
               rel="noopener noreferrer"
               aria-label="X (Twitter)"
             >
-              <X className="h-4 w-4" />
-              <span className="text-sm font-medium">X(twitter)</span>
+              <Twitter className="h-4 w-4" />
+              <span className="text-sm font-medium">Twitter</span>
             </a>
           </Button>
 
