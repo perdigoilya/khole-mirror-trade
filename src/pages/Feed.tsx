@@ -606,7 +606,7 @@ const Feed = () => {
                     </p>
                   )}
                   
-                  <div className="max-h-[calc(100vh-12rem)] overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">
                     {isLoadingMarkets ? (
                       <div className="flex items-center justify-center p-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
