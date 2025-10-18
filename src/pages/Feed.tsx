@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTweets, useFollowedAccounts } from "@/hooks/useFeedData";
 
 interface NewsItem {
   id: string;
@@ -66,20 +67,24 @@ const Feed = () => {
   const { user, activeProvider } = useTrading();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [mainFeed, setMainFeed] = useState<NewsItem[]>([]);
   const [selectedTweet, setSelectedTweet] = useState<NewsItem | null>(null);
   const [relatedMarkets, setRelatedMarkets] = useState<RelatedMarket[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMarkets, setIsLoadingMarkets] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [categories, setCategories] = useState<string[]>([]);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [attemptedAutoRefresh, setAttemptedAutoRefresh] = useState(false);
-  const [followedAccounts, setFollowedAccounts] = useState<any[]>([]);
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
   const [isAddingAccount, setIsAddingAccount] = useState(false);
+
+  // Use React Query hooks for data fetching with caching
+  const { data: tweetsData, isLoading, refetch: refetchTweets } = useTweets(filterCategory);
+  const { data: followedAccounts = [], refetch: refetchAccounts } = useFollowedAccounts();
+  
+  const mainFeed = tweetsData?.tweets || [];
+  const categories = tweetsData?.categories || [];
+  const lastUpdate = tweetsData?.lastUpdate || null;
+
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -89,66 +94,6 @@ const Feed = () => {
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  };
-
-  const fetchTweets = async () => {
-    try {
-      let query = supabase
-        .from('twitter_feed')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (filterCategory !== "all") {
-        query = query.eq('category', filterCategory);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (data) {
-        const formattedTweets = data.map(tweet => ({
-          id: tweet.id,
-          tweet_id: tweet.tweet_id,
-          title: tweet.text,
-          source: tweet.author_name || `@${tweet.author_username}`,
-          username: tweet.author_username,
-          timestamp: formatTimestamp(tweet.created_at),
-          category: tweet.category || 'Market News',
-          profileImage: tweet.profile_image_url,
-          likes: tweet.likes_count || 0,
-          retweets: tweet.retweets_count || 0,
-          views: tweet.views_count || 0,
-          relevant: tweet.relevant || false,
-        }));
-
-        setMainFeed(formattedTweets);
-
-        // Extract unique categories
-        const uniqueCategories = [...new Set(data.map(t => t.category).filter(Boolean))];
-        setCategories(uniqueCategories as string[]);
-
-        // Track last update from DB and auto-fetch if stale
-        const latestFetchedAt = data
-          .map((t: any) => t.fetched_at ? new Date(t.fetched_at as string) : null)
-          .filter(Boolean)
-          .sort((a: any, b: any) => b.getTime() - a.getTime())[0] as Date | undefined;
-
-        if (latestFetchedAt) {
-          setLastUpdate(latestFetchedAt);
-          const ageMs = Date.now() - latestFetchedAt.getTime();
-          const twoMin = 2 * 60 * 1000;
-          if (ageMs > twoMin && !attemptedAutoRefresh) {
-            setAttemptedAutoRefresh(true);
-            // Try to fetch new tweets silently once
-            refreshTwitterFeed(true).catch(() => {});
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching tweets:', error);
-    }
   };
 
   const marketSearchCacheRef = useRef<Map<string, { markets: RelatedMarket[], timestamp: number }>>(new Map());
@@ -231,12 +176,10 @@ const Feed = () => {
         });
       }
       
-      await fetchTweets();
-      setLastUpdate(new Date());
+      await refetchTweets();
     } catch (error: any) {
       console.error("Twitter fetch error:", error);
       
-      // Check if it's a rate limit error
       const isRateLimit = error.message?.includes('429') || error.message?.includes('rate limit');
       
       if (!silent) {
@@ -250,20 +193,6 @@ const Feed = () => {
       }
     } finally {
       if (!silent) setIsRefreshing(false);
-    }
-  };
-
-  const fetchFollowedAccounts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('followed_twitter_accounts')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setFollowedAccounts(data || []);
-    } catch (error) {
-      console.error('Error fetching followed accounts:', error);
     }
   };
 
@@ -296,7 +225,7 @@ const Feed = () => {
 
       setNewUsername('');
       setNewDisplayName('');
-      fetchFollowedAccounts();
+      refetchAccounts();
     } catch (error: any) {
       console.error('Error adding account:', error);
       toast({
@@ -323,7 +252,7 @@ const Feed = () => {
         description: `@${username} will no longer be tracked`,
       });
 
-      fetchFollowedAccounts();
+      refetchAccounts();
     } catch (error: any) {
       console.error('Error removing account:', error);
       toast({
@@ -335,10 +264,7 @@ const Feed = () => {
   };
 
   useEffect(() => {
-    fetchTweets();
-    fetchFollowedAccounts();
-
-    // Subscribe to realtime updates
+    // Subscribe to realtime updates for auto-refresh
     const channel = supabase
       .channel('twitter_feed_changes')
       .on(
@@ -349,28 +275,21 @@ const Feed = () => {
           table: 'twitter_feed'
         },
         () => {
-          fetchTweets();
-          setLastUpdate(new Date());
+          refetchTweets();
         }
       )
       .subscribe();
 
-    // Auto-refresh every 2 minutes (cron job runs every minute, we check every 2)
-    const autoRefreshInterval = setInterval(() => {
-      refreshTwitterFeed(true);
-    }, 120000); // 2 minutes
-
     // Update relative timestamps every minute
     const timestampInterval = setInterval(() => {
-      setMainFeed(prev => [...prev]); // Force re-render to update timestamps
+      refetchTweets();
     }, 60000); // 1 minute
 
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(autoRefreshInterval);
       clearInterval(timestampInterval);
     };
-  }, [filterCategory]);
+  }, [refetchTweets]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">

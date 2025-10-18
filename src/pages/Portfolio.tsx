@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAccount, useBalance } from "wagmi";
 import { mainnet, polygon, base, arbitrum, optimism } from "wagmi/chains";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePolymarketPortfolio, useKalshiPortfolio } from "@/hooks/usePortfolioData";
 
 interface Position {
   title: string;
@@ -57,15 +58,29 @@ const Portfolio = () => {
   const [platformTab, setPlatformTab] = useState<'kalshi' | 'polymarket'>('polymarket');
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [kalshiPositions, setKalshiPositions] = useState<Position[]>([]);
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
-  const [kalshiSummary, setKalshiSummary] = useState<PortfolioSummary | null>(null);
-  const [kalshiBalance, setKalshiBalance] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
   const [sellLoading, setSellLoading] = useState<string | null>(null);
   const [positionTab, setPositionTab] = useState<'open' | 'closed'>('open');
+
+  // Use React Query hooks for data fetching with caching
+  const { 
+    data: polymarketData, 
+    isLoading: polymarketLoading, 
+    refetch: refetchPolymarket 
+  } = usePolymarketPortfolio(user?.id, isPolymarketConnected);
+
+  const { 
+    data: kalshiData, 
+    isLoading: kalshiLoading, 
+    refetch: refetchKalshi 
+  } = useKalshiPortfolio(user?.id, isKalshiConnected, kalshiCredentials);
+
+  const positions = polymarketData?.positions || [];
+  const summary = polymarketData?.summary || null;
+  const kalshiPositions = kalshiData?.positions || [];
+  const kalshiSummary = kalshiData?.summary || null;
+  const kalshiBalance = kalshiData?.balance || 0;
+  const loading = platformTab === 'kalshi' ? kalshiLoading : polymarketLoading;
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
 
@@ -78,128 +93,6 @@ const Portfolio = () => {
     chainId: selectedChain,
     token: selectedChainConfig?.tokenAddress, // Use USDC token for Polygon, undefined for native tokens
   });
-
-  const fetchPortfolio = async () => {
-    if (!user || !isPolymarketConnected) return;
-
-    setLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error("No active session");
-      }
-
-      console.log("Fetching Polymarket portfolio data...");
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/polymarket-portfolio`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Portfolio fetch error:", errorText);
-        throw new Error(`Failed to fetch portfolio: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log("Polymarket portfolio data received:", data);
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setPositions(data.positions || []);
-      setSummary(data.summary || {
-        totalValue: 0,
-        totalPnl: 0,
-        totalRealizedPnl: 0,
-        activePositions: 0,
-        totalInvested: 0,
-      });
-
-      if (data.positions && data.positions.length > 0) {
-        toast({
-          title: "Polymarket portfolio loaded",
-          description: `Found ${data.positions.length} active position${data.positions.length > 1 ? 's' : ''}`,
-        });
-      }
-    } catch (error: any) {
-      console.error("Error fetching Polymarket portfolio:", error);
-      toast({
-        title: "Error loading Polymarket portfolio",
-        description: error.message || "Failed to load portfolio data",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchKalshiPortfolio = async () => {
-    if (!user || !isKalshiConnected) return;
-
-    setLoading(true);
-    try {
-      console.log("Fetching Kalshi portfolio data...");
-
-const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
-  body: kalshiCredentials,
-});
-
-      if (error) {
-        throw error;
-      }
-
-      console.log("Kalshi portfolio data received:", data);
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setKalshiPositions(data.positions || []);
-      setKalshiSummary(data.summary || {
-        totalValue: 0,
-        totalPnl: 0,
-        totalRealizedPnl: 0,
-        activePositions: 0,
-        totalInvested: 0,
-      });
-      setKalshiBalance(data.balance || 0);
-
-      if (data.positions && data.positions.length > 0) {
-        toast({
-          title: "Kalshi portfolio loaded",
-          description: `Found ${data.positions.length} active position${data.positions.length > 1 ? 's' : ''}`,
-        });
-      }
-    } catch (error: any) {
-      console.error("Error fetching Kalshi portfolio:", error);
-      toast({
-        title: "Error loading Kalshi portfolio",
-        description: error.message || "Failed to load portfolio data",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user && isPolymarketConnected) {
-      fetchPortfolio();
-    }
-  }, [user, isPolymarketConnected]);
-
-  useEffect(() => {
-    if (user && isKalshiConnected) {
-      fetchKalshiPortfolio();
-    }
-  }, [user, isKalshiConnected]);
 
   const handleSellAll = async (position: Position) => {
     if (!position.size || position.size === 0) {
@@ -248,9 +141,7 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
           const updated = (pData?.positions || []).find((p: any) => p.slug === position.slug);
           if (!updated || (updated.size ?? 0) < position.size) {
             cleared = true;
-            setKalshiPositions(pData?.positions || []);
-            setKalshiSummary(pData?.summary || null);
-            setKalshiBalance(pData?.balance || 0);
+            refetchKalshi();
             break;
           }
         }
@@ -266,7 +157,7 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
             description: 'Your sell order is resting and will fill shortly at 1¢.',
           });
           // Ensure we refresh anyway
-          fetchKalshiPortfolio();
+          refetchKalshi();
         }
       } else {
         // Polymarket sell logic
@@ -463,7 +354,7 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                       variant="outline" 
                       size="sm"
                       onClick={() => {
-                        fetchPortfolio();
+                        refetchPolymarket();
                         refetchBalance();
                       }}
                       disabled={loading}
@@ -480,7 +371,7 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => fetchKalshiPortfolio()}
+                      onClick={() => refetchKalshi()}
                       disabled={loading}
                     >
                       <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />

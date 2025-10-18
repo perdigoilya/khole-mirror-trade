@@ -29,6 +29,7 @@ import {
 } from "@/lib/polymarket-orders";
 import { useEnsurePolymarketCredentials } from "@/hooks/usePolymarketCredentials";
 import { usePolymarketTrade } from "@/hooks/usePolymarketTrade";
+import { useWatchlist } from "@/hooks/useWatchlistData";
 
 const Watchlist = () => {
   const { user, kalshiCredentials, polymarketCredentials } = useTrading();
@@ -41,91 +42,38 @@ const Watchlist = () => {
   const { executeTrade: executePolymarketTrade } = usePolymarketTrade();
   const [sortBy, setSortBy] = useState("recent");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [watchedMarkets, setWatchedMarkets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<{market: any, side: 'yes' | 'no', price: number} | null>(null);
   const [tradeAmount, setTradeAmount] = useState<string>('0');
   
-  // Fetch watchlist from database
+  // Use React Query hook for watchlist with caching
+  const { data: watchedMarkets = [], isLoading: loading, refetch } = useWatchlist(user?.id);
+  
+  // Set up realtime subscription
   useEffect(() => {
-    if (user) {
-      fetchWatchlist();
-      
-      // Set up realtime subscription
-      const channel = supabase
-        .channel('watchlist_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'watchlist',
-            filter: `user_id=eq.${user.id}`
-          },
-          () => {
-            fetchWatchlist();
-          }
-        )
-        .subscribe();
-      
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    } else {
-      setWatchedMarkets([]);
-      setLoading(false);
-    }
-  }, [user]);
-
-  const fetchWatchlist = async () => {
     if (!user) return;
+
+    const channel = supabase
+      .channel('watchlist_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'watchlist',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          refetch(); // Use React Query refetch instead of manual fetch
+        }
+      )
+      .subscribe();
     
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('watchlist')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('added_at', { ascending: false });
-
-      if (error) throw error;
-
-      if (data) {
-        setWatchedMarkets(data.map(item => {
-          const marketData = item.market_data as any || {};
-          return {
-            id: item.market_id || item.market_ticker,
-            dbId: item.id,
-            title: marketData.title || item.market_title,
-            yesPrice: marketData.yesPrice || 50,
-            noPrice: marketData.noPrice || 50,
-            volume: marketData.volume || '$0',
-            liquidity: marketData.liquidity || '$0',
-            endDate: marketData.endDate || 'TBD',
-            category: marketData.category || 'Other',
-            provider: marketData.provider || 'polymarket',
-            trend: marketData.trend || 'up',
-            change: marketData.change || 0,
-            image: marketData.image,
-            description: marketData.description,
-            volumeRaw: marketData.volumeRaw || 0,
-            liquidityRaw: marketData.liquidityRaw || 0
-          };
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching watchlist:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load watchlist",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, refetch]);
 
   const handleBuy = (market: any, side: 'yes' | 'no') => {
     if (!user) {

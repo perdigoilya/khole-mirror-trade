@@ -20,7 +20,17 @@ import KalshiEvent from "./pages/KalshiEvent";
 import KalshiEventDetail from "./pages/KalshiEventDetail";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000, // Data is fresh for 30 seconds
+      gcTime: 5 * 60 * 1000, // Keep unused data in cache for 5 minutes
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: true, // Always refetch in background on mount
+      retry: 1, // Retry failed requests once
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
