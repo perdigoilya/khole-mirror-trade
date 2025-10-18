@@ -57,16 +57,24 @@ serve(async (req) => {
       return null;
     };
 
-    // Price derivation
-    const lastPrice = toCents(m.last_price, m.last_price_dollars);
+    // Price derivation - prioritize current orderbook data over last trade
     const yesAsk = toCents(m.yes_ask, m.yes_ask_dollars);
     const yesBid = toCents(m.yes_bid, m.yes_bid_dollars);
+    const lastPrice = toCents(m.last_price, m.last_price_dollars);
 
-    let yesPrice = lastPrice;
-    if (yesPrice === null && yesAsk !== null && yesBid !== null) yesPrice = Math.round((yesAsk + yesBid) / 2);
-    if (yesPrice === null && yesAsk !== null) yesPrice = yesAsk;
-    if (yesPrice === null && yesBid !== null) yesPrice = yesBid;
-    if (yesPrice === null) yesPrice = 50;
+    // Use mid-market price from current orderbook if available
+    let yesPrice: number;
+    if (yesAsk !== null && yesBid !== null) {
+      yesPrice = Math.round((yesAsk + yesBid) / 2);
+    } else if (lastPrice !== null) {
+      yesPrice = lastPrice;
+    } else if (yesAsk !== null) {
+      yesPrice = yesAsk;
+    } else if (yesBid !== null) {
+      yesPrice = yesBid;
+    } else {
+      yesPrice = 50;
+    }
 
     const volume24h = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
     const liquidityDollars = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
