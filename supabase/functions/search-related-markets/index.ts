@@ -71,7 +71,7 @@ async function rankMarketsBySemantic(tweetText: string, markets: any[]): Promise
       category: m.category
     }));
 
-    // Use AI to score relevance
+    // Use AI to score relevance with strict criteria
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -82,24 +82,31 @@ async function rankMarketsBySemantic(tweetText: string, markets: any[]): Promise
         model: 'google/gemini-2.5-flash',
         messages: [{
           role: 'user',
-          content: `You are analyzing prediction markets for relevance to a tweet/news item.
+          content: `You are analyzing prediction markets for STRICT relevance to a tweet/news item. Be VERY selective - most markets should score 0-3.
 
 Tweet/News: "${tweetText}"
 
 Markets to analyze:
 ${marketSummaries.map((m, i) => `${i}. ${m.title} - ${m.description.substring(0, 100)}`).join('\n')}
 
-Score each market from 0-10 based on semantic relevance. Consider:
-- Direct topic match (e.g., if tweet mentions "Trump" and market is about Trump)
-- Industry/domain relevance (e.g., tech news → tech markets, politics → political markets)
-- Related concepts and implications (e.g., Fed rate news → inflation markets, war news → defense/oil markets)
-- Geographic relevance (e.g., China news → China-related markets)
-- Temporal relevance (e.g., upcoming events mentioned)
+STRICT scoring criteria (0-10):
+- 9-10: DIRECT match - market is specifically about the exact subject/person/event in the tweet
+- 7-8: STRONG relation - market is about closely related concepts/consequences (e.g., Fed news → inflation markets, China policy → China-related markets)
+- 5-6: MODERATE relation - same industry/domain but different topic (e.g., tech company news → different tech markets)
+- 3-4: WEAK/TANGENTIAL - vaguely same category but different focus (e.g., US politics → unrelated US political markets)
+- 0-2: NOT RELATED - different topic, industry, or geography
 
-Return ONLY a JSON array of scores in this exact format:
+IMPORTANT RULES:
+- If a tweet is about Person X, only markets directly about Person X should score 7+
+- Entertainment/movie markets should NEVER score high for political/economic news
+- Sports markets should NEVER score high for non-sports news
+- Generic "2025" timing does NOT make markets related
+- Markets must share specific subjects, not just broad categories
+
+Return ONLY a JSON array of scores:
 [{"index": 0, "score": 8}, {"index": 1, "score": 3}, ...]
 
-Include ALL ${marketSummaries.length} markets. Score 7-10 = highly relevant, 4-6 = somewhat relevant, 0-3 = not relevant.`
+Include ALL ${marketSummaries.length} markets. Be ruthless - most should be 0-3.`
         }],
         temperature: 0.3,
         max_tokens: 2000
@@ -123,7 +130,7 @@ Include ALL ${marketSummaries.length} markets. Score 7-10 = highly relevant, 4-6
     }
 
     const scores = JSON.parse(jsonMatch[0]);
-    console.log('AI relevance scores:', scores);
+    console.log('AI relevance scores:', scores.slice(0, 10));
 
     // Combine scores with markets and sort by relevance
     const scoredMarkets = markets.map((market, idx) => {
@@ -134,9 +141,10 @@ Include ALL ${marketSummaries.length} markets. Score 7-10 = highly relevant, 4-6
       };
     });
 
-    // Return top 10 markets with score >= 4 (somewhat relevant or better)
+    // Return top 10 markets with score >= 5 (moderate relevance or better)
+    // Changed from 4 to 5 to filter out weak/tangential matches
     return scoredMarkets
-      .filter(m => m.relevanceScore >= 4)
+      .filter(m => m.relevanceScore >= 5)
       .sort((a, b) => {
         // Primary sort by relevance score
         if (b.relevanceScore !== a.relevanceScore) {
