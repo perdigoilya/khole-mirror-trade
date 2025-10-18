@@ -55,25 +55,47 @@ serve(async (req) => {
     let marketData = null;
     let lastError = '';
 
+    // Retry logic with exponential backoff
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
     for (const base of baseUrls) {
       const url = `${base}${path}`;
-      console.log('[PUBLIC] Trying public endpoint:', url);
       
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`[PUBLIC] Attempt ${attempt}/${maxRetries} - Trying endpoint: ${url}`);
+          
+          const response = await fetch(url, {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000), // 10 second timeout
+          });
 
-      if (response.ok) {
-        marketData = await response.json();
-        console.log(`[PUBLIC] Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
-        break;
-      } else {
-        lastError = await response.text();
-        console.log(`[PUBLIC] Failed ${base}:`, response.status, lastError);
+          if (response.ok) {
+            marketData = await response.json();
+            console.log(`[PUBLIC] Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
+            break;
+          } else {
+            lastError = await response.text();
+            console.log(`[PUBLIC] Failed ${base} (attempt ${attempt}):`, response.status, lastError);
+          }
+        } catch (fetchError) {
+          lastError = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          console.error(`[PUBLIC] Network error on ${base} (attempt ${attempt}):`, lastError);
+          
+          // Wait before retry (exponential backoff)
+          if (attempt < maxRetries) {
+            const delay = retryDelay * Math.pow(2, attempt - 1);
+            console.log(`[PUBLIC] Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
       }
+      
+      if (marketData) break;
     }
 
     if (!marketData) {
