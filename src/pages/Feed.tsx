@@ -158,7 +158,7 @@ const Feed = () => {
     setSelectedTweet(tweet);
     
     // Check cache first
-    const cacheKey = `${tweet.tweet_id}-${activeProvider}`;
+    const cacheKey = `${tweet.tweet_id}-both`;
     const cached = marketSearchCacheRef.current.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < MARKET_CACHE_DURATION) {
@@ -171,7 +171,7 @@ const Feed = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('search-related-markets', {
-        body: { text: tweet.title, provider: activeProvider }
+        body: { text: tweet.title, provider: 'both' }
       });
 
       if (error) throw error;
@@ -600,11 +600,11 @@ const Feed = () => {
                       {selectedTweet ? 'Related Markets' : 'Select a Tweet'}
                     </h2>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {selectedTweet 
-                      ? `Markets related to this news (${activeProvider})` 
-                      : 'Click on any tweet to see related markets'}
-                  </p>
+                  {!selectedTweet && (
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Click on any tweet to see related markets
+                    </p>
+                  )}
                   
                   {isLoadingMarkets ? (
                     <div className="flex items-center justify-center p-8">

@@ -37,7 +37,10 @@ const Markets = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   
-  const [platform, setPlatform] = useState<'kalshi' | 'polymarket'>("polymarket");
+  const [platform, setPlatform] = useState<'kalshi' | 'polymarket'>(() => {
+    const saved = localStorage.getItem('lastMarketPlatform');
+    return (saved === 'polymarket' || saved === 'kalshi') ? saved : 'polymarket';
+  });
   const [sortBy, setSortBy] = useState("trending");
   const [timeFilter, setTimeFilter] = useState("all-time");
   const [showFilters, setShowFilters] = useState(false);
@@ -654,70 +657,49 @@ const Markets = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       <main className="flex-1 pt-10 pb-24">
         <div className="container mx-auto px-4 max-w-[1600px]">
-          {/* Platform Selector - Prominent */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex gap-2 p-1 bg-card rounded-lg border border-border">
-                <Button
-                  variant={platform === 'polymarket' ? 'default' : 'ghost'}
-                  size="lg"
-                  className={platform === 'polymarket' 
-                    ? 'bg-polymarket-purple hover:bg-polymarket-purple-dark text-white' 
-                    : 'text-muted-foreground hover:text-foreground'}
-                  onClick={() => { 
-                    setPlatform('polymarket'); 
-                    setMarkets([]); // Clear markets to force refresh
-                  }}
-                >
-                  <img 
-                    src={polymarketLogo} 
-                    alt="Polymarket" 
-                    className="w-5 h-5 mr-2"
-                  />
-                  Polymarket
-                </Button>
-                <Button
-                  variant={platform === 'kalshi' ? 'default' : 'ghost'}
-                  size="lg"
-                  className={platform === 'kalshi' 
-                    ? 'bg-kalshi-teal hover:bg-kalshi-teal-dark text-white' 
-                    : 'text-muted-foreground hover:text-foreground'}
-                  onClick={() => {
-                    setPlatform('kalshi');
-                    setMarkets([]); // Clear markets to force refresh
-                  }}
-                >
-                  <img 
-                    src={kalshiLogo} 
-                    alt="Kalshi" 
-                    className="w-5 h-5 mr-2"
-                  />
-                  Kalshi
-                </Button>
-              </div>
-              
-              <div className="text-sm text-muted-foreground">
-                {platform === 'kalshi' ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-kalshi-teal animate-pulse" />
-                    Showing Kalshi markets (public data)
-                    {!isKalshiConnected && (
-                      <span className="text-yellow-500 ml-2">• Connect account to trade</span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-polymarket-purple animate-pulse" />
-                    Showing Polymarket markets
-                  </span>
-                )}
-              </div>
+          {/* Filter Bar with Platform Selector */}
+          <div className="flex items-center gap-3 mb-6 flex-wrap">
+            {/* Platform Selector - Compact */}
+            <div className="flex gap-1 p-0.5 bg-muted rounded-md border border-border">
+              <Button
+                variant={platform === 'polymarket' ? 'default' : 'ghost'}
+                size="sm"
+                className={platform === 'polymarket' 
+                  ? 'bg-polymarket-purple hover:bg-polymarket-purple-dark text-white h-8' 
+                  : 'text-muted-foreground hover:text-foreground h-8'}
+                onClick={() => { 
+                  setPlatform('polymarket');
+                  localStorage.setItem('lastMarketPlatform', 'polymarket');
+                  setMarkets([]); // Clear markets to force refresh
+                }}
+              >
+                <img 
+                  src={polymarketLogo} 
+                  alt="Polymarket" 
+                  className="w-4 h-4 mr-1.5"
+                />
+                Polymarket
+              </Button>
+              <Button
+                variant={platform === 'kalshi' ? 'default' : 'ghost'}
+                size="sm"
+                className={platform === 'kalshi' 
+                  ? 'bg-kalshi-teal hover:bg-kalshi-teal-dark text-white h-8' 
+                  : 'text-muted-foreground hover:text-foreground h-8'}
+                onClick={() => {
+                  setPlatform('kalshi');
+                  localStorage.setItem('lastMarketPlatform', 'kalshi');
+                  setMarkets([]); // Clear markets to force refresh
+                }}
+              >
+                <img 
+                  src={kalshiLogo} 
+                  alt="Kalshi" 
+                  className="w-4 h-4 mr-1.5"
+                />
+                Kalshi
+              </Button>
             </div>
-          </div>
-
-
-          {/* Filter Bar */}
-          <div className="flex items-center gap-3 mb-6">
 
             <Select value={sortBy} onValueChange={setSortBy}>
               <SelectTrigger className="w-[140px] bg-card/50 border-border">
