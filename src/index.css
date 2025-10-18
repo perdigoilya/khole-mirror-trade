@@ -65,6 +65,32 @@ All colors MUST be HSL.
   }
 }
 
+/* Web3Modal custom styles for better visibility */
+@layer base {
+  w3m-modal,
+  w3m-button,
+  wui-button,
+  wui-list-wallet {
+    --w3m-accent: hsl(45 91% 49%) !important;
+    --w3m-color-mix: hsl(0 0% 4%) !important;
+    --w3m-color-mix-strength: 0 !important;
+  }
+  
+  /* Override button backgrounds for visibility */
+  w3m-modal button,
+  w3m-button button,
+  wui-button button {
+    background: hsl(45 91% 49%) !important;
+    color: hsl(0 0% 4%) !important;
+  }
+  
+  w3m-modal button:hover,
+  w3m-button button:hover,
+  wui-button button:hover {
+    background: hsl(45 95% 59%) !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
