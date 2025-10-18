@@ -98,6 +98,11 @@ export function KalshiTradeDialog({
         } else {
           payload.noPrice = Math.round(parseFloat(limitPrice));
         }
+      } else {
+        // Market orders on Kalshi still require a price field; use current price as a cap
+        const marketPx = Math.max(1, Math.min(99, Math.round(currentPrice)));
+        if (kalshiSide === 'yes') payload.yesPrice = marketPx;
+        else payload.noPrice = marketPx;
       }
 
       console.log("Submitting Kalshi trade:", payload);

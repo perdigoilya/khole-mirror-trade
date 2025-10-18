@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { Badge } from "@/components/ui/badge";
 
 const Navigation = () => {
   const location = useLocation();
@@ -133,6 +134,11 @@ const Navigation = () => {
                     <>
                       <div className="w-2 h-2 rounded-full bg-kalshi-teal" />
                       Kalshi
+                      {kalshiCredentials?.environment && (
+                        <Badge variant="secondary" className="ml-2 uppercase">
+                          {kalshiCredentials.environment}
+                        </Badge>
+                      )}
                     </>
                   ) : isPolymarketConnected ? (
                     <>
@@ -235,6 +241,11 @@ const Navigation = () => {
                           <>
                             <div className="w-2 h-2 rounded-full bg-kalshi-teal" />
                             Kalshi
+                            {kalshiCredentials?.environment && (
+                              <Badge variant="secondary" className="ml-2 uppercase">
+                                {kalshiCredentials.environment}
+                              </Badge>
+                            )}
                           </>
                         ) : isPolymarketConnected ? (
                           <>
