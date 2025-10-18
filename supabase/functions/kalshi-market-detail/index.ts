@@ -76,6 +76,10 @@ serve(async (req) => {
       yesPrice = 50;
     }
 
+    // Derive NO bid/ask with fallbacks
+    const noAsk = toCents((m as any).no_ask, (m as any).no_ask_dollars) ?? (yesBid !== null ? 100 - yesBid : null);
+    const noBid = toCents((m as any).no_bid, (m as any).no_bid_dollars) ?? (yesAsk !== null ? 100 - yesAsk : null);
+
     const volume24h = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
     const liquidityDollars = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
 
@@ -106,8 +110,14 @@ serve(async (req) => {
       rules,
       rules_primary,
       rules_secondary,
+      // Mid price derived earlier
       yesPrice,
       noPrice: 100 - yesPrice,
+      // Explicit orderbook levels for accurate display/trading
+      yesAsk: yesAsk ?? null,
+      yesBid: yesBid ?? null,
+      noAsk: noAsk ?? null,
+      noBid: noBid ?? null,
       volume: volume24h > 0 ? `${volume24h.toLocaleString('en-US')} contracts` : '$0',
       liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
       volumeRaw: volume24h,

@@ -250,6 +250,10 @@ interface Market {
   image?: string;
   yesPrice?: number;
   noPrice?: number;
+  yesAsk?: number;
+  yesBid?: number;
+  noAsk?: number;
+  noBid?: number;
   volume: string;
   liquidity: string;
   endDate: string;
@@ -1153,11 +1157,11 @@ const MarketDetail = () => {
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">YES</div>
                         <div className="text-3xl font-bold text-emerald-400">
-                          {(typeof market.yesPrice === 'number' && market.yesPrice > 0) ? `${market.yesPrice}¢` : '—'}
+                          {(typeof (market.yesAsk ?? market.yesPrice) === 'number' && (market.yesAsk ?? market.yesPrice)! > 0) ? `${(market.yesAsk ?? market.yesPrice)}¢` : '—'}
                         </div>
                         <Button 
                           className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          onClick={() => handleTrade(market.title, 'yes', market.yesPrice || 50)}
+                          onClick={() => handleTrade(market.title, 'yes', (market.yesAsk ?? market.yesPrice || 50))}
                         >
                           Buy Yes
                         </Button>
@@ -1165,11 +1169,11 @@ const MarketDetail = () => {
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">NO</div>
                         <div className="text-3xl font-bold text-red-400">
-                          {(typeof market.noPrice === 'number' && market.noPrice > 0 && market.noPrice < 100) ? `${market.noPrice}¢` : '—'}
+                          {(typeof (market.noAsk ?? market.noPrice) === 'number' && (market.noAsk ?? market.noPrice)! > 0 && (market.noAsk ?? market.noPrice)! < 100) ? `${(market.noAsk ?? market.noPrice)}¢` : '—'}
                         </div>
                         <Button 
                           className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                          onClick={() => handleTrade(market.title, 'no', market.noPrice || 50)}
+                          onClick={() => handleTrade(market.title, 'no', (market.noAsk ?? market.noPrice || 50))}
                         >
                           Buy No
                         </Button>
@@ -1364,7 +1368,7 @@ const MarketDetail = () => {
           onOpenChange={setKalshiTradeDialogOpen}
           marketTicker={market.ticker || ''}
           marketTitle={market.title}
-          currentPrice={market.yesPrice || 50}
+          currentPrice={currentTrade?.price ?? (market.yesAsk ?? market.yesPrice ?? 50)}
         />
       )}
       
