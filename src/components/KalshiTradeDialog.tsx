@@ -120,15 +120,43 @@ export function KalshiTradeDialog({
         throw new Error(data.error || "Trade failed");
       }
 
-      toast({
-        title: "Trade Successful",
-        description: `${side.toUpperCase()} order placed for ${count} contracts`,
-        action: (
-          <ToastAction altText="View Portfolio" onClick={() => navigate('/portfolio')}>
-            View Portfolio
-          </ToastAction>
-        ),
-      });
+      // Check if the order was actually filled
+      const order = data.order;
+      const fillCount = order?.fill_count || 0;
+      const orderStatus = order?.status || '';
+      
+      if (fillCount === 0 && (orderStatus === 'canceled' || orderStatus === 'cancelled')) {
+        toast({
+          title: "Trade Not Filled",
+          description: "There weren't enough contracts available to fill your order. Try using a limit order or reducing the quantity.",
+          variant: "destructive",
+        });
+        onOpenChange(false);
+        return;
+      }
+
+      // Show partial fill warning
+      if (fillCount > 0 && fillCount < count) {
+        toast({
+          title: "Partially Filled",
+          description: `Only ${fillCount} of ${count} contracts were filled. The rest couldn't be matched.`,
+          action: (
+            <ToastAction altText="View Portfolio" onClick={() => navigate('/portfolio')}>
+              View Portfolio
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({
+          title: "Trade Successful",
+          description: `${side.toUpperCase()} order filled for ${fillCount} contracts`,
+          action: (
+            <ToastAction altText="View Portfolio" onClick={() => navigate('/portfolio')}>
+              View Portfolio
+            </ToastAction>
+          ),
+        });
+      }
 
       onOpenChange(false);
       

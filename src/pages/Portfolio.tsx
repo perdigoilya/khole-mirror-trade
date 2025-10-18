@@ -60,7 +60,7 @@ const Portfolio = () => {
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
   const [sellLoading, setSellLoading] = useState<string | null>(null);
-  const [positionTab, setPositionTab] = useState<'open' | 'closed'>('open');
+  const [positionTab, setPositionTab] = useState<'open' | 'closed' | 'failed'>('open');
 
   // Use React Query hooks for data fetching with caching
   const { 
@@ -200,11 +200,19 @@ const Portfolio = () => {
     }
   }, [isKalshiConnected, isPolymarketConnected]);
 
-  // Get current platform data and filter by open/closed
+  // Get current platform data and filter by open/closed/failed
   const allPositions = platformTab === 'kalshi' ? kalshiPositions : positions;
   const openPositions = allPositions.filter(p => p.size > 0);
-  const closedPositions = allPositions.filter(p => p.size === 0);
-  const currentPositions = positionTab === 'open' ? openPositions : closedPositions;
+  // Closed = had shares and sold them (avgPrice > 0, size = 0)
+  const closedPositions = allPositions.filter(p => p.size === 0 && p.avgPrice > 0);
+  // Failed = never got filled (avgPrice = 0, size = 0)
+  const failedPositions = allPositions.filter(p => p.size === 0 && p.avgPrice === 0);
+  
+  const currentPositions = positionTab === 'open' 
+    ? openPositions 
+    : positionTab === 'closed' 
+    ? closedPositions 
+    : failedPositions;
   const currentSummary = platformTab === 'kalshi' ? kalshiSummary : summary;
   const isPlatformConnected = platformTab === 'kalshi' ? isKalshiConnected : isPolymarketConnected;
 
@@ -544,8 +552,8 @@ const Portfolio = () => {
                       <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-semibold">Positions</h2>
                       </div>
-                      <Tabs value={positionTab} onValueChange={(v) => setPositionTab(v as 'open' | 'closed')}>
-                        <TabsList className="grid w-full max-w-sm grid-cols-2">
+                      <Tabs value={positionTab} onValueChange={(v) => setPositionTab(v as 'open' | 'closed' | 'failed')}>
+                        <TabsList className="grid w-full max-w-2xl grid-cols-3">
                           <TabsTrigger value="open">
                             Open Positions
                             <Badge variant="secondary" className="ml-2">{openPositions.length}</Badge>
@@ -553,6 +561,10 @@ const Portfolio = () => {
                           <TabsTrigger value="closed">
                             Closed Positions
                             <Badge variant="secondary" className="ml-2">{closedPositions.length}</Badge>
+                          </TabsTrigger>
+                          <TabsTrigger value="failed">
+                            Failed Orders
+                            <Badge variant="secondary" className="ml-2">{failedPositions.length}</Badge>
                           </TabsTrigger>
                         </TabsList>
                       </Tabs>
@@ -563,12 +575,18 @@ const Portfolio = () => {
                     <div className="max-w-md mx-auto">
                       <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                       <h3 className="text-lg font-semibold mb-2">
-                        {positionTab === 'open' ? 'No open positions' : 'No closed positions'}
+                        {positionTab === 'open' 
+                          ? 'No open positions' 
+                          : positionTab === 'closed' 
+                          ? 'No closed positions' 
+                          : 'No failed orders'}
                       </h3>
                       <p className="text-sm text-muted-foreground mb-4">
                         {positionTab === 'open' 
                           ? `Start trading on ${platformTab === 'kalshi' ? 'Kalshi' : 'Polymarket'} to see your positions here`
-                          : 'Closed positions will appear here'
+                          : positionTab === 'closed'
+                          ? 'Closed positions will appear here'
+                          : 'Orders that couldn\'t be filled due to insufficient liquidity will appear here'
                         }
                       </p>
                       {positionTab === 'open' && (
@@ -597,9 +615,14 @@ const Portfolio = () => {
                                 <Badge variant="secondary" className="text-xs">
                                   {position.outcome}
                                 </Badge>
-                                {position.size === 0 && (
+                                {position.size === 0 && position.avgPrice > 0 && (
                                   <Badge variant="outline" className="text-xs bg-muted">
                                     Closed
+                                  </Badge>
+                                )}
+                                {position.size === 0 && position.avgPrice === 0 && (
+                                  <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">
+                                    Not Filled
                                   </Badge>
                                 )}
                                 {position.size > 0 ? (
@@ -610,8 +633,10 @@ const Portfolio = () => {
                                   <span className="text-xs text-muted-foreground">
                                     Pending: {position.pendingCount} @ ${position.pendingPrice?.toFixed(2) ?? '—'} (resting)
                                   </span>
+                                ) : position.avgPrice === 0 ? (
+                                  <span className="text-xs text-destructive">Order canceled - insufficient liquidity</span>
                                 ) : (
-                                  <span className="text-xs text-muted-foreground">No filled shares yet</span>
+                                  <span className="text-xs text-muted-foreground">Position closed</span>
                                 )}
                               </div>
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">
