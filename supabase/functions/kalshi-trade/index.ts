@@ -156,13 +156,16 @@ serve(async (req) => {
     }
 
     // Calculate required amount for the trade (USD)
+    // Only needed for BUY orders (sells don't require available cash)
     let requiredAmount = 0;
-    if (type === 'limit') {
-      const price = side === 'yes' ? yesPrice : noPrice;
-      requiredAmount = (count * price) / 100; // cents -> dollars
-    } else {
-      // Market order worst-case
-      requiredAmount = count;
+    if (action === 'buy') {
+      if (type === 'limit') {
+        const price = side === 'yes' ? yesPrice : noPrice;
+        requiredAmount = (count * price) / 100; // cents -> dollars
+      } else {
+        // Market buy worst-case (assume $1 per contract)
+        requiredAmount = count;
+      }
     }
 
     let lastError = '';
@@ -208,25 +211,24 @@ serve(async (req) => {
 
         const orderPayload: any = { ticker, action, side, count, type };
 
-        // Attach price for both limit and market orders
-        // Kalshi requires exactly one of yes_price/no_price(_dollars)
-        const priceYes = typeof yesPrice === 'number' ? Math.round(yesPrice) : undefined;
-        const priceNo = typeof noPrice === 'number' ? Math.round(noPrice) : undefined;
-
-        const isBuy = action === 'buy';
-
-        if (side === 'yes') {
-          if (priceYes !== undefined) {
-            orderPayload.yes_price = priceYes;
-          } else if (type === 'market') {
-            // Fallback cap for market orders when client didn't provide a price
-            orderPayload.yes_price = isBuy ? 99 : 1;
+        if (type === 'market') {
+          // True market behavior: do NOT include prices
+          orderPayload.time_in_force = 'immediate_or_cancel';
+          if (action === 'buy') {
+            // Cap total spend in cents (FoK enforced by API when buy_max_cost is set)
+            orderPayload.buy_max_cost = Math.round(count * 100);
+          } else {
+            // Prevent accidentally flipping position during market sells
+            orderPayload.sell_position_capped = true;
           }
-        } else if (side === 'no') {
-          if (priceNo !== undefined) {
+        } else {
+          // Limit orders: attach exactly one of yes_price/no_price
+          const priceYes = typeof yesPrice === 'number' ? Math.round(yesPrice) : undefined;
+          const priceNo = typeof noPrice === 'number' ? Math.round(noPrice) : undefined;
+          if (side === 'yes' && priceYes !== undefined) {
+            orderPayload.yes_price = priceYes;
+          } else if (side === 'no' && priceNo !== undefined) {
             orderPayload.no_price = priceNo;
-          } else if (type === 'market') {
-            orderPayload.no_price = isBuy ? 99 : 1;
           }
         }
 
