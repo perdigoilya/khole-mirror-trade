@@ -77,7 +77,7 @@ const FAQ = () => {
                 {t.faq.reachOut}
               </p>
               <a
-                href="https://x.com/tryFOMOapp"
+                href="https://x.com/FOMOAPPbet"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline font-semibold"
