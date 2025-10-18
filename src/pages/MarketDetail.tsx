@@ -1161,7 +1161,7 @@ const MarketDetail = () => {
                         </div>
                         <Button 
                           className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                          onClick={() => handleTrade(market.title, 'yes', (market.yesAsk ?? market.yesPrice || 50))}
+                          onClick={() => handleTrade(market.title, 'yes', (market.yesAsk ?? market.yesPrice) || 50)}
                         >
                           Buy Yes
                         </Button>
@@ -1173,7 +1173,7 @@ const MarketDetail = () => {
                         </div>
                         <Button 
                           className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
-                          onClick={() => handleTrade(market.title, 'no', (market.noAsk ?? market.noPrice || 50))}
+                          onClick={() => handleTrade(market.title, 'no', (market.noAsk ?? market.noPrice) || 50)}
                         >
                           Buy No
                         </Button>
