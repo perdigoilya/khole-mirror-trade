@@ -33,6 +33,8 @@ const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polym
 }) => {
   const [positions, setPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sellLoading, setSellLoading] = useState<string | null>(null);
+  const { toast } = useToast();
   
   useEffect(() => {
     const fetchPositions = async () => {
@@ -82,6 +84,107 @@ const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polym
       setLoading(false);
     }
   }, [marketId, ticker, provider, kalshiCredentials, polymarketCredentials]);
+  
+  const handleSellPosition = async (position: any) => {
+    if (!position.size || position.size <= 0) return;
+    
+    setSellLoading(position.slug);
+    try {
+      if (provider === 'kalshi' && kalshiCredentials) {
+        // Use aggressive pricing to ensure fill: low price for quick sale
+        const isYes = position.outcome.toLowerCase() === 'yes';
+        const aggressivePrice = 2; // Use 2¢ to ensure it crosses the spread
+        
+        const payload: any = {
+          apiKeyId: kalshiCredentials.apiKeyId,
+          privateKey: kalshiCredentials.privateKey,
+          ticker: position.slug,
+          action: 'sell',
+          side: position.outcome.toLowerCase(),
+          count: Math.floor(position.size),
+          type: 'limit',
+          environment: kalshiCredentials.environment,
+        };
+
+        // Set price based on side (use camelCase)
+        if (isYes) {
+          payload.yesPrice = aggressivePrice;
+        } else {
+          payload.noPrice = aggressivePrice;
+        }
+
+        const { data, error } = await supabase.functions.invoke('kalshi-trade', {
+          body: payload,
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        toast({
+          title: 'Sell order placed',
+          description: 'Checking fill status...'
+        });
+
+        // Poll for up to 10s to confirm the position size decreased
+        let cleared = false;
+        for (let i = 0; i < 10; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const { data: pData, error: pErr } = await supabase.functions.invoke('kalshi-portfolio', {
+            body: kalshiCredentials,
+          });
+          if (pErr) break;
+          const updated = (pData?.positions || []).find((p: any) => p.slug === position.slug);
+          if (!updated || (updated.size ?? 0) < position.size) {
+            cleared = true;
+            // Refresh positions
+            const marketPositions = (pData.positions || []).filter((p: any) => 
+              p.slug === ticker || p.slug === marketId
+            );
+            setPositions(marketPositions);
+            break;
+          }
+        }
+
+        if (cleared) {
+          toast({
+            title: 'Shares sold',
+            description: `Successfully submitted sale for ${Math.floor(position.size)} shares`,
+          });
+        } else {
+          toast({
+            title: 'Order pending',
+            description: 'Your sell order is resting and will fill shortly at 2¢.',
+          });
+          // Refresh anyway
+          const { data: refreshData } = await supabase.functions.invoke('kalshi-portfolio', {
+            body: kalshiCredentials,
+          });
+          if (refreshData) {
+            const marketPositions = (refreshData.positions || []).filter((p: any) => 
+              p.slug === ticker || p.slug === marketId
+            );
+            setPositions(marketPositions);
+          }
+        }
+      } else {
+        // Polymarket sell logic
+        toast({
+          title: "Coming Soon",
+          description: "Polymarket selling from market detail page coming soon",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error('Sell error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to sell shares",
+        variant: "destructive",
+      });
+    } finally {
+      setSellLoading(null);
+    }
+  };
   
   if (loading) {
     return (
@@ -134,6 +237,17 @@ const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polym
               </p>
             </div>
           )}
+          <div className="mt-3 pt-3 border-t border-border">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => handleSellPosition(position)}
+              disabled={sellLoading === position.slug || position.size <= 0}
+              className="w-full"
+            >
+              {sellLoading === position.slug ? 'Selling...' : `Sell ${Math.floor(position.size)} Shares`}
+            </Button>
+          </div>
         </div>
       ))}
     </div>
