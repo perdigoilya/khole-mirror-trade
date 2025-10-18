@@ -1084,34 +1084,36 @@ const MarketDetail = () => {
                       </div>
                       
                       {/* Individual Chart */}
-                      <>
-                        <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
-                          <div className="flex items-center gap-2">
-                            <LineChart className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs font-medium">Price History</span>
+                      {!isKalshi && (
+                        <>
+                          <div className="p-2 border-b border-border flex items-center justify-between bg-card/30">
+                            <div className="flex items-center gap-2">
+                              <LineChart className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs font-medium">Price History</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
+                                <Button
+                                  key={range}
+                                  variant={timeRange === range ? 'default' : 'ghost'}
+                                  size="sm"
+                                  className="h-7 px-2 text-xs font-medium"
+                                  onClick={() => setTimeRange(range)}
+                                >
+                                  {range}
+                                </Button>
+                              ))}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            {(['1H', '6H', '1D', '1W', '1M', 'ALL'] as const).map((range) => (
-                              <Button
-                                key={range}
-                                variant={timeRange === range ? 'default' : 'ghost'}
-                                size="sm"
-                                className="h-7 px-2 text-xs font-medium"
-                                onClick={() => setTimeRange(range)}
-                              >
-                                {range}
-                              </Button>
-                            ))}
+                          <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
+                            <MarketChart 
+                              marketId={(outcome as any).clobTokenId || (outcome as any).ticker || (outcome as any).id}
+                              timeRange={timeRange}
+                              provider={market.provider}
+                            />
                           </div>
-                        </div>
-                        <div className="h-[280px] bg-card/50 backdrop-blur-sm p-2">
-                          <MarketChart 
-                            marketId={(outcome as any).clobTokenId || (outcome as any).ticker || (outcome as any).id}
-                            timeRange={timeRange}
-                            provider={market.provider}
-                          />
-                        </div>
-                      </>
+                        </>
+                      )}
                    </Card>
                   );
                 })
@@ -1139,13 +1141,15 @@ const MarketDetail = () => {
                       </div>
                     </div>
                     
-                    <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
-                      <MarketChart 
-                        marketId={market.clobTokenId || (market as any).ticker || market.id} 
-                        timeRange={timeRange}
-                        provider={market.provider}
-                      />
-                    </div>
+                    {!isKalshi && (
+                      <div className="h-[400px] bg-card/50 backdrop-blur-sm p-2">
+                        <MarketChart 
+                          marketId={market.clobTokenId || (market as any).ticker || market.id} 
+                          timeRange={timeRange}
+                          provider={market.provider}
+                        />
+                      </div>
+                    )}
                   </Card>
                   
                   <Card className="p-4">
