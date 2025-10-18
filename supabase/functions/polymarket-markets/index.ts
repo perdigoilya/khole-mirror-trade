@@ -3,7 +3,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
 };
+
+// In-memory cache
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 60000; // 1 minute
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,6 +17,19 @@ serve(async (req) => {
 
   try {
     const { searchTerm, offset = 0, marketId } = await req.json().catch(() => ({}));
+    
+    // Generate cache key
+    const cacheKey = `${marketId || 'all'}-${searchTerm || ''}-${offset}`;
+    const cached = cache.get(cacheKey);
+    
+    // Return cached data if fresh
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log('Returning cached Polymarket data');
+      return new Response(
+        JSON.stringify(cached.data),
+        { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" } }
+      );
+    }
 
     console.log("Fetching Polymarket events...", searchTerm ? `Searching for: ${searchTerm}` : "", marketId ? `Market ID: ${marketId}` : "", `Offset: ${offset}`);
 
@@ -161,23 +179,26 @@ serve(async (req) => {
     }
 
     // Fetch simplified markets from CLOB to enrich with best bid/ask prices
-    const simplifiedRes = await fetch("https://clob.polymarket.com/simplified-markets", {
+    // Use Promise to allow for parallel processing
+    const simplifiedPromise = fetch("https://clob.polymarket.com/simplified-markets", {
       method: "GET",
       headers: {
         "Accept": "application/json",
         "User-Agent": "LovableCloud/1.0 (+https://lovable.dev)",
       },
-    });
-    let simplified: any[] = [];
-    if (simplifiedRes.ok) {
-      const simpPayload = await simplifiedRes.json();
-      simplified = Array.isArray(simpPayload)
-        ? simpPayload
-        : (simpPayload?.data || simpPayload?.markets || []);
-      console.log("Fetched simplified markets count:", simplified.length);
-    } else {
-      console.warn("Simplified markets fetch failed with status:", simplifiedRes.status);
-    }
+    }).then(async (res) => {
+      if (res.ok) {
+        const simpPayload = await res.json();
+        return Array.isArray(simpPayload)
+          ? simpPayload
+          : (simpPayload?.data || simpPayload?.markets || []);
+      }
+      console.warn("Simplified markets fetch failed with status:", res.status);
+      return [];
+    }).catch(() => []);
+    
+    const simplified = await simplifiedPromise;
+    console.log("Fetched simplified markets count:", simplified.length);
 
     const byConditionId = new Map<string, any>();
     for (const m of simplified) {
@@ -538,9 +559,20 @@ serve(async (req) => {
 
     console.log(`Returning ${formattedMarkets.length} Polymarket events`);
 
+    const responseData = { markets: formattedMarkets };
+    
+    // Cache the response
+    cache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+    
+    // Limit cache size
+    if (cache.size > 100) {
+      const firstKey = cache.keys().next().value;
+      if (firstKey) cache.delete(firstKey);
+    }
+
     return new Response(
-      JSON.stringify({ markets: formattedMarkets }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify(responseData),
+      { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "MISS" } }
     );
   } catch (error) {
     console.error("Error in polymarket-markets function:", error);

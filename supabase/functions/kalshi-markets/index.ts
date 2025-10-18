@@ -3,7 +3,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Cache-Control': 'public, s-maxage=45, stale-while-revalidate=90',
 };
+
+// In-memory cache
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 45000; // 45 seconds
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -20,6 +25,19 @@ serve(async (req) => {
     }
     const includeParlays = !!body.includeParlays;
     const diagnostics = !!body.diagnostics;
+    
+    // Generate cache key
+    const cacheKey = `kalshi-${includeParlays}`;
+    const cached = cache.get(cacheKey);
+    
+    // Return cached data if fresh
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log('[PUBLIC] Returning cached Kalshi data');
+      return new Response(
+        JSON.stringify(cached.data),
+        { headers: { ...corsHeaders, "Content-Type": "application/json", "X-Cache": "HIT" } }
+      );
+    }
 
     console.log('[PUBLIC] Fetching Kalshi market data from public API - no authentication required');
 
@@ -160,12 +178,23 @@ serve(async (req) => {
     
     console.log(`[PUBLIC] Returning ${sortedMarkets.length} independent markets`);
     
+    const responseData = { 
+      markets: sortedMarkets,
+      cursor: marketData.cursor 
+    };
+    
+    // Cache the response
+    cache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+    
+    // Limit cache size
+    if (cache.size > 50) {
+      const firstKey = cache.keys().next().value;
+      if (firstKey) cache.delete(firstKey);
+    }
+    
     return new Response(
-      JSON.stringify({ 
-        markets: sortedMarkets,
-        cursor: marketData.cursor 
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(responseData),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json', "X-Cache": "MISS" } }
     );
   } catch (error) {
     console.error('[PUBLIC] Markets fetch error:', error);

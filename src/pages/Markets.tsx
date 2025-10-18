@@ -55,9 +55,9 @@ const Markets = () => {
   const [maxPrice, setMaxPrice] = useState<number>(100);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Cache for market data
+  // Cache for market data - increased duration for better performance
   const marketCacheRef = useRef<Map<string, { data: any[], timestamp: number }>>(new Map());
-  const CACHE_DURATION = 30000; // 30 seconds
+  const CACHE_DURATION = 60000; // 1 minute
   
   // Debounce timer
   const debounceTimerRef = useRef<NodeJS.Timeout>();
