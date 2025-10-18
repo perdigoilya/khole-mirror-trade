@@ -213,10 +213,6 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
     setSellLoading(position.slug);
     try {
       if (platformTab === 'kalshi') {
-        // Use aggressive pricing to ensure fill: low price for quick sale
-        const isYes = position.outcome.toLowerCase() === 'yes';
-        const aggressivePrice = 2; // Use 2¢ to ensure it crosses the spread
-        
         const payload: any = {
           apiKeyId: kalshiCredentials.apiKeyId,
           privateKey: kalshiCredentials.privateKey,
@@ -224,16 +220,9 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
           action: 'sell',
           side: position.outcome.toLowerCase(),
           count: Math.floor(position.size),
-          type: 'limit',
+          type: 'market',
           environment: kalshiCredentials.environment,
         };
-
-        // Set price based on side (use camelCase like buying logic)
-        if (isYes) {
-          payload.yesPrice = aggressivePrice;
-        } else {
-          payload.noPrice = aggressivePrice;
-        }
 
         const { data, error } = await supabase.functions.invoke('kalshi-trade', {
           body: payload,

@@ -213,18 +213,20 @@ serve(async (req) => {
         const priceYes = typeof yesPrice === 'number' ? Math.round(yesPrice) : undefined;
         const priceNo = typeof noPrice === 'number' ? Math.round(noPrice) : undefined;
 
+        const isBuy = action === 'buy';
+
         if (side === 'yes') {
           if (priceYes !== undefined) {
             orderPayload.yes_price = priceYes;
           } else if (type === 'market') {
             // Fallback cap for market orders when client didn't provide a price
-            orderPayload.yes_price = 99;
+            orderPayload.yes_price = isBuy ? 99 : 1;
           }
         } else if (side === 'no') {
           if (priceNo !== undefined) {
             orderPayload.no_price = priceNo;
           } else if (type === 'market') {
-            orderPayload.no_price = 99;
+            orderPayload.no_price = isBuy ? 99 : 1;
           }
         }
 
