@@ -103,15 +103,41 @@ export function usePolymarketTrade() {
 
       const result = JSON.parse(responseText);
 
-      toast({
-        title: "Trade Successful",
-        description: `${side} order placed for ${size} shares at $${price}`,
-        action: (
-          <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
-            View Portfolio
-          </ToastAction>
-        ),
-      });
+      // Check if order was filled or just placed on the order book
+      const orderStatus = result.status || result.order?.status || 'LIVE';
+      const isFilled = orderStatus === 'MATCHED' || orderStatus === 'FILLED';
+      
+      if (isFilled) {
+        toast({
+          title: "Trade Successful",
+          description: `${side} order filled for ${size} shares at $${price}`,
+          action: (
+            <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+              View Portfolio
+            </ToastAction>
+          ),
+        });
+      } else if (side === 'SELL') {
+        toast({
+          title: "Order Placed",
+          description: "There aren't enough buy orders to match your sell order size. Your order has been placed on the order book and will fill when matched.",
+          action: (
+            <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+              View Portfolio
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({
+          title: "Order Placed",
+          description: `${side} order placed for ${size} shares at $${price}. Waiting for match.`,
+          action: (
+            <ToastAction altText="View Portfolio" onClick={() => window.location.href = '/portfolio'}>
+              View Portfolio
+            </ToastAction>
+          ),
+        });
+      }
 
       return { success: true, data: result };
     } catch (error: any) {
