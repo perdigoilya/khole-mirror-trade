@@ -61,8 +61,17 @@ const Markets = () => {
   
   // Debounce timer
   const debounceTimerRef = useRef<NodeJS.Timeout>();
+  
+  // Track the current fetch to prevent race conditions
+  const currentFetchRef = useRef<{ platform: 'kalshi' | 'polymarket', controller: AbortController } | null>(null);
 
   const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
+    // Cancel any existing fetch if switching platforms
+    if (!append && currentFetchRef.current && currentFetchRef.current.platform !== provider) {
+      currentFetchRef.current.controller.abort();
+      currentFetchRef.current = null;
+    }
+    
     // Generate cache key
     const cacheKey = `${provider}-${searchTerm || 'all'}-${loadOffset}`;
     
@@ -75,6 +84,12 @@ const Markets = () => {
         setMarkets(cached.data);
       }
       return;
+    }
+
+    // Create abort controller for this fetch
+    const controller = new AbortController();
+    if (!append) {
+      currentFetchRef.current = { platform: provider, controller };
     }
 
     if (append) {
@@ -99,6 +114,12 @@ const Markets = () => {
 
       const { data, error } = result;
       
+      // Check if this fetch is still relevant (not aborted/superseded)
+      if (!append && currentFetchRef.current?.platform !== provider) {
+        console.log(`Ignoring stale fetch for ${provider}`);
+        return;
+      }
+      
       if (!error && (data?.markets || data?.events)) {
         let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
         
@@ -116,10 +137,13 @@ const Markets = () => {
           timestamp: Date.now()
         });
         
-        if (append) {
-          setMarkets(prev => [...prev, ...filteredMarkets]);
-        } else {
-          setMarkets(filteredMarkets);
+        // Double-check before updating state
+        if (append || (currentFetchRef.current?.platform === provider)) {
+          if (append) {
+            setMarkets(prev => [...prev, ...filteredMarkets]);
+          } else {
+            setMarkets(filteredMarkets);
+          }
         }
       } else {
         if (!append) {
@@ -130,8 +154,14 @@ const Markets = () => {
           });
         }
       }
-    } catch (error) {
-      if (!append) {
+    } catch (error: any) {
+      // Ignore aborted requests
+      if (error.name === 'AbortError') {
+        console.log(`Fetch aborted for ${provider}`);
+        return;
+      }
+      
+      if (!append && currentFetchRef.current?.platform === provider) {
         toast({
           title: "Error",
           description: "Failed to fetch markets",
@@ -139,10 +169,13 @@ const Markets = () => {
         });
       }
     } finally {
-      if (append) {
-        setLoadingMore(false);
-      } else {
-        setLoading(false);
+      // Only clear loading if this is still the current platform
+      if (append || (currentFetchRef.current?.platform === provider)) {
+        if (append) {
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
       }
     }
   }, [kalshiCredentials, toast]);
@@ -151,6 +184,12 @@ const Markets = () => {
     // Debounce search changes
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
+    }
+
+    // Cancel any in-flight requests when platform changes
+    if (currentFetchRef.current && currentFetchRef.current.platform !== platform) {
+      currentFetchRef.current.controller.abort();
+      currentFetchRef.current = null;
     }
 
     debounceTimerRef.current = setTimeout(() => {
