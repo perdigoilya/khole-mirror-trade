@@ -606,52 +606,54 @@ const Feed = () => {
                     </p>
                   )}
                   
-                  {isLoadingMarkets ? (
-                    <div className="flex items-center justify-center p-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    </div>
-                  ) : relatedMarkets.length > 0 ? (
-                    <div className="space-y-3">
-                      {relatedMarkets.map((market) => (
-                        <Card 
-                          key={market.id} 
-                          className="p-4 hover:border-primary/50 transition-colors cursor-pointer"
-                          onClick={() => handleMarketClick(market)}
-                        >
-                          <Badge 
-                            variant="outline" 
-                            className={`mb-2 text-xs ${
-                              market.provider === 'polymarket' 
-                                ? 'text-polymarket-purple border-polymarket-purple' 
-                                : 'text-kalshi-teal border-kalshi-teal'
-                            }`}
+                  <div className="max-h-[calc(100vh-12rem)] overflow-y-auto pr-2 -mr-2">
+                    {isLoadingMarkets ? (
+                      <div className="flex items-center justify-center p-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    ) : relatedMarkets.length > 0 ? (
+                      <div className="space-y-3">
+                        {relatedMarkets.map((market) => (
+                          <Card 
+                            key={market.id} 
+                            className="p-4 hover:border-primary/50 transition-colors cursor-pointer"
+                            onClick={() => handleMarketClick(market)}
                           >
-                            {market.provider === 'polymarket' ? 'Polymarket' : 'Kalshi'}
-                          </Badge>
-                          <h4 className="text-sm font-semibold mb-2 line-clamp-2">
-                            {market.title}
-                          </h4>
-                          <div className="flex items-center justify-between text-xs">
-                            <div className="flex gap-2">
-                              <span className="text-green-600 font-medium">
-                                YES {market.yesPrice}¢
-                              </span>
-                              <span className="text-red-600 font-medium">
-                                NO {market.noPrice}¢
-                              </span>
+                            <Badge 
+                              variant="outline" 
+                              className={`mb-2 text-xs ${
+                                market.provider === 'polymarket' 
+                                  ? 'text-polymarket-purple border-polymarket-purple' 
+                                  : 'text-kalshi-teal border-kalshi-teal'
+                              }`}
+                            >
+                              {market.provider === 'polymarket' ? 'Polymarket' : 'Kalshi'}
+                            </Badge>
+                            <h4 className="text-sm font-semibold mb-2 line-clamp-2">
+                              {market.title}
+                            </h4>
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="flex gap-2">
+                                <span className="text-green-600 font-medium">
+                                  YES {market.yesPrice}¢
+                                </span>
+                                <span className="text-red-600 font-medium">
+                                  NO {market.noPrice}¢
+                                </span>
+                              </div>
+                              <span className="text-muted-foreground">{market.volume}</span>
                             </div>
-                            <span className="text-muted-foreground">{market.volume}</span>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : selectedTweet ? (
-                    <Card className="p-6 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        No related markets found
-                      </p>
-                    </Card>
-                  ) : null}
+                          </Card>
+                        ))}
+                      </div>
+                    ) : selectedTweet ? (
+                      <Card className="p-6 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          No related markets found
+                        </p>
+                      </Card>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
