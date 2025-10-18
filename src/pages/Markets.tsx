@@ -418,36 +418,41 @@ const Markets = () => {
         >
           {/* Icon/Image */}
           <div className="flex items-start pt-1">
-            {market.image ? (
-              <img 
-                src={market.image} 
-                alt={market.title}
-                className="w-10 h-10 rounded-full object-cover bg-card"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                }}
-              />
-            ) : null}
-            <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
-              {(market.title || market.ticker || '?')[0].toUpperCase()}
+              {market.image ? (
+                <img 
+                  src={market.image} 
+                  alt={market.title}
+                  className="w-10 h-10 rounded-full object-cover bg-card"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm ${market.image ? 'hidden' : ''}`}>
+                {(market.title || market.ticker || '?')[0].toUpperCase()}
+              </div>
             </div>
-          </div>
 
-          {/* Market Info */}
-          <div className="flex flex-col gap-1 min-w-0">
-            <div className="flex items-start gap-2">
-              <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
-                {market.title || market.ticker}
-              </h3>
-              {isKalshi && market.marketCount && (
-                <Badge variant="outline" className="text-xs px-2 py-0.5">
-                  {market.marketCount} markets
+            {/* Market Info */}
+            <div className="flex flex-col gap-1 min-w-0">
+              <div className="flex items-start gap-2">
+                <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
+                  {market.title || market.ticker}
+                </h3>
+                {isKalshi && market.marketCount && (
+                  <Badge variant="outline" className="text-xs px-2 py-0.5">
+                    {market.marketCount} markets
+                  </Badge>
+                )}
+                {market.status?.toLowerCase() === 'closed' && (
+                  <Badge variant="outline" className="text-xs px-2 py-0.5 bg-muted">
+                    Closed
+                  </Badge>
+                )}
+                <Badge variant="outline" className={`text-xs px-2 py-0.5 ${platformBadgeClass}`}>
+                  {platformName}
                 </Badge>
-              )}
-              <Badge variant="outline" className={`text-xs px-2 py-0.5 ${platformBadgeClass}`}>
-                {platformName}
-              </Badge>
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -637,6 +642,11 @@ const Markets = () => {
                 <h3 className="text-sm font-medium text-foreground line-clamp-2 flex-1">
                   {market.title || market.ticker}
                 </h3>
+                {market.status?.toLowerCase() === 'closed' && (
+                  <Badge variant="outline" className="text-xs px-2 py-0.5 bg-muted flex-shrink-0">
+                    Closed
+                  </Badge>
+                )}
                 <Badge variant="outline" className={`text-xs px-2 py-0.5 flex-shrink-0 ${platformBadgeClass}`}>
                   {platformName}
                 </Badge>

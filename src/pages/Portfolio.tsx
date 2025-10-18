@@ -65,6 +65,7 @@ const Portfolio = () => {
   const [loading, setLoading] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
   const [sellLoading, setSellLoading] = useState<string | null>(null);
+  const [positionTab, setPositionTab] = useState<'open' | 'closed'>('open');
 
   const hasAnyConnection = isKalshiConnected || isPolymarketConnected;
 
@@ -308,8 +309,11 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
     }
   }, [isKalshiConnected, isPolymarketConnected]);
 
-  // Get current platform data
-  const currentPositions = platformTab === 'kalshi' ? kalshiPositions : positions;
+  // Get current platform data and filter by open/closed
+  const allPositions = platformTab === 'kalshi' ? kalshiPositions : positions;
+  const openPositions = allPositions.filter(p => p.size > 0);
+  const closedPositions = allPositions.filter(p => p.size === 0);
+  const currentPositions = positionTab === 'open' ? openPositions : closedPositions;
   const currentSummary = platformTab === 'kalshi' ? kalshiSummary : summary;
   const isPlatformConnected = platformTab === 'kalshi' ? isKalshiConnected : isPolymarketConnected;
 
@@ -643,29 +647,48 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                 )}
 
                 {/* Positions List */}
+                {isPlatformConnected && (
+                  <Card className="overflow-hidden">
+                    <div className="p-6 border-b border-border">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-semibold">Positions</h2>
+                      </div>
+                      <Tabs value={positionTab} onValueChange={(v) => setPositionTab(v as 'open' | 'closed')}>
+                        <TabsList className="grid w-full max-w-sm grid-cols-2">
+                          <TabsTrigger value="open">
+                            Open Positions
+                            <Badge variant="secondary" className="ml-2">{openPositions.length}</Badge>
+                          </TabsTrigger>
+                          <TabsTrigger value="closed">
+                            Closed Positions
+                            <Badge variant="secondary" className="ml-2">{closedPositions.length}</Badge>
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
+                    
                 {currentPositions.length === 0 ? (
-                  <Card className="p-10 text-center">
+                  <div className="p-10 text-center">
                     <div className="max-w-md mx-auto">
                       <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                       <h3 className="text-lg font-semibold mb-2">
-                        No positions yet
+                        {positionTab === 'open' ? 'No open positions' : 'No closed positions'}
                       </h3>
                       <p className="text-sm text-muted-foreground mb-4">
-                        Start trading on {platformTab === 'kalshi' ? 'Kalshi' : 'Polymarket'} to see your positions here
+                        {positionTab === 'open' 
+                          ? `Start trading on ${platformTab === 'kalshi' ? 'Kalshi' : 'Polymarket'} to see your positions here`
+                          : 'Closed positions will appear here'
+                        }
                       </p>
-                      <Button onClick={() => window.location.href = '/markets'}>
-                        Browse Markets
-                      </Button>
+                      {positionTab === 'open' && (
+                        <Button onClick={() => window.location.href = '/markets'}>
+                          Browse Markets
+                        </Button>
+                      )}
                     </div>
-                  </Card>
+                  </div>
                 ) : (
-                  <Card>
-                    <div className="p-6 border-b">
-                      <h3 className="text-lg font-semibold">Open Positions</h3>
-                      <p className="text-sm text-muted-foreground">Your active market positions</p>
-                    </div>
-                    <div className="divide-y">
-                      {currentPositions.map((position, index) => (
+                    <div className="divide-y">{currentPositions.map((position, index) => (
                         <div key={index} className="p-6 hover:bg-muted/50 transition-colors group">
                           <div className="flex items-start justify-between gap-4">
                             <div 
@@ -683,6 +706,11 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                                 <Badge variant="secondary" className="text-xs">
                                   {position.outcome}
                                 </Badge>
+                                {position.size === 0 && (
+                                  <Badge variant="outline" className="text-xs bg-muted">
+                                    Closed
+                                  </Badge>
+                                )}
                                 {position.size > 0 ? (
                                   <span className="text-xs text-muted-foreground">
                                     {position.size.toFixed(2)} shares @ ${position.avgPrice.toFixed(3)}
@@ -726,8 +754,9 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                             </div>
                           </div>
                         </div>
-                      ))}
+                       ))}
                     </div>
+                )}
                   </Card>
                 )}
               </div>
