@@ -302,7 +302,7 @@ serve(async (req) => {
       totalValue,
       totalPnl,
       totalRealizedPnl,
-      activePositions: positions.length,
+      activePositions: positions.filter((p: any) => p.size > 0).length,
       totalInvested,
     };
     
