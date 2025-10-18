@@ -131,11 +131,28 @@ export function KalshiTradeDialog({
       setSide("buy");
     } catch (error: any) {
       console.error("Kalshi trade error:", error);
-      toast({
-        title: "Trade Failed",
-        description: error.message || "An error occurred while placing the trade",
-        variant: "destructive",
-      });
+      
+      // Check for insufficient liquidity errors (common for sell orders)
+      const errorMsg = error.message || "";
+      const isLiquidityError = 
+        errorMsg.toLowerCase().includes("no matching") ||
+        errorMsg.toLowerCase().includes("insufficient liquidity") ||
+        errorMsg.toLowerCase().includes("not enough") ||
+        errorMsg.toLowerCase().includes("no orders");
+      
+      if (side === "sell" && isLiquidityError) {
+        toast({
+          title: "Insufficient Market Liquidity",
+          description: "There aren't enough buy orders to match your sell order size. Try reducing the quantity or using a limit order with a lower price.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Trade Failed",
+          description: errorMsg || "An error occurred while placing the trade",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
