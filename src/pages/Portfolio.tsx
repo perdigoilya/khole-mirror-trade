@@ -25,6 +25,10 @@ interface Position {
   curPrice: number;
   slug: string;
   icon?: string;
+  // Optional: pending (resting) orders awaiting fill for this ticker (Kalshi)
+  pendingCount?: number;
+  pendingPrice?: number;
+  pendingSide?: string;
 }
 
 interface PortfolioSummary {
@@ -573,9 +577,17 @@ const { data, error } = await supabase.functions.invoke('kalshi-portfolio', {
                                 <Badge variant="secondary" className="text-xs">
                                   {position.outcome}
                                 </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {position.size.toFixed(2)} shares @ ${position.avgPrice.toFixed(3)}
-                                </span>
+                                {position.size > 0 ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {position.size.toFixed(2)} shares @ ${position.avgPrice.toFixed(3)}
+                                  </span>
+                                ) : position.pendingCount && position.pendingCount > 0 ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    Pending: {position.pendingCount} @ ${position.pendingPrice?.toFixed(2) ?? '—'} (resting)
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">No filled shares yet</span>
+                                )}
                               </div>
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                 <span>Current: ${position.curPrice.toFixed(3)}</span>

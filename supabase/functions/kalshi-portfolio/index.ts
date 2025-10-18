@@ -202,6 +202,55 @@ serve(async (req) => {
       } catch (_) {}
     }
 
+    // Fetch resting (open) buy orders to surface pending counts/prices
+    const pendingAgg: Record<string, { count: number; totalCents: number; side?: string }> = {};
+    try {
+      const tsOrders = Date.now().toString();
+      const ordersPath = `/trade-api/v2/orders?status=resting&limit=200`;
+      const ordersSig = await createKalshiSignature(privateKey, tsOrders, 'GET', ordersPath);
+      const or = await fetch(`${successfulBase}${ordersPath}`, {
+        headers: {
+          'KALSHI-ACCESS-KEY': apiKeyId,
+          'KALSHI-ACCESS-SIGNATURE': ordersSig,
+          'KALSHI-ACCESS-TIMESTAMP': tsOrders,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (or.ok) {
+        const od = await or.json();
+        const orders = od.orders || od.open_orders || od || [];
+        for (const o of orders) {
+          try {
+            if (!o) continue;
+            if (o.action !== 'buy') continue; // only show pending buys as potential new shares
+            const ticker = o.ticker || o.market_ticker;
+            if (!ticker) continue;
+            const remaining = Number(o.remaining_count ?? o.initial_count ?? 0);
+            if (!(remaining > 0)) continue;
+            const yesCents = typeof o.yes_price === 'number'
+              ? o.yes_price
+              : (o.yes_price_dollars ? Math.round(parseFloat(String(o.yes_price_dollars)) * 100) : undefined);
+            const noCents = typeof o.no_price === 'number'
+              ? o.no_price
+              : (o.no_price_dollars ? Math.round(parseFloat(String(o.no_price_dollars)) * 100) : undefined);
+            let priceCents: number | undefined;
+            if (o.side === 'yes') priceCents = yesCents;
+            else if (o.side === 'no') priceCents = noCents !== undefined ? (100 - noCents) : undefined;
+
+            if (!pendingAgg[ticker]) pendingAgg[ticker] = { count: 0, totalCents: 0, side: o.side };
+            pendingAgg[ticker].count += remaining;
+            if (typeof priceCents === 'number') pendingAgg[ticker].totalCents += priceCents * remaining;
+          } catch (_) { /* ignore order parse errors */ }
+        }
+      } else {
+        const txt = await or.text();
+        console.log('Open orders fetch failed:', or.status, txt);
+      }
+    } catch (e) {
+      console.log('Failed to fetch resting orders:', e);
+    }
+
+
     // Normalize positions
     const positions = marketPositions.map((pos: any) => {
       const ticker = pos.ticker || pos.market_ticker || '';
@@ -218,10 +267,15 @@ serve(async (req) => {
       const invested = totalTradedCents / 100;
       const cashPnl = currentValue - invested;
       const percentPnl = invested > 0 ? (cashPnl / invested) * 100 : 0;
-      
+
       // Use the market title if available, otherwise fall back to ticker
       const marketTitle = m.title || m.market_title || ticker;
-      
+
+      // Attach pending order info if any
+      const pend = pendingAgg[ticker];
+      const pendingCount = pend?.count || 0;
+      const pendingPrice = pend && pend.count > 0 ? (pend.totalCents / pend.count) / 100 : undefined;
+
       return {
         title: marketTitle,
         outcome: (Number(pos.position) || 0) >= 0 ? 'Yes' : 'No',
@@ -233,6 +287,8 @@ serve(async (req) => {
         curPrice: curPriceCents / 100,
         slug: ticker,
         icon: undefined,
+        pendingCount,
+        pendingPrice,
       };
     });
 
