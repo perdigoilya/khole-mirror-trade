@@ -23,15 +23,21 @@ const config = defaultWagmiConfig({
   metadata,
 });
 
-// Create Web3Modal
-createWeb3Modal({
-  wagmiConfig: config,
-  projectId,
-  enableAnalytics: false,
-  enableOnramp: false,
-  featuredWalletIds: [],
-  includeWalletIds: [],
-});
+// Create Web3Modal (skip in Lovable preview to avoid iframe/CSP issues)
+if (typeof window !== 'undefined' && !/lovable\.(app|dev)|lovableproject\.com/.test(window.location.hostname)) {
+  createWeb3Modal({
+    wagmiConfig: config,
+    projectId,
+    enableAnalytics: false,
+    enableOnramp: false,
+    featuredWalletIds: [],
+    includeWalletIds: [],
+    walletImages: {},
+    connectorImages: {},
+    chainImages: {}
+  } as any);
+}
+
 
 interface Web3ProviderProps {
   children: ReactNode;
