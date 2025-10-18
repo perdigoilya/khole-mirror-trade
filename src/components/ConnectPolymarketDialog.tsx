@@ -803,7 +803,7 @@ POLY_SIGNATURE (b64) first12 + POLY_TIMESTAMP: ${diagnostics.serverL2Debug.sigB6
                           handleWalletConnect();
                         }}
                         disabled={isLoading}
-                        className="text-xs bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
+                        className="text-xs bg-[hsl(var(--polymarket-purple))] hover:bg-[hsl(var(--polymarket-purple))]/90"
                       >
                         {isLoading ? (
                           <>
@@ -987,7 +987,7 @@ POLY_SIGNATURE (b64) first12 + POLY_TIMESTAMP: ${diagnostics.serverL2Debug.sigB6
               <Button
                 onClick={handleWalletConnect}
                 disabled={isLoading}
-                className="bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
+                className="bg-[hsl(var(--polymarket-purple))] hover:bg-[hsl(var(--polymarket-purple))]/90"
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save Connection
@@ -1005,7 +1005,7 @@ POLY_SIGNATURE (b64) first12 + POLY_TIMESTAMP: ${diagnostics.serverL2Debug.sigB6
               <Button
                 onClick={handleWalletConnect}
                 disabled={isLoading}
-                className="bg-[hsl(var(--polymarket-blue))] hover:bg-[hsl(var(--polymarket-blue))]/90"
+                className="bg-[hsl(var(--polymarket-purple))] hover:bg-[hsl(var(--polymarket-purple))]/90"
               >
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {!isLoading && <Wallet className="mr-2 h-4 w-4" />}
