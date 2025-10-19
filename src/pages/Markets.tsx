@@ -254,6 +254,10 @@ const Markets = () => {
       const vol = market.volumeRaw || 0;
       return vol >= minVolume && vol <= maxVolume;
     });
+    // For Kalshi, hide zero-volume markets entirely
+    if (platform === 'kalshi') {
+      result = result.filter((market: any) => (market.volumeRaw || 0) > 0);
+    }
     
     // Liquidity filter
     result = result.filter((market: any) => {
@@ -286,7 +290,7 @@ const Markets = () => {
     }
     
     return result;
-  }, [markets, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
+  }, [markets, platform, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
   
   const groupedMarkets = React.useMemo(() => {
     // For Kalshi, the backend response is already event-grouped. Avoid re-grouping here.
@@ -574,7 +578,14 @@ const Markets = () => {
 
           {/* Volume */}
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-foreground">{market.volume}</span>
+            <span className="text-sm font-medium text-foreground">{platform === 'kalshi'
+              ? (market.volume && typeof market.volume === 'string' && market.volume.startsWith('$')
+                  ? market.volume
+                  : (market.volumeRaw && market.volumeRaw > 0
+                      ? `$${Math.round(market.volumeRaw).toLocaleString('en-US')}`
+                      : '$0'))
+              : market.volume}
+            </span>
             <div className="flex items-center gap-1 text-xs text-emerald-400">
               <TrendingUp className="h-3 w-3" />
               <span>{Math.floor(Math.random() * 30 + 10)}%</span>
