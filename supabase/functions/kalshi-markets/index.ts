@@ -162,8 +162,18 @@ serve(async (req) => {
       if (yesPrice === null) yesPrice = 50;
       if (noPrice === null) noPrice = 50;
 
-      // Use 24h contract volume if available, else fall back to lifetime volume
-      const volume24h = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
+      // Prioritize dollar volume (24h or total)
+      let volumeDollars = 0;
+      if (typeof market.volume_24h_dollars === 'string') {
+        volumeDollars = parseFloat(market.volume_24h_dollars);
+      } else if (typeof market.volume_dollars === 'string') {
+        volumeDollars = parseFloat(market.volume_dollars);
+      }
+      
+      // Fall back to contract volume only if no dollar volume
+      const volumeContracts = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
+      const volumeRaw = volumeDollars > 0 ? volumeDollars : volumeContracts;
+      
       const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
 
       // Map category to image (will be resolved in frontend)
@@ -177,9 +187,9 @@ serve(async (req) => {
         image: undefined, // Will be set in frontend based on category
         yesPrice,
         noPrice,
-        volume: volume24h > 0 ? `${volume24h.toLocaleString('en-US')} contracts` : '$0',
+        volume: volumeDollars > 0 ? `$${Math.round(volumeDollars).toLocaleString('en-US')}` : (volumeContracts > 0 ? `${volumeContracts.toLocaleString('en-US')} contracts` : '$0'),
         liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: volume24h,
+        volumeRaw,
         liquidityRaw: liquidityDollars,
         endDate: market.close_time || market.expiration_time || new Date().toISOString(),
         status: (market.status || '').toLowerCase() === 'open' ? 'Active' : (market.status || 'open'),
@@ -192,13 +202,16 @@ serve(async (req) => {
       };
     }) || []);
     
-    // Each Kalshi market is an independent binary market
-    // Do NOT group by eventTicker - treat each ticker as a separate market
-    const sortedMarkets = normalizedMarkets.sort((a: any, b: any) => 
+    // Filter out low liquidity markets (less than $100 liquidity)
+    const MIN_LIQUIDITY = 100;
+    const liquidMarkets = normalizedMarkets.filter((m: any) => (m.liquidityRaw || 0) >= MIN_LIQUIDITY);
+    
+    // Sort by dollar volume (highest first), then by liquidity
+    const sortedMarkets = liquidMarkets.sort((a: any, b: any) => 
       (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0)
     );
     
-    console.log(`[PUBLIC] Returning ${sortedMarkets.length} independent markets`);
+    console.log(`[PUBLIC] Filtered to ${sortedMarkets.length} markets with liquidity >= $${MIN_LIQUIDITY}, sorted by dollar volume`);
     
     const responseData = { 
       markets: sortedMarkets,
