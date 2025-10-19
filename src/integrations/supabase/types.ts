@@ -146,6 +146,60 @@ export type Database = {
         }
         Relationships: []
       }
+      polymarket_markets: {
+        Row: {
+          category: string | null
+          condition_id: string | null
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          image: string | null
+          last_updated: string
+          liquidity: number | null
+          market_data: Json | null
+          outcome_prices: Json | null
+          outcomes: Json | null
+          question: string
+          status: string | null
+          volume: number | null
+        }
+        Insert: {
+          category?: string | null
+          condition_id?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id: string
+          image?: string | null
+          last_updated?: string
+          liquidity?: number | null
+          market_data?: Json | null
+          outcome_prices?: Json | null
+          outcomes?: Json | null
+          question: string
+          status?: string | null
+          volume?: number | null
+        }
+        Update: {
+          category?: string | null
+          condition_id?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          image?: string | null
+          last_updated?: string
+          liquidity?: number | null
+          market_data?: Json | null
+          outcome_prices?: Json | null
+          outcomes?: Json | null
+          question?: string
+          status?: string | null
+          volume?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
