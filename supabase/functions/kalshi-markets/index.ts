@@ -39,88 +39,93 @@ serve(async (req) => {
       );
     }
 
-    console.log('[PUBLIC] Fetching Kalshi market data from public API with pagination - no authentication required');
+    console.log('[PUBLIC] Fetching Kalshi market data from public API - no authentication required');
 
-    // Fetch multiple pages to get comprehensive market coverage
-    const limit = 1000; // Kalshi max per request
-    const maxPages = 10; // Fetch up to 10k markets
-    let allMarkets: any[] = [];
-    let cursor: string | undefined = undefined;
-    let lastError = '';
+    // Use public unauthenticated endpoint for market data
+    // Fetch more markets per batch to find single-leg ones (Kalshi max is 1000)
+    const limit = 1000;
+    const path = `/trade-api/v2/markets?status=open&limit=${limit}`;
     
+    // Try production endpoints (public data doesn't require authentication)
     const baseUrls = [
       'https://api.elections.kalshi.com',
       'https://api.kalshi.com'
     ];
 
-    // Pagination loop
-    for (let page = 0; page < maxPages; page++) {
-      const cursorParam: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-      const path: string = `/trade-api/v2/markets?status=open&limit=${limit}${cursorParam}`;
-      
-      let marketData = null;
+    let marketData = null;
+    let lastError = '';
 
-      for (const base of baseUrls) {
-        const url: string = `${base}${path}`;
-        console.log(`[PUBLIC] Page ${page + 1}/${maxPages} - Trying: ${url}`);
-        
+    // Retry logic with exponential backoff
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
+    for (const base of baseUrls) {
+      const url = `${base}${path}`;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          const response: Response = await fetch(url, {
+          console.log(`[PUBLIC] Attempt ${attempt}/${maxRetries} - Trying endpoint: ${url}`);
+          
+          const response = await fetch(url, {
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',
             },
-            signal: AbortSignal.timeout(15000), // 15 second timeout
+            signal: AbortSignal.timeout(10000), // 10 second timeout
           });
 
           if (response.ok) {
             marketData = await response.json();
-            console.log(`[PUBLIC] Page ${page + 1}: Fetched ${marketData.markets?.length || 0} markets from ${base}`);
+    console.log(`[PUBLIC] Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
+    
+    // Debug: Check first few markets for volume data
+    if (marketData.markets?.length > 0) {
+      const sample = marketData.markets.slice(0, 3);
+      console.log(`[PUBLIC] Sample volume data:`, sample.map((m: any) => ({
+        ticker: m.ticker,
+        volume_24h_dollars: m.volume_24h_dollars,
+        volume_dollars: m.volume_dollars,
+        volume_24h: m.volume_24h,
+        volume: m.volume
+      })));
+    }
             break;
           } else {
             lastError = await response.text();
-            console.log(`[PUBLIC] Failed ${base}:`, response.status, lastError);
+            console.log(`[PUBLIC] Failed ${base} (attempt ${attempt}):`, response.status, lastError);
           }
-        } catch (e) {
-          lastError = e instanceof Error ? e.message : String(e);
-          console.error(`[PUBLIC] Fetch error on ${base}:`, lastError);
+        } catch (fetchError) {
+          lastError = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          console.error(`[PUBLIC] Network error on ${base} (attempt ${attempt}):`, lastError);
+          
+          // Wait before retry (exponential backoff)
+          if (attempt < maxRetries) {
+            const delay = retryDelay * Math.pow(2, attempt - 1);
+            console.log(`[PUBLIC] Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
       }
-
-      if (!marketData || !marketData.markets) {
-        console.log(`[PUBLIC] No more markets on page ${page + 1}, stopping pagination`);
-        break;
-      }
-
-      // Add markets to our collection
-      allMarkets = allMarkets.concat(marketData.markets);
       
-      // Check if there's a next page
-      if (marketData.cursor) {
-        cursor = marketData.cursor;
-        console.log(`[PUBLIC] Page ${page + 1}: Got cursor for next page, total so far: ${allMarkets.length}`);
-      } else {
-        console.log(`[PUBLIC] Page ${page + 1}: No more pages, total: ${allMarkets.length}`);
-        break;
-      }
+      if (marketData) break;
     }
 
-    if (allMarkets.length === 0) {
-      console.error('[PUBLIC] Failed to fetch any markets after pagination');
+    if (!marketData) {
+      console.error('[PUBLIC] All Kalshi public API attempts failed:', lastError);
       return new Response(
         JSON.stringify({ error: 'Failed to fetch markets from Kalshi public API.', details: lastError }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`[PUBLIC] Total fetched: ${allMarkets.length} markets across all pages`);
+    const marketsRaw: any[] = Array.isArray(marketData.markets) ? marketData.markets : [];
 
     // Diagnostics summary
-    const hasCommaCount = allMarkets.filter((m: any) => ((m.title || '').toString().includes(','))).length;
-    const multiFlagCount = allMarkets.filter((m: any) => /MULTIGAME|PARLAY|BUNDLE/i.test(m.ticker || '') || /MULTIGAME|PARLAY|BUNDLE/i.test(m.event_ticker || '')).length;
-    const singleGameFlagCount = allMarkets.filter((m: any) => /SINGLEGAME/i.test(m.ticker || '') || /SINGLEGAME/i.test(m.event_ticker || '')).length;
-    const noCommaNoFlagCount = allMarkets.filter((m: any) => !((m.title || '').toString().includes(',')) && !(/MULTIGAME|PARLAY|BUNDLE/i.test(m.ticker || '') || /MULTIGAME|PARLAY|BUNDLE/i.test(m.event_ticker || ''))).length;
-    console.log(`[PUBLIC][diag] total=${allMarkets.length} hasComma=${hasCommaCount} multiFlags=${multiFlagCount} singleGameFlag=${singleGameFlagCount} noCommaNoFlag=${noCommaNoFlagCount}`);
+    const hasCommaCount = marketsRaw.filter((m: any) => ((m.title || '').toString().includes(','))).length;
+    const multiFlagCount = marketsRaw.filter((m: any) => /MULTIGAME|PARLAY|BUNDLE/i.test(m.ticker || '') || /MULTIGAME|PARLAY|BUNDLE/i.test(m.event_ticker || '')).length;
+    const singleGameFlagCount = marketsRaw.filter((m: any) => /SINGLEGAME/i.test(m.ticker || '') || /SINGLEGAME/i.test(m.event_ticker || '')).length;
+    const noCommaNoFlagCount = marketsRaw.filter((m: any) => !((m.title || '').toString().includes(',')) && !(/MULTIGAME|PARLAY|BUNDLE/i.test(m.ticker || '') || /MULTIGAME|PARLAY|BUNDLE/i.test(m.event_ticker || ''))).length;
+    console.log(`[PUBLIC][diag] total=${marketsRaw.length} hasComma=${hasCommaCount} multiFlags=${multiFlagCount} singleGameFlag=${singleGameFlagCount} noCommaNoFlag=${noCommaNoFlagCount}`);
 
     // Filter out parlay markets - only show single-leg markets
     const isParlay = (m: any): boolean => {
@@ -141,7 +146,7 @@ serve(async (req) => {
       return hasParlayCommas;
     };
 
-    const sourceList = includeParlays ? allMarkets : allMarkets.filter((market: any) => !isParlay(market));
+    const sourceList = includeParlays ? marketsRaw : marketsRaw.filter((market: any) => !isParlay(market));
     
     console.log(`[PUBLIC] Filtered to ${sourceList.length} single-leg markets (parlays ${includeParlays ? 'included' : 'removed'})`);
     
@@ -257,7 +262,8 @@ serve(async (req) => {
     console.log(`[PUBLIC] Filtered to ${sortedMarkets.length} active markets (liquidity >= $${MIN_LIQUIDITY})`);
     
     const responseData = { 
-      markets: sortedMarkets
+      markets: sortedMarkets,
+      cursor: marketData.cursor 
     };
     
     // Cache the response
