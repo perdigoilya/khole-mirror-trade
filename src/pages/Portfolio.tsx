@@ -179,16 +179,18 @@ const Portfolio = () => {
   };
 
   const handlePositionClick = (position: Position) => {
-    if (platformTab === 'kalshi') {
-      // Extract event ticker from market ticker (e.g., KXGOVTCUTS-28-2000 -> KXGOVTCUTS-28)
-      const parts = position.slug.split('-');
-      const eventTicker = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : position.slug;
-      navigate(`/kalshi/event/${eventTicker}`);
-    } else {
-      // For Polymarket, navigate to market detail if we have a market ID
-      // Position interface needs to be updated to include marketId for Polymarket
-      navigate(`/market/${position.slug}`);
-    }
+    // Navigate directly to market detail page for both platforms
+    navigate(`/market/${position.slug}`, {
+      state: {
+        market: {
+          id: position.slug,
+          ticker: position.slug,
+          title: position.title,
+          provider: platformTab,
+          // Pass minimal data - MarketDetail will fetch full details
+        }
+      }
+    });
   };
 
   // Set default platform tab based on what's connected
