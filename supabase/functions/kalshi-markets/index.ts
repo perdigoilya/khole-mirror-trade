@@ -19,16 +19,15 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Query markets from database
-    // Only get markets with volume > 0 and liquidity >= $100
+    // Read optional pagination from request
+    const { offset = 0 } = await req.json().catch(() => ({ offset: 0 }));
+
+    // Query markets from database (broad pool; UI applies filters)
     const { data: markets, error } = await supabase
       .from('kalshi_markets')
       .select('*')
-      .eq('status', 'open')
-      .or('volume_24h_dollars.gt.0,volume_dollars.gt.0')
-      .gte('liquidity_dollars', 100)
       .order('volume_24h_dollars', { ascending: false, nullsFirst: false })
-      .limit(1000);
+      .range(offset, offset + 199);
 
     if (error) {
       console.error('[kalshi-markets] Database error:', error);
@@ -36,13 +35,23 @@ serve(async (req) => {
     }
 
     if (!markets || markets.length === 0) {
-      console.log('[kalshi-markets] No markets in database, triggering sync...');
-      
-      // Trigger sync function if database is empty
-      await supabase.functions.invoke('kalshi-sync');
-      
+      // Double-check if table truly empty before triggering sync
+      const { count } = await supabase
+        .from('kalshi_markets')
+        .select('ticker', { count: 'exact', head: true });
+
+      if (!count || count === 0) {
+        console.log('[kalshi-markets] No markets in database, triggering sync...');
+        await supabase.functions.invoke('kalshi-sync');
+        return new Response(
+          JSON.stringify({ markets: [], message: 'Database syncing, please refresh' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Table has data but this page/search returned empty
       return new Response(
-        JSON.stringify({ markets: [], message: 'Database syncing, please refresh' }),
+        JSON.stringify({ markets: [], message: 'No results for current filters' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
