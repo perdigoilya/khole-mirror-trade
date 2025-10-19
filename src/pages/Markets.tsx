@@ -120,9 +120,9 @@ const Markets = () => {
         return;
       }
       
-      if (!error && (data?.markets || data?.events)) {
-        let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
-        console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} items from backend`);
+        if (!error && (data?.markets || data?.events)) {
+          let filteredMarkets = provider === 'kalshi' ? (data.markets || data.events || []) : (data.markets || []);
+          console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} items from backend`);
         
         if (searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
