@@ -164,6 +164,10 @@ serve(async (req) => {
 
     console.log(`[SYNC] Built ${eventRecords.length} event records`);
 
+    // Filter to only multi-outcome events (more than 1 market)
+    const multiOutcomeEvents = eventRecords.filter(e => e.market_count > 1);
+    console.log(`[SYNC] Filtered to ${multiOutcomeEvents.length} multi-outcome events`);
+
     // Clear old data and insert new data
     const { error: deleteError } = await supabase
       .from('kalshi_events')
@@ -176,8 +180,8 @@ serve(async (req) => {
 
     // Insert in batches of 500
     const batchSize = 500;
-    for (let i = 0; i < eventRecords.length; i += batchSize) {
-      const batch = eventRecords.slice(i, i + batchSize);
+    for (let i = 0; i < multiOutcomeEvents.length; i += batchSize) {
+      const batch = multiOutcomeEvents.slice(i, i + batchSize);
       const { error: insertError } = await supabase
         .from('kalshi_events')
         .insert(batch);
@@ -189,12 +193,12 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[SYNC] Sync complete. Total events stored: ${eventRecords.length}`);
+    console.log(`[SYNC] Sync complete. Total events stored: ${multiOutcomeEvents.length}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        eventsStored: eventRecords.length,
+        eventsStored: multiOutcomeEvents.length,
         marketsProcessed: allMarkets.length,
         timestamp: new Date().toISOString()
       }),
