@@ -133,17 +133,26 @@ serve(async (req) => {
       const eventTicker: string = m.event_ticker || '';
       const title: string = (m.title || '').toString();
       
-      // Check for explicit parlay/bundle flags in ticker
+      // 1. Explicit multi-game flags = definitely parlay
       const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
       if (multiFlag) return true;
       
-      // More sophisticated comma check - look for parlay patterns like "X and Y" or "X, Y, and Z"
-      // Exclude markets that are just using commas for normal punctuation
-      const parlayPattern = /,\s*(and|&)\s*[A-Z]/;  // "Team A, and Team B"
-      const multipleOutcomePattern = /,\s*[A-Z][^,]+,/;  // "X, Y, and Z" with multiple commas
-      const hasParlayCommas = parlayPattern.test(title) || multipleOutcomePattern.test(title);
+      // 2. SINGLEGAME markets with commas are same-game parlays
+      // (Single-outcome markets don't have commas in titles)
+      const isSingleGame = /SINGLEGAME/i.test(ticker) || /SINGLEGAME/i.test(eventTicker);
+      if (isSingleGame && title.includes(',')) {
+        return true;
+      }
       
-      return hasParlayCommas;
+      // 3. Check for "yes X,yes Y" pattern (multiple outcomes in one bet)
+      const yesCommaPattern = /yes\s+[^,]+,\s*yes\s+/i;
+      if (yesCommaPattern.test(title)) return true;
+      
+      // 4. Check for player stat parlays like "Player: X+,Player: Y+"
+      const statCommaPattern = /:\s*\d+\+,/;
+      if (statCommaPattern.test(title)) return true;
+      
+      return false;
     };
 
     const sourceList = includeParlays ? marketsRaw : marketsRaw.filter((market: any) => !isParlay(market));
