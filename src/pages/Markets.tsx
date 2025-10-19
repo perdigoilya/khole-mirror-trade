@@ -75,8 +75,8 @@ const Markets = () => {
     // Generate cache key
     const cacheKey = `${provider}-${searchTerm || 'all'}-${loadOffset}`;
     
-    // Check cache first
-    const cached = marketCacheRef.current.get(cacheKey);
+    // Check cache first (skip caching for Kalshi to avoid stale event list)
+    const cached = provider !== 'kalshi' ? marketCacheRef.current.get(cacheKey) : undefined;
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       if (append) {
         setMarkets(prev => [...prev, ...cached.data]);
@@ -122,6 +122,7 @@ const Markets = () => {
       
       if (!error && (data?.markets || data?.events)) {
         let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
+        console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} items from backend`);
         
         if (searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
@@ -130,12 +131,15 @@ const Markets = () => {
             market.eventTicker?.toLowerCase().includes(searchTerm.toLowerCase())
           );
         }
+        console.log(`[Markets] After search filter: ${filteredMarkets.length} items`);
         
         // Update cache
-        marketCacheRef.current.set(cacheKey, {
-          data: filteredMarkets,
-          timestamp: Date.now()
-        });
+        if (provider !== 'kalshi') {
+          marketCacheRef.current.set(cacheKey, {
+            data: filteredMarkets,
+            timestamp: Date.now()
+          });
+        }
         
         // Double-check before updating state
         if (append || (currentFetchRef.current?.platform === provider)) {
