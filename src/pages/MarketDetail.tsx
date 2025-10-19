@@ -1156,29 +1156,49 @@ const MarketDetail = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">YES</div>
-                        <div className="text-3xl font-bold text-emerald-400">
-                          {(typeof (market.yesAsk ?? market.yesPrice) === 'number' && (market.yesAsk ?? market.yesPrice)! > 0) ? `${(market.yesAsk ?? market.yesPrice)}¢` : '—'}
+                        <div className="space-y-1">
+                          <div className="text-3xl font-bold text-emerald-400">
+                            {(typeof (market.yesAsk ?? market.yesPrice) === 'number' && (market.yesAsk ?? market.yesPrice)! > 0) ? `${(market.yesAsk ?? market.yesPrice)}¢` : '—'}
+                          </div>
+                          {market.yesBid !== undefined && market.yesBid !== null && (
+                            <div className="text-xs text-muted-foreground">
+                              Bid: {market.yesBid}¢ / Ask: {market.yesAsk ?? market.yesPrice}¢
+                            </div>
+                          )}
                         </div>
                         <Button 
                           className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                           onClick={() => handleTrade(market.title, 'yes', (market.yesAsk ?? market.yesPrice) || 50)}
                         >
-                          Buy Yes
+                          Buy Yes at {(market.yesAsk ?? market.yesPrice)}¢
                         </Button>
                       </div>
                       <div className="space-y-2">
                         <div className="text-xs text-muted-foreground">NO</div>
-                        <div className="text-3xl font-bold text-red-400">
-                          {(typeof (market.noAsk ?? market.noPrice) === 'number' && (market.noAsk ?? market.noPrice)! > 0 && (market.noAsk ?? market.noPrice)! < 100) ? `${(market.noAsk ?? market.noPrice)}¢` : '—'}
+                        <div className="space-y-1">
+                          <div className="text-3xl font-bold text-red-400">
+                            {(typeof (market.noAsk ?? market.noPrice) === 'number' && (market.noAsk ?? market.noPrice)! > 0 && (market.noAsk ?? market.noPrice)! < 100) ? `${(market.noAsk ?? market.noPrice)}¢` : '—'}
+                          </div>
+                          {market.noBid !== undefined && market.noBid !== null && (
+                            <div className="text-xs text-muted-foreground">
+                              Bid: {market.noBid}¢ / Ask: {market.noAsk ?? market.noPrice}¢
+                            </div>
+                          )}
                         </div>
                         <Button 
                           className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30"
                           onClick={() => handleTrade(market.title, 'no', (market.noAsk ?? market.noPrice) || 50)}
                         >
-                          Buy No
+                          Buy No at {(market.noAsk ?? market.noPrice)}¢
                         </Button>
                       </div>
                     </div>
+                    {isKalshi && (market.yesBid !== undefined || market.noBid !== undefined) && 
+                     (Math.abs((market.yesAsk ?? market.yesPrice ?? 0) - (market.yesBid ?? 0)) > 10) && (
+                      <div className="mt-3 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-600 dark:text-amber-400">
+                        ⚠️ Wide spread detected. Your sell orders may execute at much lower prices ({market.yesBid}¢ bid). Consider using limit orders.
+                      </div>
+                    )}
                   </Card>
                 </>
               )}
