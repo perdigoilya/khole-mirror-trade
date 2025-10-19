@@ -24,16 +24,16 @@ import {
 import { useEnsurePolymarketCredentials } from "@/hooks/usePolymarketCredentials";
 
 // Component to display user's positions for this market
-const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polymarketCredentials }: {
+const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polymarketCredentials, onOpenSellDialog }: {
   marketId: string;
   ticker?: string;
   provider: 'kalshi' | 'polymarket';
   kalshiCredentials: any;
   polymarketCredentials: any;
+  onOpenSellDialog?: (position: any) => void;
 }) => {
   const [positions, setPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sellLoading, setSellLoading] = useState<string | null>(null);
   const { toast } = useToast();
   
   useEffect(() => {
@@ -85,93 +85,18 @@ const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polym
     }
   }, [marketId, ticker, provider, kalshiCredentials, polymarketCredentials]);
   
-  const handleSellPosition = async (position: any) => {
-    if (!position.size || position.size <= 0) return;
-    
-    setSellLoading(position.slug);
-    try {
-      if (provider === 'kalshi' && kalshiCredentials) {
-        const payload: any = {
-          apiKeyId: kalshiCredentials.apiKeyId,
-          privateKey: kalshiCredentials.privateKey,
-          ticker: position.slug,
-          action: 'sell',
-          side: position.outcome.toLowerCase(),
-          count: Math.floor(position.size),
-          type: 'market',
-          environment: kalshiCredentials.environment,
-        };
-
-        const { data, error } = await supabase.functions.invoke('kalshi-trade', {
-          body: payload,
-        });
-
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-
-        toast({
-          title: 'Sell order placed',
-          description: 'Checking fill status...'
-        });
-
-        // Poll for up to 10s to confirm the position size decreased
-        let cleared = false;
-        for (let i = 0; i < 10; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const { data: pData, error: pErr } = await supabase.functions.invoke('kalshi-portfolio', {
-            body: kalshiCredentials,
-          });
-          if (pErr) break;
-          const updated = (pData?.positions || []).find((p: any) => p.slug === position.slug);
-          if (!updated || (updated.size ?? 0) < position.size) {
-            cleared = true;
-            // Refresh positions
-            const marketPositions = (pData.positions || []).filter((p: any) => 
-              p.slug === ticker || p.slug === marketId
-            );
-            setPositions(marketPositions);
-            break;
-          }
-        }
-
-        if (cleared) {
-          toast({
-            title: 'Shares sold',
-            description: `Successfully submitted sale for ${Math.floor(position.size)} shares`,
-          });
-        } else {
-          toast({
-            title: 'Order pending',
-            description: 'Your sell order is resting and will fill shortly at 2¢.',
-          });
-          // Refresh anyway
-          const { data: refreshData } = await supabase.functions.invoke('kalshi-portfolio', {
-            body: kalshiCredentials,
-          });
-          if (refreshData) {
-            const marketPositions = (refreshData.positions || []).filter((p: any) => 
-              p.slug === ticker || p.slug === marketId
-            );
-            setPositions(marketPositions);
-          }
-        }
-      } else {
-        // Polymarket sell logic
-        toast({
-          title: "Coming Soon",
-          description: "Polymarket selling from market detail page coming soon",
-          variant: "destructive",
-        });
-      }
-    } catch (error: any) {
-      console.error('Sell error:', error);
+  const handleSellPosition = (position: any) => {
+    if (!position.size || position.size <= 0) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to sell shares",
+        title: "No shares to sell",
+        description: "This position has no filled shares",
         variant: "destructive",
       });
-    } finally {
-      setSellLoading(null);
+      return;
+    }
+    
+    if (onOpenSellDialog) {
+      onOpenSellDialog(position);
     }
   };
   
@@ -229,12 +154,11 @@ const UserPositionsTab = ({ marketId, ticker, provider, kalshiCredentials, polym
           <div className="mt-3 pt-3 border-t border-border">
             <Button
               size="sm"
-              variant="destructive"
+              variant="outline"
               onClick={() => handleSellPosition(position)}
-              disabled={sellLoading === position.slug || position.size <= 0}
               className="w-full"
             >
-              {sellLoading === position.slug ? 'Selling...' : `Sell ${Math.floor(position.size)} Shares`}
+              Sell
             </Button>
           </div>
         </div>
@@ -292,6 +216,7 @@ const MarketDetail = () => {
   const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
   const [kalshiTradeDialogOpen, setKalshiTradeDialogOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<{outcome: string, side: 'yes' | 'no', price: number} | null>(null);
+  const [positionToSell, setPositionToSell] = useState<any>(null);
 
   // Platform-specific styling (after market state is declared)
   const isKalshi = market?.provider === 'kalshi';
@@ -329,6 +254,11 @@ const MarketDetail = () => {
       setLoading(false);
     }
   }, [marketId]);
+
+  const handleOpenSellDialogFromPositions = (position: any) => {
+    setPositionToSell(position);
+    setKalshiTradeDialogOpen(true);
+  };
 
   const fetchMarket = async () => {
     if (!marketId) return;
@@ -1226,6 +1156,7 @@ const MarketDetail = () => {
                       provider={market.provider}
                       kalshiCredentials={kalshiCredentials}
                       polymarketCredentials={polymarketCredentials}
+                      onOpenSellDialog={market.provider === 'kalshi' ? handleOpenSellDialogFromPositions : undefined}
                     />
                   </TabsContent>
                   
@@ -1385,10 +1316,17 @@ const MarketDetail = () => {
       {market && market.provider === 'kalshi' && (
         <KalshiTradeDialog
           open={kalshiTradeDialogOpen}
-          onOpenChange={setKalshiTradeDialogOpen}
-          marketTicker={market.ticker || ''}
-          marketTitle={market.title}
-          currentPrice={currentTrade?.price ?? (market.yesAsk ?? market.yesPrice ?? 50)}
+          onOpenChange={(open) => {
+            setKalshiTradeDialogOpen(open);
+            if (!open) {
+              setPositionToSell(null);
+            }
+          }}
+          marketTicker={positionToSell?.slug || market.ticker || ''}
+          marketTitle={positionToSell?.title || market.title}
+          currentPrice={positionToSell?.curPrice ?? currentTrade?.price ?? (market.yesAsk ?? market.yesPrice ?? 50)}
+          initialSide={positionToSell ? "sell" : "buy"}
+          maxQuantity={positionToSell ? Math.floor(positionToSell.size) : undefined}
         />
       )}
       
