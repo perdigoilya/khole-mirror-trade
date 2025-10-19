@@ -11,53 +11,84 @@ serve(async (req) => {
   }
 
   try {
-    console.log('[PUBLIC] Fetching Kalshi events from public API');
+    console.log('[PUBLIC] Fetching Kalshi events from public API with pagination');
 
+    // Fetch multiple pages to get a large sample (aim for 1000+ events)
     const limit = 200;
-    const path = `/trade-api/v2/events?status=open&limit=${limit}&with_nested_markets=true`;
+    const maxPages = 10; // Fetch up to 10 pages (2000 events)
+    let allEvents: any[] = [];
+    let cursor: string | undefined = undefined;
+    let lastError = '';
     
     const baseUrls = [
       'https://api.elections.kalshi.com',
       'https://api.kalshi.com'
     ];
 
-    let eventData = null;
-    let lastError = '';
-
-    for (const base of baseUrls) {
-      const url = `${base}${path}`;
-      console.log('[PUBLIC] Trying public endpoint:', url);
+    // Pagination loop
+    for (let page = 0; page < maxPages; page++) {
+      const cursorParam: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+      const path: string = `/trade-api/v2/events?status=open&limit=${limit}&with_nested_markets=true${cursorParam}`;
       
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
+      let eventData = null;
 
-      if (response.ok) {
-        eventData = await response.json();
-        console.log(`[PUBLIC] Successfully fetched ${eventData.events?.length || 0} events from ${base}`);
+      for (const base of baseUrls) {
+        const url: string = `${base}${path}`;
+        console.log(`[PUBLIC] Page ${page + 1}/${maxPages} - Trying: ${url}`);
+        
+        try {
+          const response: Response = await fetch(url, {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            signal: AbortSignal.timeout(15000), // 15 second timeout
+          });
+
+          if (response.ok) {
+            eventData = await response.json();
+            console.log(`[PUBLIC] Page ${page + 1}: Fetched ${eventData.events?.length || 0} events from ${base}`);
+            break;
+          } else {
+            lastError = await response.text();
+            console.log(`[PUBLIC] Failed ${base}:`, response.status, lastError);
+          }
+        } catch (e) {
+          lastError = e instanceof Error ? e.message : String(e);
+          console.error(`[PUBLIC] Fetch error on ${base}:`, lastError);
+        }
+      }
+
+      if (!eventData || !eventData.events) {
+        console.log(`[PUBLIC] No more events on page ${page + 1}, stopping pagination`);
         break;
+      }
+
+      // Add events to our collection
+      allEvents = allEvents.concat(eventData.events);
+      
+      // Check if there's a next page
+      if (eventData.cursor) {
+        cursor = eventData.cursor;
+        console.log(`[PUBLIC] Page ${page + 1}: Got cursor for next page, total so far: ${allEvents.length}`);
       } else {
-        lastError = await response.text();
-        console.log(`[PUBLIC] Failed ${base}:`, response.status, lastError);
+        console.log(`[PUBLIC] Page ${page + 1}: No more pages, total: ${allEvents.length}`);
+        break;
       }
     }
 
-    if (!eventData) {
-      console.error('[PUBLIC] All Kalshi public API attempts failed:', lastError);
+    if (allEvents.length === 0) {
+      console.error('[PUBLIC] Failed to fetch any events after pagination');
       return new Response(
         JSON.stringify({ error: 'Failed to fetch events from Kalshi public API.', details: lastError }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Defer fetching event metadata images until after sorting to avoid heavy parallel requests
-    // We'll enrich only the top N events to reduce rate limits.
+    console.log(`[PUBLIC] Total fetched: ${allEvents.length} events across all pages`);
 
     // Normalize events
-    const normalizedEvents = (eventData.events || []).map((event: any) => {
+    const normalizedEvents = (allEvents || []).map((event: any) => {
       // Find the most liquid/popular market in this event as the "headline"
       const markets = event.markets || [];
       const headlineMarket = markets.length > 0 
@@ -110,7 +141,7 @@ serve(async (req) => {
         title: event.title || event.sub_title || event.event_ticker,
         subtitle: event.sub_title,
         description: event.title || event.sub_title,
-        image: null,
+        image: null as string | null,
         yesPrice,
         noPrice,
         volume: volumeLabel,
@@ -181,7 +212,6 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         events: sortedEvents,
-        cursor: eventData.cursor 
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
