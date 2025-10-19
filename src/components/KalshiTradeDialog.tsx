@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ interface KalshiTradeDialogProps {
   marketTicker: string;
   marketTitle: string;
   currentPrice: number;
+  initialSide?: "buy" | "sell";
+  maxQuantity?: number;
 }
 
 export function KalshiTradeDialog({
@@ -25,15 +27,24 @@ export function KalshiTradeDialog({
   marketTicker,
   marketTitle,
   currentPrice,
+  initialSide = "buy",
+  maxQuantity,
 }: KalshiTradeDialogProps) {
   const navigate = useNavigate();
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
-  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [side, setSide] = useState<"buy" | "sell">(initialSide);
   const [quantity, setQuantity] = useState<string>("1");
   const [limitPrice, setLimitPrice] = useState<string>(currentPrice.toString());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const { kalshiCredentials } = useTrading();
+
+  // Reset side when dialog opens with new initial side
+  useEffect(() => {
+    if (open) {
+      setSide(initialSide);
+    }
+  }, [open, initialSide]);
 
   const calculateTotal = () => {
     const qty = parseInt(quantity) || 0;
@@ -60,6 +71,16 @@ export function KalshiTradeDialog({
         toast({
           title: "Invalid Quantity",
           description: "Please enter a valid quantity greater than 0",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check max quantity for sell orders
+      if (maxQuantity && count > maxQuantity) {
+        toast({
+          title: "Exceeds Available Shares",
+          description: `You can only sell up to ${maxQuantity} contracts`,
           variant: "destructive",
         });
         return;
@@ -258,11 +279,17 @@ export function KalshiTradeDialog({
               id="quantity"
               type="number"
               min="1"
+              max={maxQuantity}
               step="1"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
               placeholder="Enter quantity"
             />
+            {maxQuantity && (
+              <p className="text-xs text-muted-foreground">
+                Maximum available: {maxQuantity} contracts
+              </p>
+            )}
           </div>
 
           {/* Limit Price (only for limit orders) */}

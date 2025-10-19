@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
+import { KalshiTradeDialog } from "@/components/KalshiTradeDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccount, useBalance } from "wagmi";
 import { mainnet, polygon, base, arbitrum, optimism } from "wagmi/chains";
@@ -59,8 +60,9 @@ const Portfolio = () => {
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
   const [showPolymarketDialog, setShowPolymarketDialog] = useState(false);
   const [selectedChain, setSelectedChain] = useState<number>(polygon.id);
-  const [sellLoading, setSellLoading] = useState<string | null>(null);
   const [positionTab, setPositionTab] = useState<'open' | 'closed' | 'failed'>('open');
+  const [showTradeDialog, setShowTradeDialog] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
 
   // Use React Query hooks for data fetching with caching
   const { 
@@ -94,7 +96,7 @@ const Portfolio = () => {
     token: selectedChainConfig?.tokenAddress, // Use USDC token for Polygon, undefined for native tokens
   });
 
-  const handleSellAll = async (position: Position) => {
+  const handleOpenSellDialog = (position: Position) => {
     if (!position.size || position.size === 0) {
       toast({
         title: "No shares to sell",
@@ -103,76 +105,8 @@ const Portfolio = () => {
       });
       return;
     }
-
-    setSellLoading(position.slug);
-    try {
-      if (platformTab === 'kalshi') {
-        const payload: any = {
-          apiKeyId: kalshiCredentials.apiKeyId,
-          privateKey: kalshiCredentials.privateKey,
-          ticker: position.slug,
-          action: 'sell',
-          side: position.outcome.toLowerCase(),
-          count: Math.floor(position.size),
-          type: 'market',
-          environment: kalshiCredentials.environment,
-        };
-
-        const { data, error } = await supabase.functions.invoke('kalshi-trade', {
-          body: payload,
-        });
-
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-
-        const order = data?.order;
-        const fillCount = order?.fill_count || 0;
-        const orderStatus = order?.status || '';
-
-        // Immediate liquidity check based on order response
-        if (fillCount === 0 && (orderStatus === 'canceled' || orderStatus === 'cancelled')) {
-          toast({
-            title: 'Insufficient Market Liquidity',
-            description: "There aren't enough buy orders to match your sell order. Try reducing the quantity or placing a limit order at a lower price.",
-            variant: 'destructive',
-          });
-          await refetchKalshi();
-          return;
-        }
-
-        // Partial fill
-        if (fillCount > 0 && fillCount < payload.count) {
-          toast({
-            title: 'Partially Filled',
-            description: `Sold ${fillCount} of ${payload.count} due to limited liquidity.`,
-          });
-          await refetchKalshi();
-          return;
-        }
-
-        // Full fill
-        toast({
-          title: 'Shares sold',
-          description: `Successfully sold ${fillCount} shares`,
-        });
-        await refetchKalshi();
-      } else {
-        // Polymarket sell logic
-        toast({
-          title: "Polymarket sell not yet implemented",
-          description: "Quick sell feature coming soon for Polymarket",
-        });
-      }
-    } catch (error: any) {
-      console.error("Error selling position:", error);
-      toast({
-        title: "Failed to sell position",
-        description: error.message || "An error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setSellLoading(null);
-    }
+    setSelectedPosition(position);
+    setShowTradeDialog(true);
   };
 
   const handlePositionClick = (position: Position) => {
@@ -659,11 +593,10 @@ const Portfolio = () => {
                                   className="text-xs h-8"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleSellAll(position);
+                                    handleOpenSellDialog(position);
                                   }}
-                                  disabled={sellLoading === position.slug}
                                 >
-                                  {sellLoading === position.slug ? "Selling..." : "Sell All"}
+                                  Sell
                                 </Button>
                               )}
                             </div>
@@ -683,6 +616,25 @@ const Portfolio = () => {
       {/* Connection Dialogs */}
       <ConnectKalshiDialog open={showKalshiDialog} onOpenChange={setShowKalshiDialog} />
       <ConnectPolymarketDialog open={showPolymarketDialog} onOpenChange={setShowPolymarketDialog} />
+      
+      {/* Trade Dialog */}
+      {selectedPosition && platformTab === 'kalshi' && (
+        <KalshiTradeDialog
+          open={showTradeDialog}
+          onOpenChange={(open) => {
+            setShowTradeDialog(open);
+            if (!open) {
+              setSelectedPosition(null);
+              refetchKalshi();
+            }
+          }}
+          marketTicker={selectedPosition.slug}
+          marketTitle={selectedPosition.title}
+          currentPrice={selectedPosition.curPrice}
+          initialSide="sell"
+          maxQuantity={Math.floor(selectedPosition.size)}
+        />
+      )}
 
       <Footer />
     </div>
