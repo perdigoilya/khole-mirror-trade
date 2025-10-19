@@ -125,40 +125,37 @@ const Portfolio = () => {
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
 
+        const order = data?.order;
+        const fillCount = order?.fill_count || 0;
+        const orderStatus = order?.status || '';
+
+        // Immediate liquidity check based on order response
+        if (fillCount === 0 && (orderStatus === 'canceled' || orderStatus === 'cancelled')) {
+          toast({
+            title: 'Insufficient Market Liquidity',
+            description: "There aren't enough buy orders to match your sell order. Try reducing the quantity or placing a limit order at a lower price.",
+            variant: 'destructive',
+          });
+          await refetchKalshi();
+          return;
+        }
+
+        // Partial fill
+        if (fillCount > 0 && fillCount < payload.count) {
+          toast({
+            title: 'Partially Filled',
+            description: `Sold ${fillCount} of ${payload.count} due to limited liquidity.`,
+          });
+          await refetchKalshi();
+          return;
+        }
+
+        // Full fill
         toast({
-          title: 'Sell order placed',
-          description: 'Checking fill status...'
+          title: 'Shares sold',
+          description: `Successfully sold ${fillCount} shares`,
         });
-
-        // Poll for up to 10s to confirm the position size decreased
-        let cleared = false;
-        for (let i = 0; i < 10; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const { data: pData, error: pErr } = await supabase.functions.invoke('kalshi-portfolio', {
-            body: kalshiCredentials,
-          });
-          if (pErr) break;
-          const updated = (pData?.positions || []).find((p: any) => p.slug === position.slug);
-          if (!updated || (updated.size ?? 0) < position.size) {
-            cleared = true;
-            refetchKalshi();
-            break;
-          }
-        }
-
-        if (cleared) {
-          toast({
-            title: 'Shares sold',
-            description: `Successfully submitted sale for ${Math.floor(position.size)} shares`,
-          });
-        } else {
-          toast({
-            title: 'Order pending',
-            description: 'Your sell order is resting and will fill shortly at 1¢.',
-          });
-          // Ensure we refresh anyway
-          refetchKalshi();
-        }
+        await refetchKalshi();
       } else {
         // Polymarket sell logic
         toast({
