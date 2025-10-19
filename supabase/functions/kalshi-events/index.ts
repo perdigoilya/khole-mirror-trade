@@ -24,6 +24,11 @@ serve(async (req) => {
     const { data: events, error } = await supabase
       .from('kalshi_events')
       .select('*')
+      .not('event_ticker', 'ilike', '%SINGLEGAME%')
+      .not('event_ticker', 'ilike', '%MVEN%')
+      .not('event_ticker', 'ilike', '%PARLAY%')
+      .not('event_ticker', 'ilike', '%BUNDLE%')
+      .not('event_ticker', 'ilike', '%MULTIGAME%')
       .order('total_volume', { ascending: false, nullsFirst: false })
       .limit(200);
 
@@ -58,8 +63,8 @@ serve(async (req) => {
           .limit(5);
 
         const headlineMarket = markets && markets.length > 0 ? markets[0] : null;
-        const yesPrice = headlineMarket?.yes_price || 50;
-        const noPrice = headlineMarket?.no_price || 50;
+        const yesPrice = headlineMarket?.yes_price ?? 50;
+        const noPrice = headlineMarket?.no_price ?? 50;
 
         return {
           id: event.event_ticker,
@@ -82,7 +87,7 @@ serve(async (req) => {
           markets: markets ? markets.slice(0, 5).map((m: any) => ({
             ticker: m.ticker,
             title: m.title,
-            yesPrice: m.yes_price || 50,
+            yesPrice: m.yes_price ?? 50,
             volume: m.volume_24h_dollars || m.volume_dollars || 0,
           })) : [],
         };

@@ -27,6 +27,11 @@ serve(async (req) => {
       .eq('status', 'open')
       .or('volume_24h_dollars.gt.0,volume_dollars.gt.0')
       .gte('liquidity_dollars', 100)
+      .not('event_ticker', 'ilike', '%SINGLEGAME%')
+      .not('event_ticker', 'ilike', '%MVEN%')
+      .not('event_ticker', 'ilike', '%PARLAY%')
+      .not('event_ticker', 'ilike', '%BUNDLE%')
+      .not('event_ticker', 'ilike', '%MULTIGAME%')
       .order('volume_24h_dollars', { ascending: false, nullsFirst: false })
       .limit(1000);
 
@@ -64,8 +69,8 @@ serve(async (req) => {
         subtitle: market.subtitle,
         description: market.subtitle || market.title,
         image: undefined,
-        yesPrice: market.yes_price || 50,
-        noPrice: market.no_price || 50,
+        yesPrice: market.yes_price ?? 50,
+        noPrice: market.no_price ?? 50,
         volume: volumeDollars > 0 ? `$${Math.round(volumeDollars).toLocaleString('en-US')}` : '$0',
         liquidity: liq > 0 ? `$${liq.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
         volumeRaw: volumeDollars,

@@ -91,7 +91,8 @@ serve(async (req) => {
       const eventTicker: string = m.event_ticker || '';
       const title: string = (m.title || '').toString();
       const hasComma = title.includes(',');
-      const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
+      const pattern = /MULTIGAME|PARLAY|BUNDLE|SINGLEGAME|MVEN/i;
+      const multiFlag = pattern.test(ticker) || pattern.test(eventTicker);
       return hasComma || multiFlag;
     };
 
