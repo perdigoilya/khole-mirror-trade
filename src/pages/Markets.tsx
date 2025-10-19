@@ -1,9 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as React from "react";
 import Footer from "@/components/Footer";
-import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
+import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight, ListTree } from "lucide-react";
 import polymarketLogo from "@/assets/polymarket-logo.png";
 import kalshiLogo from "@/assets/kalshi-logo.png";
+import kalshiPoliticsImage from "@/assets/kalshi-politics.png";
+import kalshiSportsImage from "@/assets/kalshi-sports.png";
+import kalshiEconomicsImage from "@/assets/kalshi-economics.png";
+import kalshiWeatherImage from "@/assets/kalshi-weather.png";
+import kalshiGeneralImage from "@/assets/kalshi-general.png";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -44,6 +49,7 @@ const Markets = () => {
   const [sortBy, setSortBy] = useState("trending");
   const [timeFilter, setTimeFilter] = useState("all-time");
   const [showFilters, setShowFilters] = useState(false);
+  const [groupByEvent, setGroupByEvent] = useState(false);
   
   // Advanced filter states
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -102,8 +108,8 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Fetch events instead of individual markets
-        result = await supabase.functions.invoke('kalshi-events', {
+        // Kalshi: Fetch individual markets (up to 1,000)
+        result = await supabase.functions.invoke('kalshi-markets', {
           body: {}
         });
       } else {
@@ -120,9 +126,9 @@ const Markets = () => {
         return;
       }
       
-        if (!error && (data?.markets || data?.events)) {
-          let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
-          console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} items from backend`);
+        if (!error && data?.markets) {
+          let filteredMarkets = data.markets || [];
+          console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} markets from backend`);
         
         if (searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
@@ -296,48 +302,114 @@ const Markets = () => {
     return result;
   }, [markets, platform, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
   
+  // Category-based image mapping for Kalshi
+  const getCategoryImage = (category: string): string => {
+    const categoryMap: Record<string, string> = {
+      'politics': kalshiPoliticsImage,
+      'sports': kalshiSportsImage,
+      'economics': kalshiEconomicsImage,
+      'financials': kalshiEconomicsImage,
+      'climate and weather': kalshiWeatherImage,
+      'weather': kalshiWeatherImage,
+      'science and technology': kalshiGeneralImage,
+      'world': kalshiGeneralImage,
+      'health': kalshiGeneralImage,
+    };
+    return categoryMap[category?.toLowerCase()] || kalshiGeneralImage;
+  };
+
   const groupedMarkets = React.useMemo(() => {
-    // For Kalshi, the backend response is already event-grouped. Avoid re-grouping here.
-    if (platform === 'kalshi' || filteredAndSortedMarkets.some((m: any) => Array.isArray(m?.subMarkets) && m.subMarkets.length > 0)) {
-      return filteredAndSortedMarkets;
+    // If not grouping, return as-is
+    if (!groupByEvent || platform !== 'kalshi') {
+      // For Polymarket, apply existing grouping logic
+      if (platform === 'polymarket') {
+        const groups = new Map<string, any[]>();
+
+        const extractTopic = (title: string): string | null => {
+          if (!title) return null;
+          const m = title.match(/win\s+(?:the\s+)?(.+?)\?/i);
+          if (m) return m[1].trim();
+          const sb = title.match(/(Super\s+Bowl\s+\d{4})/i);
+          if (sb) return sb[1].trim();
+          const ws = title.match(/(World\s+Series\s+\d{4})/i);
+          if (ws) return ws[1].trim();
+          return null;
+        };
+
+        for (const mkt of filteredAndSortedMarkets) {
+          const topic = extractTopic(mkt.title || '') || mkt.category || 'Other';
+          const key = topic.toLowerCase();
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(mkt);
+        }
+
+        const result: any[] = [];
+        for (const [, mkts] of groups) {
+          if (mkts.length <= 1) {
+            result.push(mkts[0]);
+          } else {
+            const main = mkts.reduce((a: any, b: any) => ((b.volumeRaw || 0) > (a.volumeRaw || 0) ? b : a), mkts[0]);
+            const sub = mkts.filter((m: any) => m !== main);
+            result.push({ ...main, isMultiOutcome: true, subMarkets: sub });
+          }
+        }
+        return result;
+      }
+      
+      // For Kalshi without grouping, add images and return
+      return filteredAndSortedMarkets.map((m: any) => ({
+        ...m,
+        image: m.image || getCategoryImage(m.category)
+      }));
     }
 
-    const groups = new Map<string, any[]>();
-
-    const extractTopic = (title: string): string | null => {
-      if (!title) return null;
-      // Common pattern: "Will <entity> win <Topic>?"
-      const m = title.match(/win\s+(?:the\s+)?(.+?)\?/i);
-      if (m) return m[1].trim();
-      // Fallbacks for popular events
-      const sb = title.match(/(Super\s+Bowl\s+\d{4})/i);
-      if (sb) return sb[1].trim();
-      const ws = title.match(/(World\s+Series\s+\d{4})/i);
-      if (ws) return ws[1].trim();
-      return null;
-    };
-
-    for (const mkt of filteredAndSortedMarkets) {
-      const topic = extractTopic(mkt.title || '') || mkt.category || 'Other';
-      const key = topic.toLowerCase();
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(mkt);
+    // Group Kalshi markets by event_ticker
+    const eventGroups = new Map<string, any[]>();
+    
+    for (const market of filteredAndSortedMarkets) {
+      const eventTicker = market.eventTicker || market.ticker;
+      if (!eventGroups.has(eventTicker)) {
+        eventGroups.set(eventTicker, []);
+      }
+      eventGroups.get(eventTicker)!.push(market);
     }
 
     const result: any[] = [];
-    for (const [, mkts] of groups) {
-      if (mkts.length <= 1) {
-        result.push(mkts[0]);
+    for (const [eventTicker, markets] of eventGroups) {
+      if (markets.length === 1) {
+        // Single market - show as-is with category image
+        result.push({
+          ...markets[0],
+          image: markets[0].image || getCategoryImage(markets[0].category)
+        });
       } else {
-        const main = mkts.reduce((a: any, b: any) => ((b.volumeRaw || 0) > (a.volumeRaw || 0) ? b : a), mkts[0]);
-        const sub = mkts.filter((m: any) => m !== main);
-        result.push({ ...main, isMultiOutcome: true, subMarkets: sub });
+        // Multiple markets - create grouped event
+        const sortedMarkets = markets.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
+        const headlineMarket = sortedMarkets[0];
+        const subMarkets = sortedMarkets.slice(1);
+        
+        // Aggregate volume and liquidity
+        const totalVolume = markets.reduce((sum: number, m: any) => sum + (m.volumeRaw || 0), 0);
+        const totalLiquidity = markets.reduce((sum: number, m: any) => sum + (m.liquidityRaw || 0), 0);
+        
+        result.push({
+          ...headlineMarket,
+          id: eventTicker,
+          eventTicker,
+          marketCount: markets.length,
+          isMultiOutcome: true,
+          subMarkets,
+          volumeRaw: totalVolume,
+          liquidityRaw: totalLiquidity,
+          volume: `$${Math.round(totalVolume).toLocaleString('en-US')}`,
+          liquidity: `$${Math.round(totalLiquidity).toLocaleString('en-US')}`,
+          image: headlineMarket.image || getCategoryImage(headlineMarket.category)
+        });
       }
     }
 
-    // Preserve overall sorting (already volume-sorted in filteredAndSortedMarkets)
     return result;
-  }, [filteredAndSortedMarkets, platform]);
+  }, [filteredAndSortedMarkets, platform, groupByEvent]);
   
   // Get unique categories from markets
   const categories = React.useMemo(() => {
@@ -787,6 +859,18 @@ const Markets = () => {
                 <SelectItem value="today">Today</SelectItem>
               </SelectContent>
             </Select>
+
+            {platform === 'kalshi' && (
+              <Button 
+                variant={groupByEvent ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setGroupByEvent(!groupByEvent)}
+                className="bg-card/50 border-border h-8"
+              >
+                <ListTree className="h-4 w-4 mr-2" />
+                Group by Event
+              </Button>
+            )}
 
             <Button 
               variant="outline" 
