@@ -62,8 +62,8 @@ serve(async (req) => {
       const markets = event.markets || [];
       const headlineMarket = markets.length > 0 
         ? markets.reduce((best: any, current: any) => {
-            const bestVol = best.volume_24h || best.volume || 0;
-            const currVol = current.volume_24h || current.volume || 0;
+            const bestVol = (typeof best.volume_24h_dollars === 'string' ? parseFloat(best.volume_24h_dollars) : 0) || best.volume_24h || best.volume || 0;
+            const currVol = (typeof current.volume_24h_dollars === 'string' ? parseFloat(current.volume_24h_dollars) : 0) || current.volume_24h || current.volume || 0;
             return currVol > bestVol ? current : best;
           }, markets[0])
         : null;
@@ -79,12 +79,18 @@ serve(async (req) => {
         }
       }
 
-      // Aggregate volume and liquidity across all markets in event
-      const totalVolume = markets.reduce((sum: number, m: any) => sum + (m.volume_24h || m.volume || 0), 0);
+      // Aggregate dollar volume and liquidity across all markets in event
+      const totalDollarVolume = markets.reduce((sum: number, m: any) => {
+        const v = typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : (typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0);
+        return sum + (isNaN(v) ? 0 : v);
+      }, 0);
+      const totalContracts = markets.reduce((sum: number, m: any) => sum + (m.volume_24h || m.volume || 0), 0);
       const totalLiquidity = markets.reduce((sum: number, m: any) => {
         const liq = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
         return sum + liq;
       }, 0);
+
+      const volumeLabel = totalDollarVolume > 0 ? `$${Math.round(totalDollarVolume).toLocaleString('en-US')}` : `${totalContracts.toLocaleString('en-US')} contracts`;
 
       return {
         id: event.event_ticker,
@@ -95,9 +101,9 @@ serve(async (req) => {
         image: null,
         yesPrice,
         noPrice,
-        volume: totalVolume > 0 ? `${totalVolume.toLocaleString('en-US')} contracts` : '$0',
+        volume: volumeLabel,
         liquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: totalVolume,
+        volumeRaw: totalDollarVolume > 0 ? totalDollarVolume : totalContracts,
         liquidityRaw: totalLiquidity,
         endDate: headlineMarket?.close_time || headlineMarket?.expiration_time || new Date().toISOString(),
         status: 'Active',
@@ -108,13 +114,13 @@ serve(async (req) => {
           ticker: m.ticker,
           title: m.title,
           yesPrice: m.last_price || 50,
-          volume: m.volume_24h || m.volume || 0,
+          volume: (typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : 0) || m.volume_24h || m.volume || 0,
         })),
       };
     });
 
-    // Sort by volume
-    const sortedEvents = normalizedEvents.sort((a: any, b: any) => b.volumeRaw - a.volumeRaw);
+    // Sort by volume (prefer dollar volume)
+    const sortedEvents = normalizedEvents.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
 
     // Enrich top N events with metadata images (sequential to avoid rate limits)
     const fetchEventImage = async (ticker: string): Promise<string | null> => {

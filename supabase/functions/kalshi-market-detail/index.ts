@@ -10,20 +10,22 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { ticker } = await req.json();
+    try {
+      const { ticker } = await req.json();
 
-    if (!ticker) {
-      return new Response(
-        JSON.stringify({ error: 'Ticker is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+      console.log(`[kalshi-market-detail] incoming request ticker=${ticker}`);
+
+      if (!ticker) {
+        return new Response(
+          JSON.stringify({ error: 'Ticker is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
     const baseUrls = [
-      'https://api.kalshi.com',
       'https://api.elections.kalshi.com',
-      'https://demo-api.kalshi.co'
+      'https://demo-api.kalshi.co',
+      'https://api.kalshi.com'
     ];
 
     // Fetch market detail
@@ -32,7 +34,8 @@ serve(async (req) => {
     let lastError = '';
     let usedBase: string | null = null;
     for (const base of baseUrls) {
-      const url = `${base}/trade-api/v2/markets/${ticker}`;
+      const tEnc = encodeURIComponent(ticker);
+      const url = `${base}/trade-api/v2/markets/${tEnc}`;
       try {
         const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
         if (resp.ok) {
@@ -40,7 +43,7 @@ serve(async (req) => {
           usedBase = base;
 
           // Fetch real-time orderbook from the same base
-          const obUrl = `${base}/trade-api/v2/markets/${ticker}/orderbook`;
+          const obUrl = `${base}/trade-api/v2/markets/${tEnc}/orderbook`;
           try {
             const obResp = await fetch(obUrl, { headers: { 'Accept': 'application/json' } });
             if (obResp.ok) {
@@ -62,6 +65,7 @@ serve(async (req) => {
 
     const marketObj = marketData?.market ?? marketData;
     if (!marketObj || typeof marketObj !== 'object' || !('ticker' in marketObj)) {
+      try { console.log(`[kalshi-market-detail] market not found for ${ticker}. lastError=${lastError} base=${usedBase}`); } catch {}
       return new Response(
         JSON.stringify({ error: 'Market not found', details: lastError, baseTried: usedBase }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

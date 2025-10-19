@@ -100,65 +100,70 @@ serve(async (req) => {
       if (yesPrice === null && yesBid !== null) yesPrice = yesBid;
       if (yesPrice === null) yesPrice = 50;
 
-      const volume24h = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
+      const volumeContracts = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
+      const volumeDollars = typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : (typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0);
       const liquidityDollars = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
 
-      return {
-        ticker: m.ticker,
-        title: m.title,
-        subtitle: m.subtitle,
-        yesPrice,
-        noPrice: 100 - yesPrice,
-        volume: volume24h > 0 ? `${volume24h.toLocaleString('en-US')} contracts` : '$0',
-        liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: volume24h,
-        liquidityRaw: liquidityDollars,
-        category: m.category || 'General',
-        endDate: m.close_time || m.expiration_time,
-        status: m.status || 'open',
-        rules_primary: m.rules_primary || '',
-        rules_secondary: m.rules_secondary || '',
-      };
+      const volumeLabel = volumeDollars > 0 ? `$${Math.round(volumeDollars).toLocaleString('en-US')}` : `${volumeContracts.toLocaleString('en-US')} contracts`;
+
+       return {
+         ticker: m.ticker,
+         title: m.title,
+         subtitle: m.subtitle,
+         yesPrice,
+         noPrice: 100 - yesPrice,
+         volume: volumeLabel,
+         liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+         volumeRaw: volumeDollars > 0 ? volumeDollars : volumeContracts,
+         liquidityRaw: liquidityDollars,
+         category: m.category || 'General',
+         endDate: m.close_time || m.expiration_time,
+         status: m.status || 'open',
+         rules_primary: m.rules_primary || '',
+         rules_secondary: m.rules_secondary || '',
+       };
     }).sort((a: any, b: any) => b.volumeRaw - a.volumeRaw);
 
-    const totalVolume = markets.reduce((sum: number, m: any) => sum + m.volumeRaw, 0);
-    const totalLiquidity = markets.reduce((sum: number, m: any) => sum + m.liquidityRaw, 0);
+    const totalVolume = markets.reduce((sum: number, m: any) => sum + (m.volumeRaw || 0), 0);
+    const totalLiquidity = markets.reduce((sum: number, m: any) => sum + (m.liquidityRaw || 0), 0);
 
-    // Fetch event metadata for image
-    let eventImage: string | null = null;
-    for (const base of baseUrls) {
-      const metaUrl = `${base}/trade-api/v2/events/${eventTicker}/metadata`;
-      const metaResp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
-      if (metaResp.ok) {
-        const metadata = await metaResp.json();
-        eventImage = metadata?.image_url || null;
-        console.log(`[Kalshi Event Detail] Event image: ${eventImage}`);
-        break;
-      }
-    }
+     // Fetch event metadata for image
+     let eventImage: string | null = null;
+     for (const base of baseUrls) {
+       const metaUrl = `${base}/trade-api/v2/events/${eventTicker}/metadata`;
+       const metaResp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
+       if (metaResp.ok) {
+         const metadata = await metaResp.json();
+         eventImage = metadata?.image_url || null;
+         console.log(`[Kalshi Event Detail] Event image: ${eventImage}`);
+         break;
+       }
+     }
+ 
+     // Choose headline market (most liquid/volume) and get its rules
+     const headline = markets[0];
+     const rulesCombined = [headline?.rules_primary, headline?.rules_secondary].filter(Boolean).join('\n\n');
 
-    // Choose headline market (most liquid/volume) and get its rules
-    const headline = markets[0];
-    const rulesCombined = [headline?.rules_primary, headline?.rules_secondary].filter(Boolean).join('\n\n');
-
-    return new Response(
-      JSON.stringify({
-        event: {
-          eventTicker: event.event_ticker,
-          title: event.title,
-          subtitle: event.sub_title,
-          category: event.category || 'General',
-          rules: rulesCombined || 'No rules available for this event',
-          description: event.sub_title || event.title,
-          image: eventImage,
-          headlineTicker: headline?.ticker || null,
-          totalVolume: totalVolume > 0 ? `${totalVolume.toLocaleString()} contracts` : '$0',
-          totalLiquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString()}` : '$0',
-          markets,
-        }
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+     const totalVolumeLabel = totalVolume > 0 ? `$${Math.round(totalVolume).toLocaleString('en-US')}` : '$0';
+ 
+     return new Response(
+       JSON.stringify({
+         event: {
+           eventTicker: event.event_ticker,
+           title: event.title,
+           subtitle: event.sub_title,
+           category: event.category || 'General',
+           rules: rulesCombined || 'No rules available for this event',
+           description: event.sub_title || event.title,
+           image: eventImage,
+           headlineTicker: headline?.ticker || null,
+           totalVolume: totalVolumeLabel,
+           totalLiquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString('en-US')}` : '$0',
+           markets,
+         }
+       }),
+       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+     );
 
   } catch (error) {
     console.error('[Kalshi Event Detail] Error:', error);
