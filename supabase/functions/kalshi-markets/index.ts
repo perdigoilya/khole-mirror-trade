@@ -132,9 +132,18 @@ serve(async (req) => {
       const ticker: string = m.ticker || '';
       const eventTicker: string = m.event_ticker || '';
       const title: string = (m.title || '').toString();
-      const hasComma = title.includes(',');
+      
+      // Check for explicit parlay/bundle flags in ticker
       const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
-      return hasComma || multiFlag;
+      if (multiFlag) return true;
+      
+      // More sophisticated comma check - look for parlay patterns like "X and Y" or "X, Y, and Z"
+      // Exclude markets that are just using commas for normal punctuation
+      const parlayPattern = /,\s*(and|&)\s*[A-Z]/;  // "Team A, and Team B"
+      const multipleOutcomePattern = /,\s*[A-Z][^,]+,/;  // "X, Y, and Z" with multiple commas
+      const hasParlayCommas = parlayPattern.test(title) || multipleOutcomePattern.test(title);
+      
+      return hasParlayCommas;
     };
 
     const sourceList = includeParlays ? marketsRaw : marketsRaw.filter((market: any) => !isParlay(market));

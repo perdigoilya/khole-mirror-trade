@@ -256,7 +256,11 @@ const Markets = () => {
     // Volume filter
     result = result.filter((market: any) => {
       const vol = market.volumeRaw || 0;
-      return vol >= minVolume && vol <= maxVolume;
+      const passes = vol >= minVolume && vol <= maxVolume;
+      if (!passes && vol > 0 && platform === 'kalshi') {
+        console.log(`[Filter] Kalshi market filtered by volume: ${market.title} (vol: $${vol}, min: $${minVolume}, max: $${maxVolume})`);
+      }
+      return passes;
     });
     
     // Liquidity filter
