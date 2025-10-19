@@ -102,10 +102,46 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Fetch individual markets with pagination
-        result = await supabase.functions.invoke('kalshi-markets', {
-          body: { includeParlays: false }
-        });
+        // Kalshi: Query cached events from database
+        let query = supabase
+          .from('kalshi_events')
+          .select('*')
+          .order('total_volume', { ascending: false, nullsFirst: false });
+        
+        if (searchTerm) {
+          query = query.or(`title.ilike.%${searchTerm}%,event_ticker.ilike.%${searchTerm}%`);
+        }
+        
+        result = await query;
+        
+        // Transform to match expected format
+        if (result.data) {
+          result = {
+            data: {
+              events: result.data.map((event: any) => ({
+                id: event.id,
+                eventTicker: event.event_ticker,
+                title: event.title,
+                subtitle: event.subtitle,
+                description: event.title,
+                image: null,
+                yesPrice: event.event_data?.headlineMarket?.yesPrice || 50,
+                noPrice: 100 - (event.event_data?.headlineMarket?.yesPrice || 50),
+                volume: event.total_volume > 0 ? `$${Math.round(event.total_volume).toLocaleString('en-US')}` : '$0',
+                liquidity: event.total_liquidity > 0 ? `$${Math.round(event.total_liquidity).toLocaleString('en-US')}` : '$0',
+                volumeRaw: event.total_volume || 0,
+                liquidityRaw: event.total_liquidity || 0,
+                endDate: event.event_data?.headlineMarket?.endDate || new Date().toISOString(),
+                status: 'Active',
+                category: event.category || 'General',
+                provider: 'kalshi' as const,
+                marketCount: event.market_count || 0,
+                markets: event.event_data?.markets || [],
+              }))
+            },
+            error: result.error
+          };
+        }
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {
           body: { searchTerm, offset: loadOffset }
