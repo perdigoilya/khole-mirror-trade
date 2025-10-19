@@ -85,14 +85,23 @@ serve(async (req) => {
         return sum + (isNaN(v) ? 0 : v);
       }, 0);
       
-      // Only use 24h volume for "current" relevance; do not fallback to lifetime volume
+      // Use lifetime volume as fallback for events with low daily activity
+      let totalVolume = totalDollarVolume24h;
+      if (totalVolume === 0) {
+        const totalDollarVolume = markets.reduce((sum: number, m: any) => {
+          const v = typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0;
+          return sum + (isNaN(v) ? 0 : v);
+        }, 0);
+        totalVolume = totalDollarVolume;
+      }
+      
       const totalLiquidity = markets.reduce((sum: number, m: any) => {
         const liq = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
         return sum + liq;
       }, 0);
 
-      const volumeLabel = totalDollarVolume24h > 0 
-        ? `$${Math.round(totalDollarVolume24h).toLocaleString('en-US')}` 
+      const volumeLabel = totalVolume > 0 
+        ? `$${Math.round(totalVolume).toLocaleString('en-US')}` 
         : '$0';
       
       return {
@@ -106,7 +115,8 @@ serve(async (req) => {
         noPrice,
         volume: volumeLabel,
         liquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: totalDollarVolume24h,
+        volumeRaw: totalVolume,
+        volume24hRaw: totalDollarVolume24h,  // Track both for sorting
         liquidityRaw: totalLiquidity,
         endDate: headlineMarket?.close_time || headlineMarket?.expiration_time || new Date().toISOString(),
         status: 'Active',
@@ -122,38 +132,26 @@ serve(async (req) => {
       };
     });
 
-    // Filter out events ending too far in the future (keep events within 2 years)
+    // Smart sorting: Prioritize events with recent activity, but don't exclude long-term ones
     const now = new Date();
-    const twoYearsFromNow = new Date(now.getTime() + 2 * 365 * 24 * 60 * 60 * 1000);
-    const currentEvents = normalizedEvents.filter((e: any) => {
-      const endDate = new Date(e.endDate);
-      return endDate <= twoYearsFromNow;
-    });
-    
-    console.log(`[PUBLIC] Filtered from ${normalizedEvents.length} to ${currentEvents.length} events (excluding those ending after ${twoYearsFromNow.toISOString().split('T')[0]})`);
-    
-    // Sort by a combination of recency and volume
-    // Events ending sooner get priority, but volume still matters
-    const sortedEvents = currentEvents.sort((a: any, b: any) => {
+    const sortedEvents = normalizedEvents.sort((a: any, b: any) => {
       const aEnd = new Date(a.endDate).getTime();
       const bEnd = new Date(b.endDate).getTime();
       const nowTime = now.getTime();
+      const oneYear = 365 * 24 * 60 * 60 * 1000;
       
-      // Calculate "urgency score" - events ending sooner score higher
-      const aUrgency = Math.max(0, 1 - (aEnd - nowTime) / (365 * 24 * 60 * 60 * 1000)); // 0-1 scale based on days until end
-      const bUrgency = Math.max(0, 1 - (bEnd - nowTime) / (365 * 24 * 60 * 60 * 1000));
+      // Calculate "recency bonus" - events within 1 year get a boost
+      const aRecencyBonus = aEnd < nowTime + oneYear ? 1.5 : 1.0;
+      const bRecencyBonus = bEnd < nowTime + oneYear ? 1.5 : 1.0;
       
-      // Combine urgency with volume (normalize volume to 0-1 scale)
-      const maxVol = Math.max(...currentEvents.map((e: any) => e.volumeRaw || 0));
-      const aVolScore = maxVol > 0 ? (a.volumeRaw || 0) / maxVol : 0;
-      const bVolScore = maxVol > 0 ? (b.volumeRaw || 0) / maxVol : 0;
+      // Prioritize 24h volume, but use lifetime volume as tiebreaker
+      const aVol = (a.volume24hRaw || 0) * aRecencyBonus + (a.volumeRaw || 0) * 0.1;
+      const bVol = (b.volume24hRaw || 0) * bRecencyBonus + (b.volumeRaw || 0) * 0.1;
       
-      // Weight: 60% volume, 40% urgency
-      const aScore = (aVolScore * 0.6) + (aUrgency * 0.4);
-      const bScore = (bVolScore * 0.6) + (bUrgency * 0.4);
-      
-      return bScore - aScore;
+      return bVol - aVol;
     });
+    
+    console.log(`[PUBLIC] Sorted ${sortedEvents.length} events by volume+recency`);
 
     // Enrich top N events with metadata images (sequential to avoid rate limits)
     const fetchEventImage = async (ticker: string): Promise<string | null> => {
