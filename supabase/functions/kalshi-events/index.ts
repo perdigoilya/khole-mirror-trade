@@ -25,7 +25,7 @@ serve(async (req) => {
       .from('kalshi_events')
       .select('*')
       .order('total_volume', { ascending: false, nullsFirst: false })
-      .limit(200);
+      .limit(1000);
 
     if (error) {
       console.error('[kalshi-events] Database error:', error);
@@ -55,6 +55,15 @@ serve(async (req) => {
     }
 
     console.log(`[kalshi-events] Found ${events.length} events in database`);
+
+    // If the dataset seems small, kick off a background sync (non-blocking)
+    if (events.length < 150) {
+      console.log('[kalshi-events] Few events found; triggering background sync');
+      // Fire-and-forget; do not await
+      supabase.functions.invoke('kalshi-sync')
+        .then(() => console.log('[kalshi-events] Background sync invoked'))
+        .catch((e) => console.warn('[kalshi-events] Background sync invoke failed', e));
+    }
 
     // For each event, get headline market
     const eventsWithMarkets = await Promise.all(

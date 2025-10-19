@@ -33,6 +33,9 @@ serve(async (req) => {
     for (const base of baseUrls) {
       try {
         console.log(`[kalshi-sync] Fetching from ${base}...`);
+        // Reset pagination per base
+        cursor = null;
+        requestCount = 0;
         
         do {
           const limit = 1000;
@@ -70,14 +73,20 @@ serve(async (req) => {
           await new Promise(resolve => setTimeout(resolve, 100));
         } while (cursor);
 
-        // If we successfully fetched markets, break from baseUrls loop
-        if (allMarkets.length > 0) {
-          break;
-        }
+        // Continue to next base to merge more markets
+
       } catch (error) {
         console.error(`[kalshi-sync] Error fetching from ${base}:`, error);
       }
     }
+    // Deduplicate markets by ticker across bases
+    const seen = new Set<string>();
+    allMarkets = allMarkets.filter((m) => {
+      const key = m?.ticker;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     if (allMarkets.length === 0) {
       throw new Error('No markets fetched from Kalshi API');
