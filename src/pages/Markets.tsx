@@ -105,9 +105,9 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Switch to raw markets for Kalshi to display more items
-        result = await supabase.functions.invoke('kalshi-markets', {
-          body: { offset: loadOffset }
+        // Kalshi: Fetch events instead of individual markets
+        result = await supabase.functions.invoke('kalshi-events', {
+          body: {}
         });
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {
@@ -167,8 +167,7 @@ const Markets = () => {
       }
       
       if (!error && (data?.markets || data?.events)) {
-        // Support both kalshi-markets (markets) and kalshi-events (events)
-        let filteredMarkets = (data?.markets || data?.events || []) as any[];
+        let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
         
         if (searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
