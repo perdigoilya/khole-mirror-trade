@@ -98,10 +98,9 @@ serve(async (req) => {
     const isParlay = (m: any): boolean => {
       const ticker: string = m.ticker || '';
       const eventTicker: string = m.event_ticker || '';
-      const title: string = (m.title || '').toString();
-      const hasComma = title.includes(',');
+      // Only flag explicit multi/bundle markers
       const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
-      return hasComma || multiFlag;
+      return multiFlag;
     };
 
     const singleLegMarkets = allMarkets.filter(m => !isParlay(m));
@@ -173,16 +172,16 @@ serve(async (req) => {
     const eventRecords = Array.from(eventsMap.entries()).map(([eventTicker, eventData]) => {
       const markets = eventData.markets;
       const totalVol24h = markets.reduce((sum: number, m: any) => {
-        const v = typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : 0;
+        const v = Number((m as any).volume_24h_dollars) || 0;
         return sum + (isNaN(v) ? 0 : v);
       }, 0);
       const totalVol = markets.reduce((sum: number, m: any) => {
-        const v = typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0;
+        const v = Number((m as any).volume_dollars) || 0;
         return sum + (isNaN(v) ? 0 : v);
       }, 0);
       const totalLiq = markets.reduce((sum: number, m: any) => {
-        const liq = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
-        return sum + liq;
+        const liq = Number((m as any).liquidity_dollars) || 0;
+        return sum + (isNaN(liq) ? 0 : liq);
       }, 0);
 
       return {
