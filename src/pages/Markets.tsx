@@ -125,44 +125,80 @@ const Markets = () => {
         return;
       }
       
-        if (!error && data?.markets) {
-          let filteredMarkets = data.markets || [];
-          console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} markets from backend`);
-        
-        if (searchTerm) {
-          filteredMarkets = filteredMarkets.filter((market: any) =>
-            market.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            market.ticker?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            market.eventTicker?.toLowerCase().includes(searchTerm.toLowerCase())
-          );
-        }
-        console.log(`[Markets] After search filter: ${filteredMarkets.length} items`);
-        
-        // Update cache
-        if (provider !== 'kalshi') {
-          marketCacheRef.current.set(cacheKey, {
-            data: filteredMarkets,
-            timestamp: Date.now()
-          });
-        }
-        
-        // Double-check before updating state
-        if (append || (currentFetchRef.current?.platform === provider)) {
-          if (append) {
-            setMarkets(prev => [...prev, ...filteredMarkets]);
+        if (!error) {
+          let filteredMarkets: any[] = [];
+
+          if (provider === 'kalshi' && Array.isArray(data?.events)) {
+            const events = data.events as any[];
+            const flattened = events.flatMap((ev: any) => {
+              const evTicker = ev.eventTicker || ev.ticker || ev.id;
+              const evImage = ev.image;
+              const evCategory = ev.category || 'General';
+              const evMarkets = Array.isArray(ev.markets) ? ev.markets : [];
+              return evMarkets.map((m: any) => ({
+                ...m,
+                id: m.ticker || m.id,
+                ticker: m.ticker || m.id,
+                title: m.title || ev.title,
+                eventTicker: m.eventTicker || evTicker,
+                provider: 'kalshi',
+                image: m.image || evImage,
+                category: m.category || evCategory,
+                volumeRaw: m.volumeRaw ?? m.volume ?? 0,
+                liquidityRaw: m.liquidityRaw ?? m.liquidity ?? 0,
+                volume: (typeof m.volume === 'string' && m.volume.startsWith('$'))
+                  ? m.volume
+                  : (typeof m.volumeRaw === 'number' ? `$${Math.round(m.volumeRaw).toLocaleString('en-US')}` : '$0'),
+                liquidity: (typeof m.liquidity === 'string' && m.liquidity.startsWith('$'))
+                  ? m.liquidity
+                  : (typeof m.liquidityRaw === 'number' ? `$${Math.round(m.liquidityRaw).toLocaleString('en-US')}` : '$0'),
+                endDate: m.endDate || ev.endDate,
+                status: (m.status || ev.status || 'active').toString(),
+              }));
+            });
+            filteredMarkets = flattened;
+            console.log(`[Markets] Flattened ${events.length} Kalshi events into ${filteredMarkets.length} markets`);
+          } else if (Array.isArray(data?.markets)) {
+            filteredMarkets = data.markets || [];
+            console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} markets from backend`);
           } else {
-            setMarkets(filteredMarkets);
+            throw new Error('Unexpected response shape');
+          }
+
+          if (searchTerm) {
+            filteredMarkets = filteredMarkets.filter((market: any) =>
+              (market.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (market.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (market.eventTicker || '').toLowerCase().includes(searchTerm.toLowerCase())
+            );
+          }
+          console.log(`[Markets] After search filter: ${filteredMarkets.length} items`);
+          
+          // Update cache for Polymarket only
+          if (provider !== 'kalshi') {
+            marketCacheRef.current.set(cacheKey, {
+              data: filteredMarkets,
+              timestamp: Date.now()
+            });
+          }
+          
+          // Double-check before updating state
+          if (append || (currentFetchRef.current?.platform === provider)) {
+            if (append) {
+              setMarkets(prev => [...prev, ...filteredMarkets]);
+            } else {
+              setMarkets(filteredMarkets);
+            }
+          }
+        } else {
+          if (!append) {
+            toast({
+              title: "Error",
+              description: error?.message || data?.error || "Failed to fetch markets",
+              variant: "destructive",
+            });
           }
         }
-      } else {
-        if (!append) {
-          toast({
-            title: "Error",
-            description: error?.message || data?.error || "Failed to fetch markets",
-            variant: "destructive",
-          });
-        }
-      }
     } catch (error: any) {
       // Ignore aborted requests
       if (error.name === 'AbortError') {
