@@ -137,18 +137,11 @@ serve(async (req) => {
       const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
       if (multiFlag) return true;
       
-      // 2. SINGLEGAME markets with commas are same-game parlays
-      // (Single-outcome markets don't have commas in titles)
-      const isSingleGame = /SINGLEGAME/i.test(ticker) || /SINGLEGAME/i.test(eventTicker);
-      if (isSingleGame && title.includes(',')) {
-        return true;
-      }
-      
-      // 3. Check for "yes X,yes Y" pattern (multiple outcomes in one bet)
+      // 2. Check for "yes X,yes Y" pattern (multiple outcomes in one bet)
       const yesCommaPattern = /yes\s+[^,]+,\s*yes\s+/i;
       if (yesCommaPattern.test(title)) return true;
       
-      // 4. Check for player stat parlays like "Player: X+,Player: Y+"
+      // 3. Check for player stat parlays like "Player: X+,Player: Y+"
       const statCommaPattern = /:\s*\d+\+,/;
       if (statCommaPattern.test(title)) return true;
       
