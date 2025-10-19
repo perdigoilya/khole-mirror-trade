@@ -84,13 +84,24 @@ serve(async (req) => {
         const v = typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : 0;
         return sum + (isNaN(v) ? 0 : v);
       }, 0);
+      
+      // Fallback: if no 24h dollar volume, try lifetime volume_dollars or contract volume
+      let totalVolume = totalDollarVolume24h;
+      if (totalVolume === 0) {
+        const totalDollarVolume = markets.reduce((sum: number, m: any) => {
+          const v = typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0;
+          return sum + (isNaN(v) ? 0 : v);
+        }, 0);
+        totalVolume = totalDollarVolume;
+      }
+      
       const totalLiquidity = markets.reduce((sum: number, m: any) => {
         const liq = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
         return sum + liq;
       }, 0);
 
-      const volumeLabel = totalDollarVolume24h > 0 
-        ? `$${Math.round(totalDollarVolume24h).toLocaleString('en-US')}` 
+      const volumeLabel = totalVolume > 0 
+        ? `$${Math.round(totalVolume).toLocaleString('en-US')}` 
         : '$0';
 
       return {
@@ -104,7 +115,7 @@ serve(async (req) => {
         noPrice,
         volume: volumeLabel,
         liquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: totalDollarVolume24h,
+        volumeRaw: totalVolume,
         liquidityRaw: totalLiquidity,
         endDate: headlineMarket?.close_time || headlineMarket?.expiration_time || new Date().toISOString(),
         status: 'Active',

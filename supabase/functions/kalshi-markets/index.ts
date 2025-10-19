@@ -174,8 +174,10 @@ serve(async (req) => {
       if (yesPrice === null) yesPrice = 50;
       if (noPrice === null) noPrice = 50;
 
-      // Parse 24h dollar volume only (to match detail page)
+      // Parse dollar volume with fallbacks
       let volumeDollars = 0;
+      
+      // Try 24h dollar volume first
       const vol24hDollarStr = market.volume_24h_dollars || null;
       if (typeof vol24hDollarStr === 'string') {
         const parsed = parseFloat(vol24hDollarStr);
@@ -184,13 +186,21 @@ serve(async (req) => {
         volumeDollars = vol24hDollarStr;
       }
       
-      // Calculate contract-based volume (for display only if needed)
-      const volumeContracts = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
-      
-      // For sorting/filtering, use only 24h dollar volume
-      const volumeRaw = volumeDollars;
+      // Fallback to lifetime volume_dollars if no 24h volume
+      if (volumeDollars === 0) {
+        const volDollarStr = market.volume_dollars || null;
+        if (typeof volDollarStr === 'string') {
+          const parsed = parseFloat(volDollarStr);
+          if (!isNaN(parsed)) volumeDollars = parsed;
+        } else if (typeof volDollarStr === 'number' && !isNaN(volDollarStr)) {
+          volumeDollars = volDollarStr;
+        }
+      }
       
       const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
+
+      // Use dollar volume for raw value
+      const volumeRaw = volumeDollars;
 
       // Map category to image (will be resolved in frontend)
       const category = market.category || 'General';
