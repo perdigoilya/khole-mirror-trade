@@ -22,7 +22,8 @@ serve(async (req) => {
 
     const baseUrls = [
       'https://api.kalshi.com',
-      'https://api.elections.kalshi.com'
+      'https://api.elections.kalshi.com',
+      'https://demo-api.kalshi.co'
     ];
 
     // Fetch market detail
@@ -32,31 +33,42 @@ serve(async (req) => {
     let usedBase: string | null = null;
     for (const base of baseUrls) {
       const url = `${base}/trade-api/v2/markets/${ticker}`;
-      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if (resp.ok) {
-        marketData = await resp.json();
-        usedBase = base;
-        
-        // Fetch real-time orderbook from the same base
-        const obUrl = `${base}/trade-api/v2/markets/${ticker}/orderbook`;
-        const obResp = await fetch(obUrl, { headers: { 'Accept': 'application/json' } });
-        if (obResp.ok) {
-          orderbookData = await obResp.json();
+      try {
+        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (resp.ok) {
+          marketData = await resp.json();
+          usedBase = base;
+
+          // Fetch real-time orderbook from the same base
+          const obUrl = `${base}/trade-api/v2/markets/${ticker}/orderbook`;
+          try {
+            const obResp = await fetch(obUrl, { headers: { 'Accept': 'application/json' } });
+            if (obResp.ok) {
+              orderbookData = await obResp.json();
+            } else {
+              lastError = `orderbook ${obResp.status} ${await obResp.text()}`;
+            }
+          } catch (e) {
+            lastError = e instanceof Error ? e.message : 'Unknown orderbook error';
+          }
+          break;
+        } else {
+          lastError = `${resp.status} ${await resp.text()}`;
         }
-        break;
-      } else {
-        lastError = await resp.text();
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : 'Network error';
       }
     }
 
-    if (!marketData || !marketData.market) {
+    const marketObj = marketData?.market ?? marketData;
+    if (!marketObj || typeof marketObj !== 'object' || !('ticker' in marketObj)) {
       return new Response(
-        JSON.stringify({ error: 'Market not found', details: lastError }),
+        JSON.stringify({ error: 'Market not found', details: lastError, baseTried: usedBase }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const m = marketData.market;
+    const m = (marketData?.market ?? marketData) as any;
 
     const toCents = (num: unknown, dollars: unknown): number | null => {
       if (typeof num === 'number' && !isNaN(num)) return Math.round(num);
@@ -134,30 +146,38 @@ serve(async (req) => {
     const volume24hContracts = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
     const liquidityDollars = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
 
-    // Try to compute 24h dollar volume from recent trades (best-effort)
+    // Prefer official dollar-based 24h volume if provided; otherwise compute best-effort from recent trades
     let volumeDollars24h = 0;
-    try {
-      const nowTs = Math.floor(Date.now() / 1000);
-      const minTs = nowTs - 24 * 3600;
-      for (const base of baseUrls) {
-        const tradesUrl = `${base}/trade-api/v2/markets/trades?ticker=${encodeURIComponent(m.ticker)}&min_ts=${minTs}&limit=1000`;
-        const tResp = await fetch(tradesUrl, { headers: { 'Accept': 'application/json' } });
-        if (tResp.ok) {
-          const t = await tResp.json();
-          const trades = Array.isArray(t?.trades) ? t.trades : [];
-          for (const tr of trades) {
-            const priceStr = typeof tr?.yes_price_dollars === 'string' ? tr.yes_price_dollars : (typeof tr?.no_price_dollars === 'string' ? tr.no_price_dollars : null);
-            const count = typeof tr?.count === 'number' ? tr.count : 0;
-            if (priceStr && count > 0) {
-              const p = parseFloat(priceStr);
-              if (!isNaN(p)) volumeDollars24h += p * count;
+    const volDollarStr = (m as any).volume_24h_dollars || (m as any).volume_dollars || null;
+    if (typeof volDollarStr === 'string') {
+      const v = parseFloat(volDollarStr);
+      if (!isNaN(v)) volumeDollars24h = v;
+    }
+
+    if (volumeDollars24h <= 0) {
+      try {
+        const nowTs = Math.floor(Date.now() / 1000);
+        const minTs = nowTs - 24 * 3600;
+        for (const base of baseUrls) {
+          const tradesUrl = `${base}/trade-api/v2/markets/trades?ticker=${encodeURIComponent(m.ticker)}&min_ts=${minTs}&limit=1000`;
+          const tResp = await fetch(tradesUrl, { headers: { 'Accept': 'application/json' } });
+          if (tResp.ok) {
+            const t = await tResp.json();
+            const trades = Array.isArray(t?.trades) ? t.trades : [];
+            for (const tr of trades) {
+              const priceStr = typeof tr?.yes_price_dollars === 'string' ? tr.yes_price_dollars : (typeof tr?.no_price_dollars === 'string' ? tr.no_price_dollars : null);
+              const count = typeof tr?.count === 'number' ? tr.count : 0;
+              if (priceStr && count > 0) {
+                const p = parseFloat(priceStr);
+                if (!isNaN(p)) volumeDollars24h += p * count;
+              }
             }
+            break;
           }
-          break;
         }
+      } catch (_) {
+        // Ignore failures and fall back gracefully
       }
-    } catch (_) {
-      // Ignore failures and fall back gracefully
     }
 
     // Build rules description
