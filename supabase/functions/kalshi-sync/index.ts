@@ -88,15 +88,20 @@ serve(async (req) => {
       const multiFlag = /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(eventTicker);
       if (multiFlag) return true;
       
-      // Check for multiple conditions separated by commas
-      // Examples: "Breece Hall,Carolina,Carolina wins by over 1.5 points"
-      // or "Trevor Lawrence: 200+,Matthew Stafford: 225+"
-      const commaCount = (title.match(/,/g) || []).length;
-      if (commaCount >= 2) return true;
+      // Check for yes/no prefix pattern - these are multi-condition parlays
+      // Examples: "yes Kyren Williams: 10+,no Los Angeles R wins by over 3.5 points"
+      //           "yes Travis Hunter,yes Over 50.5 points scored"
+      const multiConditionPattern = /^(yes|no)\s+[^,]+,\s*(yes|no)\s+/i;
+      if (multiConditionPattern.test(title)) return true;
       
-      // Check for colon patterns indicating player props in parlays
+      // Check for multiple player props with colons
+      // Example: "Trevor Lawrence: 200+,Matthew Stafford: 225+"
       const colonCount = (title.match(/:/g) || []).length;
       if (colonCount >= 2) return true;
+      
+      // Check for multiple comma-separated conditions with "and"
+      const parlayPattern = /,\s*(and|&)\s*[A-Z]/;
+      if (parlayPattern.test(title)) return true;
       
       return false;
     };
