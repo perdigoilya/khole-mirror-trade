@@ -21,21 +21,23 @@ serve(async (req) => {
     }
 
     const baseUrls = [
-      'https://api.elections.kalshi.com',
-      'https://api.kalshi.com'
+      'https://api.kalshi.com',
+      'https://api.elections.kalshi.com'
     ];
 
     // Fetch market detail
     let marketData: any = null;
     let orderbookData: any = null;
     let lastError = '';
+    let usedBase: string | null = null;
     for (const base of baseUrls) {
       const url = `${base}/trade-api/v2/markets/${ticker}`;
       const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (resp.ok) {
         marketData = await resp.json();
+        usedBase = base;
         
-        // Fetch real-time orderbook
+        // Fetch real-time orderbook from the same base
         const obUrl = `${base}/trade-api/v2/markets/${ticker}/orderbook`;
         const obResp = await fetch(obUrl, { headers: { 'Accept': 'application/json' } });
         if (obResp.ok) {
@@ -102,29 +104,61 @@ serve(async (req) => {
       if (typeof yesBid === 'number') noAsk = Math.max(0, Math.min(100, 100 - yesBid));
     }
 
+    // Debug logging for verification
+    try {
+      console.log(`[kalshi-market-detail] ticker=${ticker} base=${usedBase} yesBid=${yesBid} yesAsk=${yesAsk} noBid=${noBid} noAsk=${noAsk}`);
+    } catch (_) {}
+
+
     // Fallback to market data if orderbook is empty
     if (yesAsk === null) yesAsk = toCents(m.yes_ask, m.yes_ask_dollars);
     if (yesBid === null) yesBid = toCents(m.yes_bid, m.yes_bid_dollars);
     if (noAsk === null) noAsk = toCents((m as any).no_ask, (m as any).no_ask_dollars) ?? (yesBid !== null ? 100 - yesBid : null);
     if (noBid === null) noBid = toCents((m as any).no_bid, (m as any).no_bid_dollars) ?? (yesAsk !== null ? 100 - yesAsk : null);
 
-    // Calculate mid-market price for display
+    // Calculate mid-market price for display (favor orderbook if present)
     const lastPrice = toCents(m.last_price, m.last_price_dollars);
     let yesPrice: number;
     if (yesAsk !== null && yesBid !== null) {
       yesPrice = Math.round((yesAsk + yesBid) / 2);
-    } else if (lastPrice !== null) {
-      yesPrice = lastPrice;
     } else if (yesAsk !== null) {
       yesPrice = yesAsk;
     } else if (yesBid !== null) {
       yesPrice = yesBid;
+    } else if (lastPrice !== null) {
+      yesPrice = lastPrice;
     } else {
       yesPrice = 50;
     }
 
-    const volume24h = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
+    const volume24hContracts = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
     const liquidityDollars = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
+
+    // Try to compute 24h dollar volume from recent trades (best-effort)
+    let volumeDollars24h = 0;
+    try {
+      const nowTs = Math.floor(Date.now() / 1000);
+      const minTs = nowTs - 24 * 3600;
+      for (const base of baseUrls) {
+        const tradesUrl = `${base}/trade-api/v2/markets/trades?ticker=${encodeURIComponent(m.ticker)}&min_ts=${minTs}&limit=1000`;
+        const tResp = await fetch(tradesUrl, { headers: { 'Accept': 'application/json' } });
+        if (tResp.ok) {
+          const t = await tResp.json();
+          const trades = Array.isArray(t?.trades) ? t.trades : [];
+          for (const tr of trades) {
+            const priceStr = typeof tr?.yes_price_dollars === 'string' ? tr.yes_price_dollars : (typeof tr?.no_price_dollars === 'string' ? tr.no_price_dollars : null);
+            const count = typeof tr?.count === 'number' ? tr.count : 0;
+            if (priceStr && count > 0) {
+              const p = parseFloat(priceStr);
+              if (!isNaN(p)) volumeDollars24h += p * count;
+            }
+          }
+          break;
+        }
+      }
+    } catch (_) {
+      // Ignore failures and fall back gracefully
+    }
 
     // Build rules description
     const rules_primary = m.rules_primary || '';
@@ -161,9 +195,10 @@ serve(async (req) => {
       yesBid: yesBid ?? null,
       noAsk: noAsk ?? null,
       noBid: noBid ?? null,
-      volume: volume24h > 0 ? `${volume24h.toLocaleString('en-US')} contracts` : '$0',
+      // Prefer dollar-based metrics for display consistency with Kalshi UI
+      volume: volumeDollars24h > 0 ? `$${Math.round(volumeDollars24h).toLocaleString('en-US')}` : `${volume24hContracts.toLocaleString('en-US')} contracts`,
       liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-      volumeRaw: volume24h,
+      volumeRaw: volumeDollars24h > 0 ? volumeDollars24h : volume24hContracts,
       liquidityRaw: liquidityDollars,
       endDate: m.close_time || m.expiration_time,
       status: m.status || 'open',
