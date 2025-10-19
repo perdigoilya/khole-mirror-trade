@@ -108,10 +108,28 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Fetch individual markets (up to 1,000)
-        result = await supabase.functions.invoke('kalshi-markets', {
+        // Use new aggregation endpoint with 5-minute cache
+        if (!append) {
+          const cached = marketCacheRef.current.get('kalshi-aggregate');
+          if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+            console.log('[Markets] Using cached Kalshi aggregate data');
+            setMarkets(cached.data);
+            setLoading(false);
+            return;
+          }
+        }
+
+        result = await supabase.functions.invoke('kalshi-aggregate', {
           body: {}
         });
+        
+        // Cache the aggregate result for 5 minutes
+        if (result.data?.events && !append) {
+          marketCacheRef.current.set('kalshi-aggregate', {
+            data: result.data.events,
+            timestamp: Date.now()
+          });
+        }
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {
           body: { searchTerm, offset: loadOffset }

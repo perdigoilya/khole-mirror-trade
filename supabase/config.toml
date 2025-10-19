@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.kalshi-events]
 verify_jwt = false
 
+[functions.kalshi-aggregate]
+verify_jwt = false
+
 [functions.kalshi-event-detail]
 verify_jwt = false
 
