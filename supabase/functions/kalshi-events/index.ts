@@ -74,11 +74,18 @@ serve(async (req) => {
           .select('*')
           .eq('event_ticker', event.event_ticker)
           .order('volume_24h_dollars', { ascending: false, nullsFirst: false })
-          .limit(5);
+          .limit(50);
 
-        const headlineMarket = markets && markets.length > 0 ? markets[0] : null;
-        const yesPrice = headlineMarket?.yes_price || 50;
-        const noPrice = headlineMarket?.no_price || 50;
+        // Choose headline market by max of 24h volume (fallback to total volume)
+        const headlineMarket = (markets && markets.length > 0)
+          ? markets.reduce((best: any, m: any) => {
+              const v = Number(m.volume_24h_dollars) || Number(m.volume_dollars) || 0;
+              const bv = Number(best?.volume_24h_dollars) || Number(best?.volume_dollars) || 0;
+              return v > bv ? m : best;
+            }, markets[0])
+          : null;
+        const yesPrice = (typeof headlineMarket?.yes_price === 'number') ? headlineMarket!.yes_price : 50;
+        const noPrice = (typeof headlineMarket?.no_price === 'number') ? headlineMarket!.no_price : 50;
 
         return {
           id: event.event_ticker,
@@ -101,8 +108,8 @@ serve(async (req) => {
           markets: markets ? markets.slice(0, 5).map((m: any) => ({
             ticker: m.ticker,
             title: m.title,
-            yesPrice: m.yes_price || 50,
-            volume: m.volume_24h_dollars || m.volume_dollars || 0,
+            yesPrice: (typeof m.yes_price === 'number') ? m.yes_price : 50,
+            volume: Number(m.volume_24h_dollars) || Number(m.volume_dollars) || 0,
           })) : [],
         };
       })
