@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as React from "react";
 import Footer from "@/components/Footer";
-import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { Filter, Star, TrendingUp, TrendingDown, ChevronDown, ChevronRight } from "lucide-react";
 import polymarketLogo from "@/assets/polymarket-logo.png";
 import kalshiLogo from "@/assets/kalshi-logo.png";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +32,6 @@ const Markets = () => {
   const [markets, setMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [offset, setOffset] = useState(0);
   const [expandedMarkets, setExpandedMarkets] = useState<Set<string>>(new Set());
   const { toast } = useToast();
@@ -103,9 +102,9 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Use the kalshi-markets edge function
+        // Kalshi: Fetch individual markets with pagination
         result = await supabase.functions.invoke('kalshi-markets', {
-          body: { searchTerm, offset: loadOffset }
+          body: { includeParlays: false }
         });
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {
@@ -412,32 +411,6 @@ const Markets = () => {
     });
   };
 
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const { error } = await supabase.functions.invoke('kalshi-sync');
-      if (error) throw error;
-      
-      toast({
-        title: "Sync Complete",
-        description: "Kalshi markets have been refreshed",
-      });
-      
-      // Refresh the markets display
-      setMarkets([]);
-      const searchTerm = searchParams.get("search");
-      fetchMarkets(searchTerm, 'kalshi', 0, false);
-    } catch (error: any) {
-      toast({
-        title: "Sync Failed",
-        description: error.message || "Failed to sync markets",
-        variant: "destructive",
-      });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const renderMarketRow = (market: any, index: number, isSubMarket: boolean = false) => {
     let y = typeof market.yesPrice === 'number' ? market.yesPrice : (typeof market.noPrice === 'number' ? 100 - market.noPrice : undefined);
     let n = typeof market.noPrice === 'number' ? market.noPrice : (typeof y === 'number' ? 100 - y : undefined);
@@ -448,9 +421,7 @@ const Markets = () => {
     } else if (typeof n === 'number') {
       y = 100 - n;
     }
-    const outcome = (typeof y === 'number') 
-      ? getOutcomeBadge(y) 
-      : { label: '—', color: 'bg-muted/30 text-muted-foreground border-muted/40' };
+    const outcome = getOutcomeBadge(typeof y === 'number' ? y : 50);
     // Treat 0 as missing data (demo accounts often have no pricing)
     const yesLabel = (typeof y === 'number' && y > 0) ? `${y}¢` : '—';
     const noLabel = (typeof n === 'number' && n > 0 && n < 100) ? `${n}¢` : '—';
@@ -828,20 +799,6 @@ const Markets = () => {
                 Kalshi
               </Button>
             </div>
-
-            {/* Sync Button for Kalshi */}
-            {platform === 'kalshi' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSync}
-                disabled={syncing}
-                className="h-8 gap-2"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Sync'}
-              </Button>
-            )}
 
             <Select value={sortBy} onValueChange={setSortBy}>
               <SelectTrigger className="w-[140px] bg-card/50 border-border">
