@@ -102,9 +102,9 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Fetch events instead of individual markets
-        result = await supabase.functions.invoke('kalshi-events', {
-          body: {}
+        // Kalshi: Fetch single-leg markets for better discoverability
+        result = await supabase.functions.invoke('kalshi-markets', {
+          body: { includeParlays: false }
         });
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {

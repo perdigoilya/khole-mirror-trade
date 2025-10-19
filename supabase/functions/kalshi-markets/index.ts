@@ -238,7 +238,7 @@ serve(async (req) => {
     }) || []);
     
     // Filter out markets with low liquidity only (keep markets even with zero volume)
-    const MIN_LIQUIDITY = 100;
+    const MIN_LIQUIDITY = 0;
     const activeMarkets = normalizedMarkets.filter((m: any) => 
       (m.liquidityRaw || 0) >= MIN_LIQUIDITY
     );
