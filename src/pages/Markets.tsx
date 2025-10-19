@@ -102,9 +102,9 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Fetch events instead of individual markets
-        result = await supabase.functions.invoke('kalshi-events', {
-          body: {}
+        // Kalshi: Fetch individual markets with pagination
+        result = await supabase.functions.invoke('kalshi-markets', {
+          body: { includeParlays: false }
         });
       } else {
         result = await supabase.functions.invoke('polymarket-markets', {
@@ -121,7 +121,7 @@ const Markets = () => {
       }
       
         if (!error && (data?.markets || data?.events)) {
-          let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
+          let filteredMarkets = data.markets || data.events || [];
           console.log(`[Markets] Fetched ${filteredMarkets.length} ${provider} items from backend`);
         
         if (searchTerm) {
@@ -297,8 +297,43 @@ const Markets = () => {
   }, [markets, platform, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
   
   const groupedMarkets = React.useMemo(() => {
-    // For Kalshi, the backend response is already event-grouped. Avoid re-grouping here.
-    if (platform === 'kalshi' || filteredAndSortedMarkets.some((m: any) => Array.isArray(m?.subMarkets) && m.subMarkets.length > 0)) {
+    // For Kalshi markets, group by event_ticker to avoid showing individual yes/no contracts
+    if (platform === 'kalshi') {
+      const eventGroups = new Map<string, any[]>();
+      
+      for (const market of filteredAndSortedMarkets) {
+        const eventKey = market.eventTicker || market.ticker;
+        if (!eventGroups.has(eventKey)) {
+          eventGroups.set(eventKey, []);
+        }
+        eventGroups.get(eventKey)!.push(market);
+      }
+      
+      const result: any[] = [];
+      for (const [eventTicker, markets] of eventGroups) {
+        if (markets.length === 1) {
+          // Single market in event - show as-is
+          result.push(markets[0]);
+        } else {
+          // Multiple markets - group them
+          const main = markets.reduce((a, b) => 
+            ((b.volumeRaw || 0) > (a.volumeRaw || 0) ? b : a), 
+            markets[0]
+          );
+          const sub = markets.filter((m) => m !== main);
+          result.push({
+            ...main,
+            isMultiOutcome: true,
+            subMarkets: sub,
+            marketCount: markets.length
+          });
+        }
+      }
+      return result;
+    }
+    
+    // For already-grouped Kalshi events from kalshi-events endpoint
+    if (filteredAndSortedMarkets.some((m: any) => Array.isArray(m?.subMarkets) && m.subMarkets.length > 0)) {
       return filteredAndSortedMarkets;
     }
 
