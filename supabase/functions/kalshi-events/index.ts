@@ -33,13 +33,23 @@ serve(async (req) => {
     }
 
     if (!events || events.length === 0) {
-      console.log('[kalshi-events] No events in database, triggering sync...');
-      
-      // Trigger sync function if database is empty
-      await supabase.functions.invoke('kalshi-sync');
-      
+      // Double-check if table is truly empty before triggering sync
+      const { count } = await supabase
+        .from('kalshi_events')
+        .select('event_ticker', { count: 'exact', head: true });
+
+      if (!count || count === 0) {
+        console.log('[kalshi-events] No events in database, triggering sync...');
+        await supabase.functions.invoke('kalshi-sync');
+        return new Response(
+          JSON.stringify({ events: [], message: 'Database syncing, please refresh' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Table has data but current filters returned empty
       return new Response(
-        JSON.stringify({ events: [], message: 'Database syncing, please refresh' }),
+        JSON.stringify({ events: [], message: 'No results for current filters' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
