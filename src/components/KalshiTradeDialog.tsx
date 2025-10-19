@@ -126,9 +126,12 @@ export function KalshiTradeDialog({
       const orderStatus = order?.status || '';
       
       if (fillCount === 0 && (orderStatus === 'canceled' || orderStatus === 'cancelled')) {
+        const isSellOrder = side === 'sell';
         toast({
-          title: "Trade Not Filled",
-          description: "There weren't enough contracts available to fill your order. Try using a limit order or reducing the quantity.",
+          title: "Insufficient Market Liquidity",
+          description: isSellOrder 
+            ? "There aren't enough buy orders to match your sell order. Try reducing the quantity or using a limit order with a lower price to increase chances of matching."
+            : "There aren't enough sell orders to match your buy order. Try reducing the quantity or using a limit order with a higher price to increase chances of matching.",
           variant: "destructive",
         });
         onOpenChange(false);
@@ -139,7 +142,7 @@ export function KalshiTradeDialog({
       if (fillCount > 0 && fillCount < count) {
         toast({
           title: "Partially Filled",
-          description: `Only ${fillCount} of ${count} contracts were filled. The rest couldn't be matched.`,
+          description: `Only ${fillCount} of ${count} contracts were filled due to limited liquidity. The rest couldn't be matched.`,
           action: (
             <ToastAction altText="View Portfolio" onClick={() => navigate('/portfolio')}>
               View Portfolio
@@ -168,7 +171,7 @@ export function KalshiTradeDialog({
     } catch (error: any) {
       console.error("Kalshi trade error:", error);
       
-      // Check for insufficient liquidity errors (common for sell orders)
+      // Check for insufficient liquidity errors
       const errorMsg = error.message || "";
       const isLiquidityError = 
         errorMsg.toLowerCase().includes("no matching") ||
@@ -176,10 +179,13 @@ export function KalshiTradeDialog({
         errorMsg.toLowerCase().includes("not enough") ||
         errorMsg.toLowerCase().includes("no orders");
       
-      if (side === "sell" && isLiquidityError) {
+      if (isLiquidityError) {
+        const isSellOrder = side === "sell";
         toast({
           title: "Insufficient Market Liquidity",
-          description: "There aren't enough buy orders to match your sell order size. Try reducing the quantity or using a limit order with a lower price.",
+          description: isSellOrder 
+            ? "There aren't enough buy orders to match your sell order. Try reducing the quantity or using a limit order with a lower price to increase chances of matching."
+            : "There aren't enough sell orders to match your buy order. Try reducing the quantity or using a limit order with a higher price to increase chances of matching.",
           variant: "destructive",
         });
       } else {
