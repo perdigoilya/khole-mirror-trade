@@ -24,8 +24,7 @@ serve(async (req) => {
     const { data: events, error } = await supabase
       .from('kalshi_events')
       .select('*')
-      .gt('total_volume', 0)
-      .order('total_volume', { ascending: false })
+      .order('total_volume', { ascending: false, nullsFirst: false })
       .limit(200);
 
     if (error) {

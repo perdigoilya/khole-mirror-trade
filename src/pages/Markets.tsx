@@ -64,8 +64,9 @@ const Markets = () => {
   
   // Track the current fetch to prevent race conditions
   const currentFetchRef = useRef<{ platform: 'kalshi' | 'polymarket', controller: AbortController } | null>(null);
-  // Retry counter for Kalshi syncing state
+  // Retry counters for syncing state
   const kalshiRetryRef = useRef(0);
+  const polymarketRetryRef = useRef(0);
 
   const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
     // Cancel any existing fetch if switching platforms
@@ -138,6 +139,26 @@ const Markets = () => {
           setTimeout(() => {
             if (currentFetchRef.current?.platform === 'kalshi') {
               fetchMarkets(searchTerm, 'kalshi', 0, false);
+            }
+          }, 2000);
+          return;
+        }
+      }
+      // Special handling: Polymarket backend may still be syncing; auto-retry a few times
+      if (!error && provider === 'polymarket' && (!data?.markets || data.markets.length === 0)) {
+        const syncing = typeof data?.message === 'string' && data.message.toLowerCase().includes('sync');
+        if (syncing && polymarketRetryRef.current < 10) {
+          polymarketRetryRef.current += 1;
+          if (!append) setLoading(true);
+          if (polymarketRetryRef.current === 1) {
+            toast({
+              title: 'Syncing Polymarket markets…',
+              description: 'Fetching the latest markets. This may take a few seconds.',
+            });
+          }
+          setTimeout(() => {
+            if (currentFetchRef.current?.platform === 'polymarket') {
+              fetchMarkets(searchTerm, 'polymarket', loadOffset, append);
             }
           }, 2000);
           return;
@@ -219,9 +240,11 @@ const Markets = () => {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      // Reset Kalshi retry counter when switching to Kalshi
+      // Reset retry counters when switching platform
       if (platform === 'kalshi') {
         kalshiRetryRef.current = 0;
+      } else {
+        polymarketRetryRef.current = 0;
       }
       setOffset(0);
       const searchTerm = searchParams.get("search");
@@ -284,10 +307,6 @@ const Markets = () => {
       const vol = market.volumeRaw || 0;
       return vol >= minVolume && vol <= maxVolume;
     });
-    // For Kalshi, hide zero-volume markets entirely
-    if (platform === 'kalshi') {
-      result = result.filter((market: any) => (market.volumeRaw || 0) > 0);
-    }
     
     // Liquidity filter
     result = result.filter((market: any) => {
