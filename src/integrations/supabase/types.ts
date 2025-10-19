@@ -47,6 +47,105 @@ export type Database = {
         }
         Relationships: []
       }
+      kalshi_events: {
+        Row: {
+          category: string | null
+          created_at: string
+          event_data: Json | null
+          event_ticker: string
+          id: string
+          last_updated: string
+          market_count: number | null
+          subtitle: string | null
+          title: string
+          total_liquidity: number | null
+          total_volume: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          event_data?: Json | null
+          event_ticker: string
+          id: string
+          last_updated?: string
+          market_count?: number | null
+          subtitle?: string | null
+          title: string
+          total_liquidity?: number | null
+          total_volume?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          event_data?: Json | null
+          event_ticker?: string
+          id?: string
+          last_updated?: string
+          market_count?: number | null
+          subtitle?: string | null
+          title?: string
+          total_liquidity?: number | null
+          total_volume?: number | null
+        }
+        Relationships: []
+      }
+      kalshi_markets: {
+        Row: {
+          category: string | null
+          close_time: string | null
+          created_at: string
+          event_ticker: string | null
+          id: string
+          last_updated: string
+          liquidity_dollars: number | null
+          market_data: Json | null
+          no_price: number | null
+          status: string | null
+          subtitle: string | null
+          ticker: string
+          title: string
+          volume_24h_dollars: number | null
+          volume_dollars: number | null
+          yes_price: number | null
+        }
+        Insert: {
+          category?: string | null
+          close_time?: string | null
+          created_at?: string
+          event_ticker?: string | null
+          id: string
+          last_updated?: string
+          liquidity_dollars?: number | null
+          market_data?: Json | null
+          no_price?: number | null
+          status?: string | null
+          subtitle?: string | null
+          ticker: string
+          title: string
+          volume_24h_dollars?: number | null
+          volume_dollars?: number | null
+          yes_price?: number | null
+        }
+        Update: {
+          category?: string | null
+          close_time?: string | null
+          created_at?: string
+          event_ticker?: string | null
+          id?: string
+          last_updated?: string
+          liquidity_dollars?: number | null
+          market_data?: Json | null
+          no_price?: number | null
+          status?: string | null
+          subtitle?: string | null
+          ticker?: string
+          title?: string
+          volume_24h_dollars?: number | null
+          volume_dollars?: number | null
+          yes_price?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

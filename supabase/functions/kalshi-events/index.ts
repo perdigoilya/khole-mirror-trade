@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,163 +12,92 @@ serve(async (req) => {
   }
 
   try {
-    console.log('[PUBLIC] Fetching Kalshi events from public API');
-
-    const limit = 200;
-    const path = `/trade-api/v2/events?status=open&limit=${limit}&with_nested_markets=true`;
+    console.log('[kalshi-events] Reading from database cache');
     
-    const baseUrls = [
-      'https://api.elections.kalshi.com',
-      'https://api.kalshi.com'
-    ];
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    let eventData = null;
-    let lastError = '';
+    // Query events from database
+    // Only get events with volume > 0
+    const { data: events, error } = await supabase
+      .from('kalshi_events')
+      .select('*')
+      .gt('total_volume', 0)
+      .order('total_volume', { ascending: false })
+      .limit(200);
 
-    for (const base of baseUrls) {
-      const url = `${base}${path}`;
-      console.log('[PUBLIC] Trying public endpoint:', url);
-      
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        eventData = await response.json();
-        console.log(`[PUBLIC] Successfully fetched ${eventData.events?.length || 0} events from ${base}`);
-        break;
-      } else {
-        lastError = await response.text();
-        console.log(`[PUBLIC] Failed ${base}:`, response.status, lastError);
-      }
+    if (error) {
+      console.error('[kalshi-events] Database error:', error);
+      throw error;
     }
 
-    if (!eventData) {
-      console.error('[PUBLIC] All Kalshi public API attempts failed:', lastError);
+    if (!events || events.length === 0) {
+      console.log('[kalshi-events] No events in database, triggering sync...');
+      
+      // Trigger sync function if database is empty
+      await supabase.functions.invoke('kalshi-sync');
+      
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch events from Kalshi public API.', details: lastError }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ events: [], message: 'Database syncing, please refresh' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Defer fetching event metadata images until after sorting to avoid heavy parallel requests
-    // We'll enrich only the top N events to reduce rate limits.
+    console.log(`[kalshi-events] Found ${events.length} events in database`);
 
-    // Normalize events
-    const normalizedEvents = (eventData.events || []).map((event: any) => {
-      // Find the most liquid/popular market in this event as the "headline"
-      const markets = event.markets || [];
-      const headlineMarket = markets.length > 0 
-        ? markets.reduce((best: any, current: any) => {
-            const bestVol = (typeof best.volume_24h_dollars === 'string' ? parseFloat(best.volume_24h_dollars) : 0) || best.volume_24h || best.volume || 0;
-            const currVol = (typeof current.volume_24h_dollars === 'string' ? parseFloat(current.volume_24h_dollars) : 0) || current.volume_24h || current.volume || 0;
-            return currVol > bestVol ? current : best;
-          }, markets[0])
-        : null;
+    // For each event, get headline market
+    const eventsWithMarkets = await Promise.all(
+      events.map(async (event: any) => {
+        // Get markets for this event
+        const { data: markets } = await supabase
+          .from('kalshi_markets')
+          .select('*')
+          .eq('event_ticker', event.event_ticker)
+          .order('volume_24h_dollars', { ascending: false, nullsFirst: false })
+          .limit(5);
 
-      // Calculate price from headline market
-      let yesPrice = 50;
-      let noPrice = 50;
-      if (headlineMarket) {
-        const lastPrice = headlineMarket.last_price;
-        if (typeof lastPrice === 'number') {
-          yesPrice = Math.round(lastPrice);
-          noPrice = 100 - yesPrice;
-        }
-      }
+        const headlineMarket = markets && markets.length > 0 ? markets[0] : null;
+        const yesPrice = headlineMarket?.yes_price || 50;
+        const noPrice = headlineMarket?.no_price || 50;
 
-      // Aggregate 24h dollar volume and liquidity across all markets in event
-      const totalDollarVolume24h = markets.reduce((sum: number, m: any) => {
-        const v = typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : 0;
-        return sum + (isNaN(v) ? 0 : v);
-      }, 0);
-      
-      // Fallback: if no 24h dollar volume, try lifetime volume_dollars or contract volume
-      let totalVolume = totalDollarVolume24h;
-      if (totalVolume === 0) {
-        const totalDollarVolume = markets.reduce((sum: number, m: any) => {
-          const v = typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0;
-          return sum + (isNaN(v) ? 0 : v);
-        }, 0);
-        totalVolume = totalDollarVolume;
-      }
-      
-      const totalLiquidity = markets.reduce((sum: number, m: any) => {
-        const liq = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
-        return sum + liq;
-      }, 0);
+        return {
+          id: event.event_ticker,
+          eventTicker: event.event_ticker,
+          title: event.title,
+          subtitle: event.subtitle,
+          description: event.title,
+          image: null,
+          yesPrice,
+          noPrice,
+          volume: event.total_volume > 0 ? `$${Math.round(event.total_volume).toLocaleString('en-US')}` : '$0',
+          liquidity: event.total_liquidity > 0 ? `$${event.total_liquidity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
+          volumeRaw: event.total_volume || 0,
+          liquidityRaw: event.total_liquidity || 0,
+          endDate: headlineMarket?.close_time || new Date().toISOString(),
+          status: 'Active',
+          category: event.category || 'General',
+          provider: 'kalshi' as const,
+          marketCount: event.market_count || 0,
+          markets: markets ? markets.slice(0, 5).map((m: any) => ({
+            ticker: m.ticker,
+            title: m.title,
+            yesPrice: m.yes_price || 50,
+            volume: m.volume_24h_dollars || m.volume_dollars || 0,
+          })) : [],
+        };
+      })
+    );
 
-      const volumeLabel = totalVolume > 0 
-        ? `$${Math.round(totalVolume).toLocaleString('en-US')}` 
-        : '$0';
-
-      return {
-        id: event.event_ticker,
-        eventTicker: event.event_ticker,
-        title: event.title || event.sub_title || event.event_ticker,
-        subtitle: event.sub_title,
-        description: event.title || event.sub_title,
-        image: null,
-        yesPrice,
-        noPrice,
-        volume: volumeLabel,
-        liquidity: totalLiquidity > 0 ? `$${totalLiquidity.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
-        volumeRaw: totalVolume,
-        liquidityRaw: totalLiquidity,
-        endDate: headlineMarket?.close_time || headlineMarket?.expiration_time || new Date().toISOString(),
-        status: 'Active',
-        category: event.category || 'General',
-        provider: 'kalshi' as const,
-        marketCount: markets.length,
-        markets: markets.map((m: any) => ({
-          ticker: m.ticker,
-          title: m.title,
-          yesPrice: m.last_price || 50,
-          volume: (typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : 0) || m.volume_24h || m.volume || 0,
-        })),
-      };
-    });
-
-    // Sort by volume (prefer dollar volume)
-    const sortedEvents = normalizedEvents.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
-
-    // Enrich top N events with metadata images (sequential to avoid rate limits)
-    const fetchEventImage = async (ticker: string): Promise<string | null> => {
-      for (const base of baseUrls) {
-        const metaUrl = `${base}/trade-api/v2/events/${ticker}/metadata`;
-        try {
-          const resp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
-          if (resp.ok) {
-            const md = await resp.json();
-            return md?.image_url || null;
-          }
-        } catch (e) {
-          console.log('[PUBLIC] metadata error', ticker, e);
-        }
-      }
-      return null;
-    };
-
-    const TOP_N = Math.min(40, sortedEvents.length);
-    for (let i = 0; i < TOP_N; i++) {
-      const ticker = sortedEvents[i].eventTicker;
-      const img = await fetchEventImage(ticker);
-      if (img) sortedEvents[i].image = img;
-    }
-
-    console.log(`[PUBLIC] Returning ${sortedEvents.length} events`);
+    console.log(`[kalshi-events] Returning ${eventsWithMarkets.length} events`);
+    
     return new Response(
-      JSON.stringify({ 
-        events: sortedEvents,
-        cursor: eventData.cursor 
-      }),
+      JSON.stringify({ events: eventsWithMarkets }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('[PUBLIC] Events fetch error:', error);
+    console.error('[kalshi-events] Error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
