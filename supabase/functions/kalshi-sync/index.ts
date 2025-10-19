@@ -78,18 +78,27 @@ serve(async (req) => {
       throw new Error('No markets fetched from Kalshi');
     }
 
-    // Filter out parlays
+    // Filter out parlays and multi-condition markets
     const isParlay = (m: any): boolean => {
       const ticker = m.ticker || '';
       const eventTicker = m.event_ticker || '';
       const title = (m.title || '').toString();
       
-      const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
+      // Check for explicit parlay/multi-game keywords
+      const multiFlag = /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(eventTicker);
       if (multiFlag) return true;
       
-      const parlayPattern = /,\s*(and|&)\s*[A-Z]/;
-      const multipleOutcomePattern = /,\s*[A-Z][^,]+,/;
-      return parlayPattern.test(title) || multipleOutcomePattern.test(title);
+      // Check for multiple conditions separated by commas
+      // Examples: "Breece Hall,Carolina,Carolina wins by over 1.5 points"
+      // or "Trevor Lawrence: 200+,Matthew Stafford: 225+"
+      const commaCount = (title.match(/,/g) || []).length;
+      if (commaCount >= 2) return true;
+      
+      // Check for colon patterns indicating player props in parlays
+      const colonCount = (title.match(/:/g) || []).length;
+      if (colonCount >= 2) return true;
+      
+      return false;
     };
 
     const singleLegMarkets = allMarkets.filter(m => !isParlay(m));
@@ -164,10 +173,6 @@ serve(async (req) => {
 
     console.log(`[SYNC] Built ${eventRecords.length} event records`);
 
-    // Filter to only multi-outcome events (more than 1 market)
-    const multiOutcomeEvents = eventRecords.filter(e => e.market_count > 1);
-    console.log(`[SYNC] Filtered to ${multiOutcomeEvents.length} multi-outcome events`);
-
     // Clear old data and insert new data
     const { error: deleteError } = await supabase
       .from('kalshi_events')
@@ -180,8 +185,8 @@ serve(async (req) => {
 
     // Insert in batches of 500
     const batchSize = 500;
-    for (let i = 0; i < multiOutcomeEvents.length; i += batchSize) {
-      const batch = multiOutcomeEvents.slice(i, i + batchSize);
+    for (let i = 0; i < eventRecords.length; i += batchSize) {
+      const batch = eventRecords.slice(i, i + batchSize);
       const { error: insertError } = await supabase
         .from('kalshi_events')
         .insert(batch);
@@ -193,12 +198,12 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[SYNC] Sync complete. Total events stored: ${multiOutcomeEvents.length}`);
+    console.log(`[SYNC] Sync complete. Total events stored: ${eventRecords.length}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        eventsStored: multiOutcomeEvents.length,
+        eventsStored: eventRecords.length,
         marketsProcessed: allMarkets.length,
         timestamp: new Date().toISOString()
       }),
