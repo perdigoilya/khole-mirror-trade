@@ -20,19 +20,18 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Query markets from database
-    // Only get markets with volume > 0 and liquidity >= $100
+    // Get active markets with minimum liquidity, excluding parlays
     const { data: markets, error } = await supabase
       .from('kalshi_markets')
       .select('*')
       .in('status', ['open', 'active'])
-      .or('volume_24h_dollars.gt.0,volume_dollars.gt.0')
       .gte('liquidity_dollars', 100)
       .not('event_ticker', 'ilike', '%SINGLEGAME%')
       .not('event_ticker', 'ilike', '%MVEN%')
       .not('event_ticker', 'ilike', '%PARLAY%')
       .not('event_ticker', 'ilike', '%BUNDLE%')
       .not('event_ticker', 'ilike', '%MULTIGAME%')
-      .order('volume_24h_dollars', { ascending: false, nullsFirst: false })
+      .order('liquidity_dollars', { ascending: false, nullsFirst: false })
       .limit(1000);
 
     if (error) {
