@@ -119,26 +119,30 @@ const Markets = () => {
         if (result.data) {
           result = {
             data: {
-              events: result.data.map((event: any) => ({
-                id: event.id,
-                eventTicker: event.event_ticker,
-                title: event.title,
-                subtitle: event.subtitle,
-                description: event.title,
-                image: null,
-                yesPrice: event.event_data?.headlineMarket?.yesPrice || 50,
-                noPrice: 100 - (event.event_data?.headlineMarket?.yesPrice || 50),
-                volume: event.total_volume > 0 ? `$${Math.round(event.total_volume).toLocaleString('en-US')}` : '$0',
-                liquidity: event.total_liquidity > 0 ? `$${Math.round(event.total_liquidity).toLocaleString('en-US')}` : '$0',
-                volumeRaw: event.total_volume || 0,
-                liquidityRaw: event.total_liquidity || 0,
-                endDate: event.event_data?.headlineMarket?.endDate || new Date().toISOString(),
-                status: 'Active',
-                category: event.category || 'General',
-                provider: 'kalshi' as const,
-                marketCount: event.market_count || 0,
-                markets: event.event_data?.markets || [],
-              }))
+              events: result.data.map((event: any) => {
+                const y = typeof event.event_data?.headlineMarket?.yesPrice === 'number' ? event.event_data.headlineMarket.yesPrice : undefined;
+                const n = typeof y === 'number' ? (100 - y) : undefined;
+                return ({
+                  id: event.id,
+                  eventTicker: event.event_ticker,
+                  title: event.title,
+                  subtitle: event.subtitle,
+                  description: event.title,
+                  image: event.event_data?.image || null,
+                  yesPrice: y,
+                  noPrice: n,
+                  volume: event.total_volume > 0 ? `$${Math.round(event.total_volume).toLocaleString('en-US')}` : '$0',
+                  liquidity: event.total_liquidity > 0 ? `$${Math.round(event.total_liquidity).toLocaleString('en-US')}` : '$0',
+                  volumeRaw: event.total_volume || 0,
+                  liquidityRaw: event.total_liquidity || 0,
+                  endDate: event.event_data?.headlineMarket?.endDate || new Date().toISOString(),
+                  status: 'Active',
+                  category: event.category || 'General',
+                  provider: 'kalshi' as const,
+                  marketCount: event.market_count || 0,
+                  markets: event.event_data?.markets || [],
+                });
+              })
             },
             error: result.error
           };
@@ -484,7 +488,9 @@ const Markets = () => {
     } else if (typeof n === 'number') {
       y = 100 - n;
     }
-    const outcome = getOutcomeBadge(typeof y === 'number' ? y : 50);
+    const outcome = (typeof y === 'number') 
+      ? getOutcomeBadge(y) 
+      : { label: '—', color: 'bg-muted/30 text-muted-foreground border-muted/40' };
     // Treat 0 as missing data (demo accounts often have no pricing)
     const yesLabel = (typeof y === 'number' && y > 0) ? `${y}¢` : '—';
     const noLabel = (typeof n === 'number' && n > 0 && n < 100) ? `${n}¢` : '—';

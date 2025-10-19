@@ -78,30 +78,30 @@ serve(async (req) => {
       throw new Error('No markets fetched from Kalshi');
     }
 
-    // Filter out parlays and multi-condition markets
+    // Filter out parlays, single-game combos, and multi-condition markets
     const isParlay = (m: any): boolean => {
       const ticker = m.ticker || '';
       const eventTicker = m.event_ticker || '';
       const title = (m.title || '').toString();
       
-      // Check for explicit parlay/multi-game keywords
-      const multiFlag = /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(eventTicker);
-      if (multiFlag) return true;
+      // Determine series from ticker prefix (before -S)
+      const series = (eventTicker || ticker).split('-')[0] || '';
       
-      // Check for yes/no prefix pattern - these are multi-condition parlays
-      // Examples: "yes Kyren Williams: 10+,no Los Angeles R wins by over 3.5 points"
-      //           "yes Travis Hunter,yes Over 50.5 points scored"
-      const multiConditionPattern = /^(yes|no)\s+[^,]+,\s*(yes|no)\s+/i;
-      if (multiConditionPattern.test(title)) return true;
+      // Exclude Kalshi Single Game and explicit parlay/bundle series
+      if (/SINGLEGAME/i.test(series)) return true;
+      if (/MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(series)) return true;
+      if (/MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE|EXTENDED/i.test(eventTicker)) return true;
       
-      // Check for multiple player props with colons
-      // Example: "Trevor Lawrence: 200+,Matthew Stafford: 225+"
+      // Explicit multi-condition pattern using yes/no prefixes
+      // e.g., "yes A,yes B" or "yes A,no B"
+      if (/\b(yes|no)\s+[^,]+,\s*(yes|no)\s+/i.test(title)) return true;
+      
+      // Multiple player props pattern: "Name: 100+, Other: 50+"
       const colonCount = (title.match(/:/g) || []).length;
       if (colonCount >= 2) return true;
       
-      // Check for multiple comma-separated conditions with "and"
-      const parlayPattern = /,\s*(and|&)\s*[A-Z]/;
-      if (parlayPattern.test(title)) return true;
+      // Fallback comma-and pattern
+      if (/,\s*(and|\&)\s*[A-Z]/.test(title)) return true;
       
       return false;
     };
@@ -121,10 +121,42 @@ serve(async (req) => {
 
     console.log(`[SYNC] Grouped into ${eventGroups.size} events`);
 
+    // Helpers for pricing and titles
+    const toCents = (num: unknown, dollars: unknown): number | null => {
+      if (typeof num === 'number' && !isNaN(num)) return Math.round(num);
+      if (typeof dollars === 'string') {
+        const f = parseFloat(dollars);
+        if (!isNaN(f)) return Math.round(f * 100);
+      }
+      if (typeof dollars === 'number' && !isNaN(dollars)) return Math.round((dollars as number) * 100);
+      return null;
+    };
+
+    const calcYesPrice = (m: any): number | undefined => {
+      const last = toCents(m.last_price, m.last_price_dollars);
+      const yesAsk = toCents(m.yes_ask, m.yes_ask_dollars);
+      const yesBid = toCents(m.yes_bid, m.yes_bid_dollars);
+      if (last !== null) return last;
+      if (yesAsk !== null && yesBid !== null) return Math.round((yesAsk + yesBid) / 2);
+      if (yesAsk !== null) return yesAsk;
+      if (yesBid !== null) return yesBid;
+      return undefined;
+    };
+
+    const cleanTitle = (rawTitle: string | undefined, sub: string | undefined): string => {
+      const t = (rawTitle || '').toString();
+      if (sub && sub.trim().length > 0) return sub.trim();
+      // Remove leading "yes " or "no "
+      let s = t.replace(/^\s*(yes|no)\s+/i, '');
+      // If comma-separated, take the first part
+      if (s.includes(',')) s = s.split(',')[0];
+      return s.trim() || t;
+    };
+
     // Build event-level records
-    const eventRecords = [];
+    const eventRecords = [] as any[];
     for (const [eventTicker, markets] of eventGroups) {
-      // Find headline market (highest volume)
+      // Find headline market (highest 24h vol, fallback lifetime)
       const headlineMarket = markets.reduce((best, curr) => {
         const bestVol = parseFloat(best.volume_24h_dollars || '0') || parseFloat(best.volume_dollars || '0') || 0;
         const currVol = parseFloat(curr.volume_24h_dollars || '0') || parseFloat(curr.volume_dollars || '0') || 0;
@@ -132,43 +164,37 @@ serve(async (req) => {
       }, markets[0]);
 
       // Aggregate volume and liquidity
-      const totalVolume24h = markets.reduce((sum, m) => {
-        const vol = parseFloat(m.volume_24h_dollars || '0') || 0;
-        return sum + vol;
-      }, 0);
+      const totalVolume24h = markets.reduce((sum, m) => sum + (parseFloat(m.volume_24h_dollars || '0') || 0), 0);
+      const totalVolume = markets.reduce((sum, m) => sum + (parseFloat(m.volume_dollars || '0') || 0), 0);
+      const totalLiquidity = markets.reduce((sum, m) => sum + (parseFloat(m.liquidity_dollars || '0') || 0), 0);
 
-      const totalVolume = markets.reduce((sum, m) => {
-        const vol = parseFloat(m.volume_dollars || '0') || 0;
-        return sum + vol;
-      }, 0);
-
-      const totalLiquidity = markets.reduce((sum, m) => {
-        const liq = parseFloat(m.liquidity_dollars || '0') || 0;
-        return sum + liq;
-      }, 0);
-
-      // Use 24h volume if available, else lifetime volume
       const volumeForSorting = totalVolume24h > 0 ? totalVolume24h : totalVolume;
+
+      const seriesCode = (eventTicker || '').split('-')[0] || '';
+      const imageUrl = seriesCode ? `https://kalshi-public-docs.s3.amazonaws.com/series-images-webp/${seriesCode}.webp` : null;
+
+      const headlineYes = calcYesPrice(headlineMarket);
 
       eventRecords.push({
         id: eventTicker,
         event_ticker: eventTicker,
-        title: headlineMarket.title || eventTicker,
+        title: cleanTitle(headlineMarket.title, headlineMarket.subtitle),
         subtitle: headlineMarket.subtitle || null,
         category: headlineMarket.category || 'General',
         total_volume: volumeForSorting,
         total_liquidity: totalLiquidity,
         market_count: markets.length,
         event_data: {
+          image: imageUrl,
           headlineMarket: {
             ticker: headlineMarket.ticker,
-            yesPrice: headlineMarket.last_price || 50,
+            yesPrice: typeof headlineYes === 'number' ? headlineYes : undefined,
             endDate: headlineMarket.close_time || headlineMarket.expiration_time,
           },
           markets: markets.map(m => ({
             ticker: m.ticker,
-            title: m.title,
-            yesPrice: m.last_price || 50,
+            title: cleanTitle(m.title, m.subtitle),
+            yesPrice: calcYesPrice(m),
             volume24h: parseFloat(m.volume_24h_dollars || '0') || 0,
           }))
         },
