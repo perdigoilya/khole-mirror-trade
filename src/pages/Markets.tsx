@@ -254,10 +254,6 @@ const Markets = () => {
       const vol = market.volumeRaw || 0;
       return vol >= minVolume && vol <= maxVolume;
     });
-    // For Kalshi, hide zero-volume markets entirely
-    if (platform === 'kalshi') {
-      result = result.filter((market: any) => (market.volumeRaw || 0) > 0);
-    }
     
     // Liquidity filter
     result = result.filter((market: any) => {
