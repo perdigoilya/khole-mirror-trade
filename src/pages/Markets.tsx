@@ -64,6 +64,8 @@ const Markets = () => {
   
   // Track the current fetch to prevent race conditions
   const currentFetchRef = useRef<{ platform: 'kalshi' | 'polymarket', controller: AbortController } | null>(null);
+  // Retry counter for Kalshi syncing state
+  const kalshiRetryRef = useRef(0);
 
   const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
     // Cancel any existing fetch if switching platforms
@@ -120,6 +122,28 @@ const Markets = () => {
         return;
       }
       
+      // Special handling: Kalshi backend may still be syncing; auto-retry a few times
+      if (!error && provider === 'kalshi' && (!data?.events || data.events.length === 0)) {
+        const syncing = typeof data?.message === 'string' && data.message.toLowerCase().includes('sync');
+        if (syncing && kalshiRetryRef.current < 10) {
+          kalshiRetryRef.current += 1;
+          if (!append) setLoading(true);
+          // Show one-time info toast
+          if (kalshiRetryRef.current === 1) {
+            toast({
+              title: 'Syncing Kalshi markets…',
+              description: 'Fetching the latest markets. This may take a few seconds.',
+            });
+          }
+          setTimeout(() => {
+            if (currentFetchRef.current?.platform === 'kalshi') {
+              fetchMarkets(searchTerm, 'kalshi', 0, false);
+            }
+          }, 2000);
+          return;
+        }
+      }
+      
       if (!error && (data?.markets || data?.events)) {
         let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
         
@@ -143,6 +167,8 @@ const Markets = () => {
             setMarkets(prev => [...prev, ...filteredMarkets]);
           } else {
             setMarkets(filteredMarkets);
+            // Reset retry counter on success
+            if (provider === 'kalshi') kalshiRetryRef.current = 0;
           }
         }
       } else {
@@ -193,6 +219,10 @@ const Markets = () => {
     }
 
     debounceTimerRef.current = setTimeout(() => {
+      // Reset Kalshi retry counter when switching to Kalshi
+      if (platform === 'kalshi') {
+        kalshiRetryRef.current = 0;
+      }
       setOffset(0);
       const searchTerm = searchParams.get("search");
       
