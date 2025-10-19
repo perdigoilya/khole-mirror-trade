@@ -105,8 +105,8 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        // Kalshi: Fetch events instead of individual markets
-        result = await supabase.functions.invoke('kalshi-events', {
+        // Kalshi: Fetch individual markets (not events)
+        result = await supabase.functions.invoke('kalshi-markets', {
           body: {}
         });
       } else {
@@ -166,7 +166,7 @@ const Markets = () => {
       }
       
       if (!error && (data?.markets || data?.events)) {
-        let filteredMarkets = provider === 'kalshi' ? (data.events || []) : (data.markets || []);
+        let filteredMarkets = (data.markets || []);
         
         if (searchTerm) {
           filteredMarkets = filteredMarkets.filter((market: any) =>
@@ -316,7 +316,7 @@ const Markets = () => {
     
     // Price filter
     result = result.filter((market: any) => {
-      const price = market.yesPrice || 50;
+      const price = (market.yesPrice ?? 50);
       return price >= minPrice && price <= maxPrice;
     });
     
