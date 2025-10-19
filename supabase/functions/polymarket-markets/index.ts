@@ -25,6 +25,7 @@ serve(async (req) => {
     let query = supabase
       .from('polymarket_markets')
       .select('*')
+      .eq('status', 'active')
       .order('volume', { ascending: false })
       .range(offset, offset + 99);
 
@@ -41,23 +42,13 @@ serve(async (req) => {
     }
 
     if (!markets || markets.length === 0) {
-      // Double-check if table truly empty before triggering sync
-      const { count } = await supabase
-        .from('polymarket_markets')
-        .select('id', { count: 'exact', head: true });
-
-      if (!count || count === 0) {
-        console.log('[polymarket-markets] No markets in database, triggering sync...');
-        await supabase.functions.invoke('polymarket-sync');
-        return new Response(
-          JSON.stringify({ markets: [], message: 'Database syncing, please refresh' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Table has data but this page/search returned empty
+      console.log('[polymarket-markets] No markets in database, triggering sync...');
+      
+      // Trigger sync function if database is empty
+      await supabase.functions.invoke('polymarket-sync');
+      
       return new Response(
-        JSON.stringify({ markets: [], message: 'No results for current filters' }),
+        JSON.stringify({ markets: [], message: 'Database syncing, please refresh' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
