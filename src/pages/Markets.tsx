@@ -142,7 +142,7 @@ const Markets = () => {
                 title: m.title || ev.title,
                 eventTicker: m.eventTicker || evTicker,
                 provider: 'kalshi',
-                image: m.image || evImage,
+                image: m.image || evImage || getCategoryImage(m.category || evCategory),
                 category: m.category || evCategory,
                 volumeRaw: m.volumeRaw ?? m.volume ?? 0,
                 liquidityRaw: m.liquidityRaw ?? m.liquidity ?? 0,
@@ -337,18 +337,21 @@ const Markets = () => {
     return result;
   }, [markets, platform, timeFilter, categoryFilter, minVolume, maxVolume, minLiquidity, maxLiquidity, minPrice, maxPrice, statusFilter, sortBy]);
   
-  // Category-based image mapping for Kalshi
+  // Category-based image mapping for Kalshi - ensures all markets have images
   const getCategoryImage = (category: string): string => {
     const categoryMap: Record<string, string> = {
       'politics': kalshiPoliticsImage,
       'sports': kalshiSportsImage,
       'economics': kalshiEconomicsImage,
       'financials': kalshiEconomicsImage,
+      'finance': kalshiEconomicsImage,
       'climate and weather': kalshiWeatherImage,
       'weather': kalshiWeatherImage,
       'science and technology': kalshiGeneralImage,
+      'technology': kalshiGeneralImage,
       'world': kalshiGeneralImage,
       'health': kalshiGeneralImage,
+      'entertainment': kalshiGeneralImage,
     };
     return categoryMap[category?.toLowerCase()] || kalshiGeneralImage;
   };

@@ -201,12 +201,20 @@ serve(async (req) => {
       return null;
     };
 
-    const TOP_N = Math.min(40, sortedEvents.length);
+    // Enrich top 150 events with images (covers most visible markets)
+    const TOP_N = Math.min(150, sortedEvents.length);
+    console.log(`[PUBLIC] Fetching images for top ${TOP_N} events...`);
+    
     for (let i = 0; i < TOP_N; i++) {
       const ticker = sortedEvents[i].eventTicker;
       const img = await fetchEventImage(ticker);
-      if (img) sortedEvents[i].image = img;
+      if (img) {
+        sortedEvents[i].image = img;
+        if (i < 10) console.log(`[PUBLIC] Event ${i+1}: ${ticker} - image: ${img?.substring(0, 50)}...`);
+      }
     }
+    
+    console.log(`[PUBLIC] Successfully enriched ${sortedEvents.filter((e: any) => e.image).length} events with images`);
 
     console.log(`[PUBLIC] Returning ${sortedEvents.length} events`);
     return new Response(
