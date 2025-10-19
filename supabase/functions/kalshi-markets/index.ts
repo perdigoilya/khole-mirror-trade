@@ -24,7 +24,7 @@ serve(async (req) => {
     const { data: markets, error } = await supabase
       .from('kalshi_markets')
       .select('*')
-      .eq('status', 'open')
+      .in('status', ['open', 'active'])
       .or('volume_24h_dollars.gt.0,volume_dollars.gt.0')
       .gte('liquidity_dollars', 100)
       .not('event_ticker', 'ilike', '%SINGLEGAME%')
