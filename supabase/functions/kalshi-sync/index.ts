@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('[kalshi-sync] Starting sync of Kalshi events and markets...');
+    console.log('[kalshi-sync] Starting sync of Kalshi markets...');
     
     // Create Supabase client with service role for database writes
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -24,76 +24,15 @@ serve(async (req) => {
       'https://api.kalshi.com'
     ];
 
-    let allEvents: any[] = [];
     let allMarkets: any[] = [];
     let cursor: string | null = null;
-    const MAX_REQUESTS = 50;
+    const MAX_REQUESTS = 50; // Fetch up to 50 pages (50,000 markets max)
     let requestCount = 0;
 
-    // Step 1: Fetch events from Kalshi API
+    // Fetch all markets from Kalshi API with pagination
     for (const base of baseUrls) {
       try {
-        console.log(`[kalshi-sync] Fetching events from ${base}...`);
-        cursor = null;
-        requestCount = 0;
-        
-        do {
-          const limit = 1000;
-          const path: string = `/trade-api/v2/events?status=open&limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`;
-          const url: string = `${base}${path}`;
-          
-          const response: Response = await fetch(url, {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-            },
-            signal: AbortSignal.timeout(15000),
-          });
-
-          if (!response.ok) {
-            console.error(`[kalshi-sync] Failed to fetch events from ${base}: ${response.status}`);
-            break;
-          }
-
-          const data: any = await response.json();
-          const events = data.events || [];
-          allEvents = allEvents.concat(events);
-          cursor = data.cursor || null;
-          requestCount++;
-
-          console.log(`[kalshi-sync] Fetched ${events.length} events (total: ${allEvents.length})`);
-
-          if (!cursor || requestCount >= MAX_REQUESTS) {
-            cursor = null;
-            break;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 100));
-        } while (cursor);
-
-        // Continue to next base to merge more events
-      } catch (error) {
-        console.error(`[kalshi-sync] Error fetching events from ${base}:`, error);
-      }
-    }
-
-    // Deduplicate events by event_ticker
-    const seenEvents = new Set<string>();
-    allEvents = allEvents.filter((e) => {
-      const key = e?.event_ticker;
-      if (!key || seenEvents.has(key)) return false;
-      seenEvents.add(key);
-      return true;
-    });
-
-    console.log(`[kalshi-sync] Total unique events: ${allEvents.length}`);
-
-    // Step 2: Fetch all markets
-    for (const base of baseUrls) {
-      try {
-        console.log(`[kalshi-sync] Fetching markets from ${base}...`);
-        cursor = null;
-        requestCount = 0;
+        console.log(`[kalshi-sync] Fetching from ${base}...`);
         
         do {
           const limit = 1000;
@@ -109,7 +48,7 @@ serve(async (req) => {
           });
 
           if (!response.ok) {
-            console.error(`[kalshi-sync] Failed to fetch markets from ${base}: ${response.status}`);
+            console.error(`[kalshi-sync] Failed to fetch from ${base}: ${response.status}`);
             break;
           }
 
@@ -121,46 +60,45 @@ serve(async (req) => {
 
           console.log(`[kalshi-sync] Fetched ${markets.length} markets (total: ${allMarkets.length})`);
 
+          // Break if no more pages or reached max requests
           if (!cursor || requestCount >= MAX_REQUESTS) {
             cursor = null;
             break;
           }
 
+          // Small delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 100));
         } while (cursor);
 
-        // Continue to next base to merge more markets
+        // If we successfully fetched markets, break from baseUrls loop
+        if (allMarkets.length > 0) {
+          break;
+        }
       } catch (error) {
-        console.error(`[kalshi-sync] Error fetching markets from ${base}:`, error);
+        console.error(`[kalshi-sync] Error fetching from ${base}:`, error);
       }
     }
 
-    // Deduplicate markets by ticker
-    const seenMarkets = new Set<string>();
-    allMarkets = allMarkets.filter((m) => {
-      const key = m?.ticker;
-      if (!key || seenMarkets.has(key)) return false;
-      seenMarkets.add(key);
-      return true;
-    });
+    if (allMarkets.length === 0) {
+      throw new Error('No markets fetched from Kalshi API');
+    }
 
-    console.log(`[kalshi-sync] Total unique markets: ${allMarkets.length}`);
+    console.log(`[kalshi-sync] Total markets fetched: ${allMarkets.length}`);
 
-    // Filter markets to exclude parlays
+    // Filter to only single-leg markets (no parlays)
     const isParlay = (m: any): boolean => {
       const ticker: string = m.ticker || '';
       const eventTicker: string = m.event_ticker || '';
       const title: string = (m.title || '').toString();
-      // Flag parlays: explicit keywords or comma-separated multi-props
-      const multiFlag = /MULTIGAME|PARLAY|BUNDLE|MVEN/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE|MVEN/i.test(eventTicker);
       const hasComma = title.includes(',');
-      return multiFlag || hasComma;
+      const multiFlag = /MULTIGAME|PARLAY|BUNDLE/i.test(ticker) || /MULTIGAME|PARLAY|BUNDLE/i.test(eventTicker);
+      return hasComma || multiFlag;
     };
 
     const singleLegMarkets = allMarkets.filter(m => !isParlay(m));
     console.log(`[kalshi-sync] Filtered to ${singleLegMarkets.length} single-leg markets`);
 
-    // Step 3: Prepare market records for database
+    // Prepare market records for database
     const marketRecords = singleLegMarkets.map((market: any) => {
       const vol24h = market.volume_24h_dollars ? parseFloat(market.volume_24h_dollars) : null;
       const vol = market.volume_dollars ? parseFloat(market.volume_dollars) : null;
@@ -185,7 +123,7 @@ serve(async (req) => {
       };
     });
 
-    // Batch upsert markets
+    // Batch insert/upsert markets
     console.log(`[kalshi-sync] Upserting ${marketRecords.length} markets to database...`);
     
     const BATCH_SIZE = 1000;
@@ -196,52 +134,63 @@ serve(async (req) => {
         .upsert(batch, { onConflict: 'ticker' });
 
       if (error) {
-        console.error(`[kalshi-sync] Error upserting market batch ${i / BATCH_SIZE + 1}:`, error);
+        console.error(`[kalshi-sync] Error upserting batch ${i / BATCH_SIZE + 1}:`, error);
         throw error;
       }
       
-      console.log(`[kalshi-sync] Upserted market batch ${i / BATCH_SIZE + 1} (${batch.length} markets)`);
+      console.log(`[kalshi-sync] Upserted batch ${i / BATCH_SIZE + 1} (${batch.length} markets)`);
     }
 
-    // Step 4: Build event records from fetched events + aggregate market data
-    const eventRecordsMap = new Map<string, any>();
-
-    for (const event of allEvents) {
-      const eventTicker = event.event_ticker;
-      if (!eventTicker) continue;
-
-      eventRecordsMap.set(eventTicker, {
-        id: eventTicker,
-        event_ticker: eventTicker,
-        title: event.title || eventTicker,
-        subtitle: event.sub_title || event.subtitle || null,
-        category: event.category || 'General',
-        total_volume: 0,
-        total_liquidity: 0,
-        market_count: 0,
-        event_data: event,
-        last_updated: new Date().toISOString(),
-      });
-    }
-
-    // Aggregate volume/liquidity from markets per event
+    // Aggregate events from markets
+    const eventsMap = new Map<string, any>();
+    
     for (const market of singleLegMarkets) {
       const eventTicker = market.event_ticker;
-      if (!eventTicker || !eventRecordsMap.has(eventTicker)) continue;
+      if (!eventTicker) continue;
 
-      const eventRecord = eventRecordsMap.get(eventTicker)!;
-      const vol24h = Number(market.volume_24h_dollars) || 0;
-      const vol = Number(market.volume_dollars) || 0;
-      const liq = Number(market.liquidity_dollars) || 0;
+      if (!eventsMap.has(eventTicker)) {
+        eventsMap.set(eventTicker, {
+          markets: [],
+          title: market.title?.split('?')[0] || eventTicker,
+          subtitle: market.subtitle || null,
+          category: market.category || 'General',
+        });
+      }
 
-      eventRecord.total_volume += (vol24h > 0 ? vol24h : vol);
-      eventRecord.total_liquidity += liq;
-      eventRecord.market_count += 1;
+      eventsMap.get(eventTicker)!.markets.push(market);
     }
 
-    const eventRecords = Array.from(eventRecordsMap.values());
+    // Prepare event records
+    const eventRecords = Array.from(eventsMap.entries()).map(([eventTicker, eventData]) => {
+      const markets = eventData.markets;
+      const totalVol24h = markets.reduce((sum: number, m: any) => {
+        const v = typeof m.volume_24h_dollars === 'string' ? parseFloat(m.volume_24h_dollars) : 0;
+        return sum + (isNaN(v) ? 0 : v);
+      }, 0);
+      const totalVol = markets.reduce((sum: number, m: any) => {
+        const v = typeof m.volume_dollars === 'string' ? parseFloat(m.volume_dollars) : 0;
+        return sum + (isNaN(v) ? 0 : v);
+      }, 0);
+      const totalLiq = markets.reduce((sum: number, m: any) => {
+        const liq = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
+        return sum + liq;
+      }, 0);
 
-    // Batch upsert events
+      return {
+        id: eventTicker,
+        event_ticker: eventTicker,
+        title: eventData.title,
+        subtitle: eventData.subtitle,
+        category: eventData.category,
+        total_volume: totalVol24h > 0 ? totalVol24h : totalVol,
+        total_liquidity: totalLiq,
+        market_count: markets.length,
+        event_data: { markets: markets.map((m: any) => ({ ticker: m.ticker, title: m.title })) },
+        last_updated: new Date().toISOString(),
+      };
+    });
+
+    // Batch insert/upsert events
     console.log(`[kalshi-sync] Upserting ${eventRecords.length} events to database...`);
     
     for (let i = 0; i < eventRecords.length; i += BATCH_SIZE) {
@@ -254,8 +203,6 @@ serve(async (req) => {
         console.error(`[kalshi-sync] Error upserting event batch:`, error);
         throw error;
       }
-      
-      console.log(`[kalshi-sync] Upserted event batch ${i / BATCH_SIZE + 1} (${batch.length} events)`);
     }
 
     console.log(`[kalshi-sync] Sync complete! Markets: ${marketRecords.length}, Events: ${eventRecords.length}`);

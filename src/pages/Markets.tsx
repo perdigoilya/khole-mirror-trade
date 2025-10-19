@@ -124,10 +124,9 @@ const Markets = () => {
       }
       
       // Special handling: Kalshi backend may still be syncing; auto-retry a few times
-      if (!error && provider === 'kalshi') {
-        const kalshiEmpty = (!data?.markets && !data?.events) || (((data?.markets?.length ?? 0) === 0) && ((data?.events?.length ?? 0) === 0));
+      if (!error && provider === 'kalshi' && (!data?.events || data.events.length === 0)) {
         const syncing = typeof data?.message === 'string' && data.message.toLowerCase().includes('sync');
-        if ((kalshiEmpty && syncing) && kalshiRetryRef.current < 10) {
+        if (syncing && kalshiRetryRef.current < 10) {
           kalshiRetryRef.current += 1;
           if (!append) setLoading(true);
           // Show one-time info toast
@@ -186,14 +185,11 @@ const Markets = () => {
         // Double-check before updating state
         if (append || (currentFetchRef.current?.platform === provider)) {
           if (append) {
-            console.debug(`[markets] Appending ${filteredMarkets.length} ${provider} items (offset ${loadOffset})`);
             setMarkets(prev => [...prev, ...filteredMarkets]);
           } else {
-            console.debug(`[markets] Loaded ${filteredMarkets.length} ${provider} items`);
             setMarkets(filteredMarkets);
             // Reset retry counter on success
             if (provider === 'kalshi') kalshiRetryRef.current = 0;
-            if (provider === 'polymarket') polymarketRetryRef.current = 0;
           }
         }
       } else {

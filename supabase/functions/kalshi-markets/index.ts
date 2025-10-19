@@ -19,15 +19,16 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Read optional pagination from request
-    const { offset = 0 } = await req.json().catch(() => ({ offset: 0 }));
-
-    // Query markets from database (broad pool; UI applies filters)
+    // Query markets from database
+    // Only get markets with volume > 0 and liquidity >= $100
     const { data: markets, error } = await supabase
       .from('kalshi_markets')
       .select('*')
+      .eq('status', 'open')
+      .or('volume_24h_dollars.gt.0,volume_dollars.gt.0')
+      .gte('liquidity_dollars', 100)
       .order('volume_24h_dollars', { ascending: false, nullsFirst: false })
-      .range(offset, offset + 199);
+      .limit(1000);
 
     if (error) {
       console.error('[kalshi-markets] Database error:', error);
@@ -35,23 +36,13 @@ serve(async (req) => {
     }
 
     if (!markets || markets.length === 0) {
-      // Double-check if table truly empty before triggering sync
-      const { count } = await supabase
-        .from('kalshi_markets')
-        .select('ticker', { count: 'exact', head: true });
-
-      if (!count || count === 0) {
-        console.log('[kalshi-markets] No markets in database, triggering sync...');
-        await supabase.functions.invoke('kalshi-sync');
-        return new Response(
-          JSON.stringify({ markets: [], message: 'Database syncing, please refresh' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Table has data but this page/search returned empty
+      console.log('[kalshi-markets] No markets in database, triggering sync...');
+      
+      // Trigger sync function if database is empty
+      await supabase.functions.invoke('kalshi-sync');
+      
       return new Response(
-        JSON.stringify({ markets: [], message: 'No results for current filters' }),
+        JSON.stringify({ markets: [], message: 'Database syncing, please refresh' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -73,8 +64,8 @@ serve(async (req) => {
         subtitle: market.subtitle,
         description: market.subtitle || market.title,
         image: undefined,
-        yesPrice: (typeof market.yes_price === 'number') ? market.yes_price : 50,
-        noPrice: (typeof market.no_price === 'number') ? market.no_price : 50,
+        yesPrice: market.yes_price || 50,
+        noPrice: market.no_price || 50,
         volume: volumeDollars > 0 ? `$${Math.round(volumeDollars).toLocaleString('en-US')}` : '$0',
         liquidity: liq > 0 ? `$${liq.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
         volumeRaw: volumeDollars,
