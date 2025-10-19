@@ -71,24 +71,35 @@ serve(async (req) => {
     let noAsk: number | null = null;
     let noBid: number | null = null;
 
+    const bestBid = (levels?: unknown[], levelsDollars?: unknown[]): number | null => {
+      let best: number | null = null;
+      if (Array.isArray(levels)) {
+        for (const lvl of levels as any[]) {
+          const price = typeof lvl?.[0] === 'number' ? lvl[0] : null;
+          if (price !== null) best = best === null ? price : Math.max(best, price);
+        }
+      }
+      if (best === null && Array.isArray(levelsDollars)) {
+        for (const lvl of levelsDollars as any[]) {
+          const str = typeof lvl?.[0] === 'string' ? lvl[0] : null;
+          if (str) {
+            const f = parseFloat(str);
+            if (!isNaN(f)) {
+              const cents = Math.round(f * 100);
+              best = best === null ? cents : Math.max(best, cents);
+            }
+          }
+        }
+      }
+      return best;
+    };
+
     if (orderbookData?.orderbook) {
       const ob = orderbookData.orderbook;
-      // Best YES bid is the highest price in the YES array (last element)
-      if (ob.yes && ob.yes.length > 0) {
-        yesBid = ob.yes[ob.yes.length - 1][0];
-      }
-      // Best NO bid is the highest price in the NO array (last element)
-      if (ob.no && ob.no.length > 0) {
-        noBid = ob.no[ob.no.length - 1][0];
-      }
-      // YES ask = 100 - NO bid (because buying YES at X = selling NO at 100-X)
-      if (noBid !== null) {
-        yesAsk = 100 - noBid;
-      }
-      // NO ask = 100 - YES bid
-      if (yesBid !== null) {
-        noAsk = 100 - yesBid;
-      }
+      yesBid = bestBid(ob.yes, ob.yes_dollars);
+      noBid = bestBid(ob.no, ob.no_dollars);
+      if (typeof noBid === 'number') yesAsk = Math.max(0, Math.min(100, 100 - noBid));
+      if (typeof yesBid === 'number') noAsk = Math.max(0, Math.min(100, 100 - yesBid));
     }
 
     // Fallback to market data if orderbook is empty

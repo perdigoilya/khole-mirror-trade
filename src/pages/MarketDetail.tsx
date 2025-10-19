@@ -265,7 +265,8 @@ const MarketDetail = () => {
     
     // Check cache
     const cached = marketDetailCacheRef.current.get(marketId);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    const isKalshiById = marketId.includes('-');
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION && !isKalshiById) {
       setMarket(cached.market);
       return;
     }
