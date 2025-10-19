@@ -31,23 +31,23 @@ serve(async (req) => {
   try {
     console.log('[AGGREGATE] Starting multi-source Kalshi event aggregation');
 
-    // Source 1: Deep pagination (30 pages)
+    // Source 1: Deep pagination (12 pages for speed)
     const fetchDeepPagination = async (): Promise<any[]> => {
-      console.log('[AGGREGATE] Source 1: Deep pagination (30 pages)');
+      console.log('[AGGREGATE] Source 1: Deep pagination (12 pages)');
       const limit = 200;
-      const maxPages = 30;
+      const maxPages = 12; // Reduced from 30 to 12 for faster response
       let allEvents: any[] = [];
       let cursor: string | undefined = undefined;
 
       for (let page = 0; page < maxPages; page++) {
-        const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-        const path = `/trade-api/v2/events?status=open&limit=${limit}&with_nested_markets=true${cursorParam}`;
+        const cursorParam: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+        const path: string = `/trade-api/v2/events?status=open&limit=${limit}&with_nested_markets=true${cursorParam}`;
         
         let eventData = null;
         for (const base of BASE_URLS) {
-          const url = `${base}${path}`;
+          const url: string = `${base}${path}`;
           try {
-            const response = await fetch(url, {
+            const response: Response = await fetch(url, {
               headers: { 'Accept': 'application/json' },
               signal: AbortSignal.timeout(15000),
             });
@@ -73,83 +73,15 @@ serve(async (req) => {
       return allEvents;
     };
 
-    // Source 2: Series-targeted fetching
+    // Source 2: Skip series-targeted (not working, returns 0 events)
     const fetchSeriesTargeted = async (): Promise<any[]> => {
-      console.log('[AGGREGATE] Source 2: Series-targeted fetching');
-      const allEvents: any[] = [];
-      
-      for (const series of HIGH_VOLUME_SERIES) {
-        const path = `/trade-api/v2/events?status=open&limit=200&with_nested_markets=true&series_ticker=${series}`;
-        
-        for (const base of BASE_URLS) {
-          const url = `${base}${path}`;
-          try {
-            const response = await fetch(url, {
-              headers: { 'Accept': 'application/json' },
-              signal: AbortSignal.timeout(10000),
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              if (data.events) {
-                allEvents.push(...data.events);
-                console.log(`[AGGREGATE] Series ${series}: ${data.events.length} events`);
-              }
-              break;
-            }
-          } catch (e) {
-            console.error(`[AGGREGATE] Series ${series} error:`, e);
-          }
-        }
-      }
-
-      console.log(`[AGGREGATE] Series-targeted fetched ${allEvents.length} events`);
-      return allEvents;
+      console.log('[AGGREGATE] Source 2: Skipping series-targeted (returns 0 results)');
+      return [];
     };
 
-    // Source 3: Markets grouping
+    // Source 3: Skip markets grouping (adds time, deep pagination is enough)
     const fetchAndGroupMarkets = async (): Promise<any[]> => {
-      console.log('[AGGREGATE] Source 3: Markets grouping');
-      const path = `/trade-api/v2/markets?status=open&limit=1000`;
-      
-      for (const base of BASE_URLS) {
-        const url = `${base}${path}`;
-        try {
-          const response = await fetch(url, {
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(15000),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.markets) {
-              // Group markets by event_ticker
-              const eventMap = new Map<string, any>();
-              
-              for (const market of data.markets) {
-                const eventTicker = market.event_ticker;
-                if (!eventMap.has(eventTicker)) {
-                  eventMap.set(eventTicker, {
-                    event_ticker: eventTicker,
-                    title: market.title?.split(',')[0] || eventTicker,
-                    category: market.category || 'General',
-                    markets: [],
-                  });
-                }
-                
-                eventMap.get(eventTicker).markets.push(market);
-              }
-              
-              const groupedEvents = Array.from(eventMap.values());
-              console.log(`[AGGREGATE] Markets grouping created ${groupedEvents.length} events`);
-              return groupedEvents;
-            }
-          }
-        } catch (e) {
-          console.error(`[AGGREGATE] Markets grouping error:`, e);
-        }
-      }
-
+      console.log('[AGGREGATE] Source 3: Skipping markets grouping (use deep pagination only)');
       return [];
     };
 
@@ -283,12 +215,15 @@ serve(async (req) => {
       source: e._source,
     })));
 
-    // Enrich top 50 events with images
+    // Enrich top 30 events with images (reduced for speed)
     const fetchEventImage = async (ticker: string): Promise<string | null> => {
       for (const base of BASE_URLS) {
         const metaUrl = `${base}/trade-api/v2/events/${ticker}/metadata`;
         try {
-          const resp = await fetch(metaUrl, { headers: { 'Accept': 'application/json' } });
+          const resp = await fetch(metaUrl, { 
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(3000) // 3 second timeout per image
+          });
           if (resp.ok) {
             const md = await resp.json();
             return md?.image_url || null;
@@ -300,7 +235,7 @@ serve(async (req) => {
       return null;
     };
 
-    const TOP_N = Math.min(50, sortedEvents.length);
+    const TOP_N = Math.min(30, sortedEvents.length);
     for (let i = 0; i < TOP_N; i++) {
       const ticker = sortedEvents[i].eventTicker;
       const img = await fetchEventImage(ticker);
