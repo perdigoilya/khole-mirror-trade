@@ -27,12 +27,20 @@ serve(async (req) => {
 
     // Fetch market detail
     let marketData: any = null;
+    let orderbookData: any = null;
     let lastError = '';
     for (const base of baseUrls) {
       const url = `${base}/trade-api/v2/markets/${ticker}`;
       const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (resp.ok) {
         marketData = await resp.json();
+        
+        // Fetch real-time orderbook
+        const obUrl = `${base}/trade-api/v2/markets/${ticker}/orderbook`;
+        const obResp = await fetch(obUrl, { headers: { 'Accept': 'application/json' } });
+        if (obResp.ok) {
+          orderbookData = await obResp.json();
+        }
         break;
       } else {
         lastError = await resp.text();
@@ -57,12 +65,40 @@ serve(async (req) => {
       return null;
     };
 
-    // Price derivation - prioritize current orderbook data over last trade
-    const yesAsk = toCents(m.yes_ask, m.yes_ask_dollars);
-    const yesBid = toCents(m.yes_bid, m.yes_bid_dollars);
-    const lastPrice = toCents(m.last_price, m.last_price_dollars);
+    // Get real-time prices from orderbook
+    let yesAsk: number | null = null;
+    let yesBid: number | null = null;
+    let noAsk: number | null = null;
+    let noBid: number | null = null;
 
-    // Use mid-market price from current orderbook if available
+    if (orderbookData?.orderbook) {
+      const ob = orderbookData.orderbook;
+      // Best YES bid is the highest price in the YES array (last element)
+      if (ob.yes && ob.yes.length > 0) {
+        yesBid = ob.yes[ob.yes.length - 1][0];
+      }
+      // Best NO bid is the highest price in the NO array (last element)
+      if (ob.no && ob.no.length > 0) {
+        noBid = ob.no[ob.no.length - 1][0];
+      }
+      // YES ask = 100 - NO bid (because buying YES at X = selling NO at 100-X)
+      if (noBid !== null) {
+        yesAsk = 100 - noBid;
+      }
+      // NO ask = 100 - YES bid
+      if (yesBid !== null) {
+        noAsk = 100 - yesBid;
+      }
+    }
+
+    // Fallback to market data if orderbook is empty
+    if (yesAsk === null) yesAsk = toCents(m.yes_ask, m.yes_ask_dollars);
+    if (yesBid === null) yesBid = toCents(m.yes_bid, m.yes_bid_dollars);
+    if (noAsk === null) noAsk = toCents((m as any).no_ask, (m as any).no_ask_dollars) ?? (yesBid !== null ? 100 - yesBid : null);
+    if (noBid === null) noBid = toCents((m as any).no_bid, (m as any).no_bid_dollars) ?? (yesAsk !== null ? 100 - yesAsk : null);
+
+    // Calculate mid-market price for display
+    const lastPrice = toCents(m.last_price, m.last_price_dollars);
     let yesPrice: number;
     if (yesAsk !== null && yesBid !== null) {
       yesPrice = Math.round((yesAsk + yesBid) / 2);
@@ -75,10 +111,6 @@ serve(async (req) => {
     } else {
       yesPrice = 50;
     }
-
-    // Derive NO bid/ask with fallbacks
-    const noAsk = toCents((m as any).no_ask, (m as any).no_ask_dollars) ?? (yesBid !== null ? 100 - yesBid : null);
-    const noBid = toCents((m as any).no_bid, (m as any).no_bid_dollars) ?? (yesAsk !== null ? 100 - yesAsk : null);
 
     const volume24h = typeof m.volume_24h === 'number' ? m.volume_24h : (typeof m.volume === 'number' ? m.volume : 0);
     const liquidityDollars = m.liquidity_dollars ? parseFloat(m.liquidity_dollars) : 0;
