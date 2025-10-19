@@ -174,9 +174,9 @@ serve(async (req) => {
       if (yesPrice === null) yesPrice = 50;
       if (noPrice === null) noPrice = 50;
 
-      // Parse dollar volume - try multiple field variations
+      // Parse 24h dollar volume only (to match detail page)
       let volumeDollars = 0;
-      const vol24hDollarStr = market.volume_24h_dollars || market.volume_dollars || null;
+      const vol24hDollarStr = market.volume_24h_dollars || null;
       if (typeof vol24hDollarStr === 'string') {
         const parsed = parseFloat(vol24hDollarStr);
         if (!isNaN(parsed)) volumeDollars = parsed;
@@ -184,11 +184,11 @@ serve(async (req) => {
         volumeDollars = vol24hDollarStr;
       }
       
-      // Calculate contract-based volume as fallback
+      // Calculate contract-based volume (for display only if needed)
       const volumeContracts = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
       
-      // For sorting, prefer dollar volume (much more accurate indicator of activity)
-      const volumeRaw = volumeDollars > 0 ? volumeDollars : volumeContracts;
+      // For sorting/filtering, use only 24h dollar volume
+      const volumeRaw = volumeDollars;
       
       const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
 
@@ -203,7 +203,7 @@ serve(async (req) => {
         image: undefined, // Will be set in frontend based on category
         yesPrice,
         noPrice,
-        volume: volumeDollars > 0 ? `$${Math.round(volumeDollars).toLocaleString('en-US')}` : (volumeContracts > 0 ? `${volumeContracts.toLocaleString('en-US')} contracts` : '$0'),
+        volume: volumeDollars > 0 ? `$${Math.round(volumeDollars).toLocaleString('en-US')}` : '$0',
         liquidity: liquidityDollars > 0 ? `$${liquidityDollars.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '$0',
         volumeRaw,
         liquidityRaw: liquidityDollars,
