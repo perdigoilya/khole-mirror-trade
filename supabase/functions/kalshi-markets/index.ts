@@ -218,12 +218,14 @@ serve(async (req) => {
       };
     }) || []);
     
-    // Filter out low liquidity markets (less than $100 liquidity)
+    // Filter out markets with no volume or low liquidity
     const MIN_LIQUIDITY = 100;
-    const liquidMarkets = normalizedMarkets.filter((m: any) => (m.liquidityRaw || 0) >= MIN_LIQUIDITY);
+    const activeMarkets = normalizedMarkets.filter((m: any) => 
+      (m.volumeRaw || 0) > 0 && (m.liquidityRaw || 0) >= MIN_LIQUIDITY
+    );
     
     // Sort by dollar volume (highest first), then by liquidity
-    const sortedMarkets = liquidMarkets.sort((a: any, b: any) => 
+    const sortedMarkets = activeMarkets.sort((a: any, b: any) => 
       (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0)
     );
     
@@ -238,7 +240,7 @@ serve(async (req) => {
       })));
     }
     
-    console.log(`[PUBLIC] Filtered to ${sortedMarkets.length} markets with liquidity >= $${MIN_LIQUIDITY}, sorted by dollar volume`);
+    console.log(`[PUBLIC] Filtered to ${sortedMarkets.length} active markets (volume > 0, liquidity >= $${MIN_LIQUIDITY})`);
     
     const responseData = { 
       markets: sortedMarkets,
