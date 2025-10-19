@@ -76,7 +76,19 @@ serve(async (req) => {
 
           if (response.ok) {
             marketData = await response.json();
-            console.log(`[PUBLIC] Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
+    console.log(`[PUBLIC] Successfully fetched ${marketData.markets?.length || 0} public markets from ${base}`);
+    
+    // Debug: Check first few markets for volume data
+    if (marketData.markets?.length > 0) {
+      const sample = marketData.markets.slice(0, 3);
+      console.log(`[PUBLIC] Sample volume data:`, sample.map((m: any) => ({
+        ticker: m.ticker,
+        volume_24h_dollars: m.volume_24h_dollars,
+        volume_dollars: m.volume_dollars,
+        volume_24h: m.volume_24h,
+        volume: m.volume
+      })));
+    }
             break;
           } else {
             lastError = await response.text();
@@ -162,16 +174,20 @@ serve(async (req) => {
       if (yesPrice === null) yesPrice = 50;
       if (noPrice === null) noPrice = 50;
 
-      // Prioritize dollar volume (24h or total)
+      // Parse dollar volume - try multiple field variations
       let volumeDollars = 0;
-      if (typeof market.volume_24h_dollars === 'string') {
-        volumeDollars = parseFloat(market.volume_24h_dollars);
-      } else if (typeof market.volume_dollars === 'string') {
-        volumeDollars = parseFloat(market.volume_dollars);
+      const vol24hDollarStr = market.volume_24h_dollars || market.volume_dollars || null;
+      if (typeof vol24hDollarStr === 'string') {
+        const parsed = parseFloat(vol24hDollarStr);
+        if (!isNaN(parsed)) volumeDollars = parsed;
+      } else if (typeof vol24hDollarStr === 'number' && !isNaN(vol24hDollarStr)) {
+        volumeDollars = vol24hDollarStr;
       }
       
-      // Fall back to contract volume only if no dollar volume
+      // Calculate contract-based volume as fallback
       const volumeContracts = typeof market.volume_24h === 'number' ? market.volume_24h : (typeof market.volume === 'number' ? market.volume : 0);
+      
+      // For sorting, prefer dollar volume (much more accurate indicator of activity)
       const volumeRaw = volumeDollars > 0 ? volumeDollars : volumeContracts;
       
       const liquidityDollars = market.liquidity_dollars ? parseFloat(market.liquidity_dollars) : 0;
@@ -210,6 +226,17 @@ serve(async (req) => {
     const sortedMarkets = liquidMarkets.sort((a: any, b: any) => 
       (b.volumeRaw || 0) - (a.volumeRaw || 0) || (b.liquidityRaw || 0) - (a.liquidityRaw || 0)
     );
+    
+    // Debug: Log top markets by volume
+    if (sortedMarkets.length > 0) {
+      console.log(`[PUBLIC] Top 5 markets by volume:`, sortedMarkets.slice(0, 5).map((m: any) => ({
+        ticker: m.ticker,
+        title: m.title?.substring(0, 50),
+        volume: m.volume,
+        volumeRaw: m.volumeRaw,
+        liquidity: m.liquidity
+      })));
+    }
     
     console.log(`[PUBLIC] Filtered to ${sortedMarkets.length} markets with liquidity >= $${MIN_LIQUIDITY}, sorted by dollar volume`);
     
