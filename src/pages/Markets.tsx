@@ -418,6 +418,10 @@ const Markets = () => {
     }
 
     // Group Kalshi markets by event_ticker
+    console.log('🔍 [GROUPING DEBUG] Starting grouping process');
+    console.log('🔍 Platform:', platform, '| groupByEvent:', groupByEvent);
+    console.log('🔍 Total markets to process:', filteredAndSortedMarkets.length);
+    
     const eventGroups = new Map<string, any[]>();
     
     for (const market of filteredAndSortedMarkets) {
@@ -427,17 +431,33 @@ const Markets = () => {
       }
       eventGroups.get(eventTicker)!.push(market);
     }
+    
+    console.log('🔍 Unique event tickers found:', eventGroups.size);
+    
+    // Sample first 5 events for inspection
+    let sampleCount = 0;
+    for (const [ticker, markets] of eventGroups) {
+      if (sampleCount < 5) {
+        console.log(`🔍 Sample ${sampleCount + 1}: ${ticker} has ${markets.length} market(s)`);
+        sampleCount++;
+      }
+    }
 
     const result: any[] = [];
+    let singleMarketCount = 0;
+    let multiMarketCount = 0;
+    
     for (const [eventTicker, markets] of eventGroups) {
       if (markets.length === 1) {
         // Single market - show as-is with category image
+        singleMarketCount++;
         result.push({
           ...markets[0],
           image: markets[0].image || getCategoryImage(markets[0].category)
         });
       } else {
         // Multiple markets - create grouped event
+        multiMarketCount++;
         const sortedMarkets = markets.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
         const headlineMarket = sortedMarkets[0];
         const subMarkets = sortedMarkets.slice(1);
@@ -445,6 +465,8 @@ const Markets = () => {
         // Aggregate volume and liquidity
         const totalVolume = markets.reduce((sum: number, m: any) => sum + (m.volumeRaw || 0), 0);
         const totalLiquidity = markets.reduce((sum: number, m: any) => sum + (m.liquidityRaw || 0), 0);
+        
+        console.log(`✅ Multi-market group: ${eventTicker} with ${markets.length} markets`);
         
         result.push({
           ...headlineMarket,
@@ -461,6 +483,12 @@ const Markets = () => {
         });
       }
     }
+    
+    console.log('📊 [GROUPING SUMMARY]');
+    console.log(`   Total events: ${eventGroups.size}`);
+    console.log(`   Single-market events: ${singleMarketCount}`);
+    console.log(`   Multi-market events: ${multiMarketCount}`);
+    console.log(`   Final result count: ${result.length}`);
 
     return result;
   }, [filteredAndSortedMarkets, platform, groupByEvent]);
