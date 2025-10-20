@@ -49,7 +49,14 @@ const Markets = () => {
   const [sortBy, setSortBy] = useState("trending");
   const [timeFilter, setTimeFilter] = useState("all-time");
   const [showFilters, setShowFilters] = useState(false);
-  const [groupByEvent, setGroupByEvent] = useState(false);
+  
+  // Enable grouping by default for Kalshi, persist in localStorage
+  const [groupByEvent, setGroupByEvent] = useState(() => {
+    const savedPlatform = localStorage.getItem('lastMarketPlatform');
+    const savedGrouping = localStorage.getItem('groupByEvent');
+    if (savedGrouping !== null) return savedGrouping === 'true';
+    return savedPlatform === 'kalshi'; // Default true for Kalshi, false for Polymarket
+  });
   
   // Advanced filter states
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -70,6 +77,15 @@ const Markets = () => {
   
   // Track the current fetch to prevent race conditions
   const currentFetchRef = useRef<{ platform: 'kalshi' | 'polymarket', controller: AbortController } | null>(null);
+
+  // Set groupByEvent default when platform changes
+  useEffect(() => {
+    const savedGrouping = localStorage.getItem('groupByEvent');
+    if (savedGrouping === null) {
+      // Only auto-set if user hasn't manually configured it
+      setGroupByEvent(platform === 'kalshi');
+    }
+  }, [platform]);
 
   const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
     // Cancel any existing fetch if switching platforms
@@ -558,8 +574,9 @@ const Markets = () => {
                 <h3 className="text-sm font-normal text-foreground line-clamp-1 flex-1">
                   {market.title || market.ticker}
                 </h3>
-                {isKalshi && market.marketCount && (
-                  <Badge variant="outline" className="text-xs px-2 py-0.5">
+                {isKalshi && market.marketCount && market.marketCount > 1 && (
+                  <Badge variant="outline" className="text-xs px-2 py-0.5 bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30 flex items-center gap-1">
+                    <ListTree className="h-3 w-3" />
                     {market.marketCount} markets
                   </Badge>
                 )}
@@ -767,6 +784,12 @@ const Markets = () => {
                 <h3 className="text-sm font-medium text-foreground line-clamp-2 flex-1">
                   {market.title || market.ticker}
                 </h3>
+                {market.marketCount && market.marketCount > 1 && (
+                  <Badge variant="outline" className="text-xs px-2 py-0.5 bg-kalshi-teal/20 text-kalshi-teal border-kalshi-teal/30 flex-shrink-0">
+                    <ListTree className="h-3 w-3 mr-1" />
+                    {market.marketCount} markets
+                  </Badge>
+                )}
                 {market.status?.toLowerCase() === 'closed' && (
                   <Badge variant="outline" className="text-xs px-2 py-0.5 bg-muted flex-shrink-0">
                     Closed
@@ -902,11 +925,17 @@ const Markets = () => {
               <Button 
                 variant={groupByEvent ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setGroupByEvent(!groupByEvent)}
-                className="bg-card/50 border-border h-8"
+                onClick={() => {
+                  const newValue = !groupByEvent;
+                  setGroupByEvent(newValue);
+                  localStorage.setItem('groupByEvent', String(newValue));
+                }}
+                className={groupByEvent 
+                  ? 'bg-kalshi-teal hover:bg-kalshi-teal-dark text-white h-8' 
+                  : 'bg-card/50 border-border h-8'}
               >
                 <ListTree className="h-4 w-4 mr-2" />
-                Group by Event
+                {groupByEvent ? 'Grouped' : 'Group by Event'}
               </Button>
             )}
 
