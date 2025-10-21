@@ -518,6 +518,12 @@ const Markets = () => {
     return result;
   }, [filteredAndSortedMarkets, platform, groupByEvent]);
   
+  // Decide which list to display: grouped (Kalshi) or flat
+  const displayedMarkets = React.useMemo(() => {
+    if (platform === 'kalshi' && groupByEvent) return groupedMarkets;
+    return filteredAndSortedMarkets;
+  }, [groupedMarkets, filteredAndSortedMarkets, platform, groupByEvent]);
+  
   // Get unique categories from markets
   const categories = React.useMemo(() => {
     const cats = new Set(markets.map((m: any) => m.category).filter(Boolean));
@@ -1104,7 +1110,7 @@ const Markets = () => {
             {/* Table Header - Hidden on Mobile */}
             <div className="hidden lg:grid grid-cols-[50px,1fr,220px,140px,140px,140px,120px] gap-4 px-6 py-3 bg-card/50 border-b border-border text-sm text-muted-foreground font-medium">
               <div></div>
-              <div>MARKET ({filteredAndSortedMarkets.length})</div>
+              <div>MARKET ({displayedMarkets.length})</div>
               <div>PRICES</div>
               <div>OUTCOME</div>
               <div>VOLUME</div>
@@ -1115,7 +1121,7 @@ const Markets = () => {
             {/* Mobile Header */}
             <div className="lg:hidden px-4 py-3 bg-card/50 border-b border-border">
               <div className="text-sm text-muted-foreground font-medium">
-                MARKETS ({filteredAndSortedMarkets.length})
+                MARKETS ({displayedMarkets.length})
               </div>
             </div>
 
@@ -1155,7 +1161,7 @@ const Markets = () => {
                   )}
                 </div>
               </div>
-            ) : filteredAndSortedMarkets.length === 0 ? (
+            ) : displayedMarkets.length === 0 ? (
               <div className="p-12 text-center">
                 <div className="max-w-md mx-auto">
                   <div className={`w-16 h-16 rounded-full ${platform === 'kalshi' ? 'bg-kalshi-teal/10' : 'bg-polymarket-purple/10'} flex items-center justify-center mx-auto mb-4`}>
@@ -1176,7 +1182,7 @@ const Markets = () => {
                 </div>
               </div>
             ) : (
-              filteredAndSortedMarkets.map((market, index) => {
+              displayedMarkets.map((market, index) => {
                 const isExpanded = expandedMarkets.has(market.id);
                 const hasSubMarkets = market.isMultiOutcome && market.subMarkets && market.subMarkets.length > 1;
                 
