@@ -54,8 +54,8 @@ const Index = () => {
             </p>
 
             <a 
-              href="https://four.meme/" 
-              target="_blank" 
+              href="https://four.meme/token/0xe6ff0d10bef8484b2251a9fa811d045e96104444" 
+              target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer animate-fade-in opacity-0 [animation-delay:500ms] [animation-fill-mode:forwards]"
             >
