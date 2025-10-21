@@ -29,6 +29,7 @@ import { useTrading } from "@/contexts/TradingContext";
 import { ConnectionRequired } from "@/components/ConnectionRequired";
 import { useToast } from "@/hooks/use-toast";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { useApiCache } from "@/hooks/useApiCache";
 
 
 const Markets = () => {
@@ -70,6 +71,7 @@ const Markets = () => {
 
   // Cache for market data - increased duration for better performance
   const marketCacheRef = useRef<Map<string, { data: any[], timestamp: number }>>(new Map());
+  const apiCache = useApiCache(5 * 60 * 1000); // 5 minute API cache
   const CACHE_DURATION = 60000; // 1 minute
   
   // Debounce timer
@@ -124,13 +126,33 @@ const Markets = () => {
       let result;
       
       if (provider === 'kalshi') {
-        result = await supabase.functions.invoke('kalshi-events', {
-          body: {}
-        });
+        const cacheKey = 'kalshi-events';
+        const cached = apiCache.get(cacheKey);
+        if (cached) {
+          console.log('[Markets] Using cached Kalshi events from apiCache');
+          result = { data: cached, error: null };
+        } else {
+          result = await supabase.functions.invoke('kalshi-events', {
+            body: {}
+          });
+          if (result.data && !result.error) {
+            apiCache.set(cacheKey, result.data);
+          }
+        }
       } else {
-        result = await supabase.functions.invoke('polymarket-markets', {
-          body: { searchTerm, offset: loadOffset }
-        });
+        const cacheKey = `polymarket-${searchTerm || 'all'}-${loadOffset}`;
+        const cached = apiCache.get(cacheKey);
+        if (cached) {
+          console.log('[Markets] Using cached Polymarket markets from apiCache');
+          result = { data: cached, error: null };
+        } else {
+          result = await supabase.functions.invoke('polymarket-markets', {
+            body: { searchTerm, offset: loadOffset }
+          });
+          if (result.data && !result.error) {
+            apiCache.set(cacheKey, result.data);
+          }
+        }
       }
 
       const { data, error } = result;
@@ -418,6 +440,7 @@ const Markets = () => {
     }
 
     // Group Kalshi markets by event_ticker
+    const startTime = performance.now();
     console.log('🔍 [GROUPING DEBUG] Starting grouping process');
     console.log('🔍 Platform:', platform, '| groupByEvent:', groupByEvent);
     console.log('🔍 Total markets to process:', filteredAndSortedMarkets.length);
@@ -484,11 +507,13 @@ const Markets = () => {
       }
     }
     
+    const endTime = performance.now();
     console.log('📊 [GROUPING SUMMARY]');
     console.log(`   Total events: ${eventGroups.size}`);
     console.log(`   Single-market events: ${singleMarketCount}`);
     console.log(`   Multi-market events: ${multiMarketCount}`);
     console.log(`   Final result count: ${result.length}`);
+    console.log(`   ⚡ Processing time: ${(endTime - startTime).toFixed(2)}ms`);
 
     return result;
   }, [filteredAndSortedMarkets, platform, groupByEvent]);
