@@ -11,12 +11,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
 import { KalshiTradeDialog } from "@/components/KalshiTradeDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { useAccount, useBalance } from "wagmi";
 import { mainnet, polygon, base, arbitrum, optimism } from "wagmi/chains";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePolymarketPortfolio, useKalshiPortfolio } from "@/hooks/usePortfolioData";
-import { PortfolioSummary } from "@/features/portfolio/components/PortfolioSummary";
-import { PositionCard } from "@/features/portfolio/components/PositionCard";
 
 interface Position {
   title: string;

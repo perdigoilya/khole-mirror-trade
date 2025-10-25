@@ -8,9 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTrading } from "@/contexts/TradingContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Filter, UserPlus, X, TrendingUp, Heart, Repeat, Eye } from "lucide-react";
-import { FeedCard } from "@/features/feed/components/FeedCard";
-import { useTweets, useFollowedAccounts } from "@/hooks/useFeedData";
+import { Clock, RefreshCw, Heart, Repeat, Eye, Filter, TrendingUp, UserPlus, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTweets, useFollowedAccounts } from "@/hooks/useFeedData";
 
 interface NewsItem {
   id: string;
