@@ -82,8 +82,8 @@ const Navigation = () => {
                 className={cn(
                   "px-3 py-2 rounded-md text-sm font-medium transition-colors",
                   isActive(item.path)
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-primary/15 text-primary border border-primary/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
               >
                 {item.label}
@@ -199,7 +199,7 @@ const Navigation = () => {
                       className={cn(
                         "px-4 py-3 rounded-md text-base font-medium transition-colors",
                         isActive(item.path)
-                          ? "bg-primary/10 text-primary"
+                          ? "bg-primary/15 text-primary border border-primary/30"
                           : "text-foreground hover:bg-muted"
                       )}
                     >
