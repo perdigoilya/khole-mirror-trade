@@ -4,15 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Footer from "@/components/Footer";
 import nameLogo from "@/assets/name-logo.png";
-import nameLogoGray from "@/assets/name-logo-gray.png";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
 
 const Index = () => {
   const { t } = useLanguage();
-  const { themeColor } = useTheme();
-  
-  const currentNameLogo = themeColor === 'golden' ? nameLogo : nameLogoGray;
   
   const features = [
     {
@@ -40,7 +35,7 @@ const Index = () => {
         <section className="container mx-auto text-center">
           <div className="max-w-5xl mx-auto space-y-8">
             <div className="flex items-center justify-center space-x-4 animate-fade-in opacity-0 [animation-delay:100ms] [animation-fill-mode:forwards]">
-              <img src={currentNameLogo} alt="FOMO APP" className="h-28 md:h-40 w-auto" />
+              <img src={nameLogo} alt="FOMO APP" className="h-28 md:h-40 w-auto" />
               <Badge 
                 variant="outline" 
                 className="border-primary text-primary text-sm px-3 py-1 font-display"

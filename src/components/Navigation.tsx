@@ -4,9 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo.png";
-import logoGray from "@/assets/fomo-logo-gray.png";
 import { useTrading } from "@/contexts/TradingContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { ConnectKalshiDialog } from "@/components/ConnectKalshiDialog";
 import { ConnectPolymarketDialog } from "@/components/ConnectPolymarketDialog";
 import { ConnectPlatformDialog } from "@/components/ConnectPlatformDialog";
@@ -21,7 +19,6 @@ const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { themeColor } = useTheme();
   const { isKalshiConnected, isPolymarketConnected, user, kalshiCredentials, disconnectKalshi, disconnectPolymarket } = useTrading();
   const [showPlatformDialog, setShowPlatformDialog] = useState(false);
   const [showKalshiDialog, setShowKalshiDialog] = useState(false);
@@ -29,8 +26,6 @@ const Navigation = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
-  
-  const currentLogo = themeColor === 'golden' ? logo : logoGray;
   
   const isActive = (path: string) => location.pathname === path;
   
@@ -75,7 +70,7 @@ const Navigation = () => {
         <div className="flex h-14 items-center justify-between gap-2 sm:gap-4">
           {/* Left: Logo */}
           <Link to="/" className="flex items-center flex-shrink-0">
-            <img src={currentLogo} alt="FOMO App" className="h-7 sm:h-8 w-auto" />
+            <img src={logo} alt="FOMO App" className="h-7 sm:h-8 w-auto" />
           </Link>
           
           {/* Desktop Nav Links */}

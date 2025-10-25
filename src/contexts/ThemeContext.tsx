@@ -41,16 +41,16 @@ const themeColors = {
     primaryDim: '180 70% 40%',
   },
   grey: {
-    primary: '220 9% 60%',
-    primaryBright: '220 9% 70%',
-    primaryDim: '220 9% 50%',
+    primary: '0 0% 75%',
+    primaryBright: '0 0% 85%',
+    primaryDim: '0 0% 65%',
   },
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeColor, setThemeColorState] = useState<ThemeColor>(() => {
     const saved = localStorage.getItem('themeColor');
-    return (saved as ThemeColor) || 'golden';
+    return (saved as ThemeColor) || 'grey';
   });
 
   useEffect(() => {
