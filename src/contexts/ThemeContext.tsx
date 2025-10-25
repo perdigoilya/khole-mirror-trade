@@ -41,9 +41,9 @@ const themeColors = {
     primaryDim: '180 70% 40%',
   },
   grey: {
-    primary: '210 5% 75%',
-    primaryBright: '210 5% 85%',
-    primaryDim: '210 5% 65%',
+    primary: '210 8% 80%',
+    primaryBright: '210 10% 92%',
+    primaryDim: '210 6% 60%',
   },
 };
 

@@ -11,37 +11,37 @@ All colors MUST be HSL.
     --background: 0 0% 4%;
     --foreground: 0 0% 98%;
 
-    --card: 0 0% 6%;
+    --card: 210 8% 7%;
     --card-foreground: 0 0% 98%;
 
     --popover: 0 0% 6%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 210 5% 75%;
+    --primary: 210 8% 80%;
     --primary-foreground: 0 0% 10%;
 
     --secondary: 0 0% 10%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 0 0% 12%;
-    --muted-foreground: 210 5% 65%;
+    --muted: 210 8% 14%;
+    --muted-foreground: 210 6% 60%;
 
-    --accent: 210 5% 75%;
+    --accent: 210 8% 80%;
     --accent-foreground: 0 0% 10%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 15%;
-    --input: 0 0% 15%;
-    --ring: 0 0% 75%;
+    --border: 210 8% 18%;
+    --input: 210 8% 18%;
+    --ring: 210 8% 80%;
 
     --radius: 0.375rem;
 
     /* Monotone grey variations (default) */
-    --terminal-green: 210 5% 75%;
-    --terminal-green-bright: 210 5% 85%;
-    --terminal-green-dim: 210 5% 65%;
+    --terminal-green: 210 8% 80%;
+    --terminal-green-bright: 210 10% 92%;
+    --terminal-green-dim: 210 6% 60%;
     
     /* Chart colors for multi-outcome markets */
     --chart-orange: 24 95% 53%;
