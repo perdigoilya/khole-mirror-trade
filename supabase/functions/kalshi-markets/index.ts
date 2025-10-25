@@ -3,12 +3,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Cache-Control': 'public, s-maxage=45, stale-while-revalidate=90',
+  'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
 };
 
-// In-memory cache
+// In-memory cache with longer duration for better performance
 const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_DURATION = 45000; // 45 seconds
+const CACHE_DURATION = 300000; // 5 minutes (markets don't change frequently)
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

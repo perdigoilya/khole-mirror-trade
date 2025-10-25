@@ -5,14 +5,23 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
+interface CacheStats {
+  hits: number;
+  misses: number;
+  size: number;
+}
+
 export function useApiCache<T>(cacheDuration: number = 60000) {
   const cacheRef = useRef<Map<string, CacheEntry<T>>>(new Map());
+  const statsRef = useRef<CacheStats>({ hits: 0, misses: 0, size: 0 });
 
   const get = useCallback((key: string): T | null => {
     const cached = cacheRef.current.get(key);
     if (cached && Date.now() - cached.timestamp < cacheDuration) {
+      statsRef.current.hits++;
       return cached.data;
     }
+    statsRef.current.misses++;
     return null;
   }, [cacheDuration]);
 
@@ -22,11 +31,14 @@ export function useApiCache<T>(cacheDuration: number = 60000) {
       timestamp: Date.now()
     });
 
-    // Limit cache size to prevent memory issues
-    if (cacheRef.current.size > 100) {
+    statsRef.current.size = cacheRef.current.size;
+
+    // Limit cache size to prevent memory issues (increased to 200 for better performance)
+    if (cacheRef.current.size > 200) {
       const firstKey = cacheRef.current.keys().next().value;
       if (firstKey) {
         cacheRef.current.delete(firstKey);
+        statsRef.current.size--;
       }
     }
   }, []);
@@ -37,6 +49,7 @@ export function useApiCache<T>(cacheDuration: number = 60000) {
     } else {
       cacheRef.current.clear();
     }
+    statsRef.current.size = cacheRef.current.size;
   }, []);
 
   const has = useCallback((key: string): boolean => {
@@ -44,5 +57,9 @@ export function useApiCache<T>(cacheDuration: number = 60000) {
     return cached ? Date.now() - cached.timestamp < cacheDuration : false;
   }, [cacheDuration]);
 
-  return { get, set, clear, has };
+  const getStats = useCallback((): CacheStats => ({
+    ...statsRef.current
+  }), []);
+
+  return { get, set, clear, has, getStats };
 }

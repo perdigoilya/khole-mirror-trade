@@ -69,16 +69,14 @@ const Markets = () => {
   const [maxPrice, setMaxPrice] = useState<number>(100);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  // Cache for market data - increased duration for better performance
-  const marketCacheRef = useRef<Map<string, { data: any[], timestamp: number }>>(new Map());
-  const apiCache = useApiCache(5 * 60 * 1000); // 5 minute API cache
-  const CACHE_DURATION = 60000; // 1 minute
+  // Enhanced caching with longer durations for better performance
+  const apiCache = useApiCache(10 * 60 * 1000); // 10 minute API cache (markets don't change frequently)
   
   // Debounce timer
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   
-  // Track the current fetch to prevent race conditions
-  const currentFetchRef = useRef<{ platform: 'kalshi' | 'polymarket', controller: AbortController } | null>(null);
+  // Track the current fetch to prevent race conditions and duplicate requests
+  const currentFetchRef = useRef<{ platform: 'kalshi' | 'polymarket', controller: AbortController, key: string } | null>(null);
 
   // Set groupByEvent default when platform changes
   useEffect(() => {
@@ -90,30 +88,25 @@ const Markets = () => {
   }, [platform]);
 
   const fetchMarkets = useCallback(async (searchTerm?: string | null, provider: 'kalshi' | 'polymarket' = 'polymarket', loadOffset: number = 0, append: boolean = false) => {
+    // Generate cache key for request deduplication
+    const requestKey = `${provider}-${searchTerm || 'all'}-${loadOffset}`;
+    
+    // Request deduplication: prevent duplicate simultaneous requests
+    if (currentFetchRef.current?.key === requestKey && !append) {
+      console.log('[Markets] Deduplicating request:', requestKey);
+      return;
+    }
+    
     // Cancel any existing fetch if switching platforms
     if (!append && currentFetchRef.current && currentFetchRef.current.platform !== provider) {
       currentFetchRef.current.controller.abort();
       currentFetchRef.current = null;
     }
-    
-    // Generate cache key
-    const cacheKey = `${provider}-${searchTerm || 'all'}-${loadOffset}`;
-    
-    // Check cache first (skip caching for Kalshi to avoid stale event list)
-    const cached = provider !== 'kalshi' ? marketCacheRef.current.get(cacheKey) : undefined;
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      if (append) {
-        setMarkets(prev => [...prev, ...cached.data]);
-      } else {
-        setMarkets(cached.data);
-      }
-      return;
-    }
 
     // Create abort controller for this fetch
     const controller = new AbortController();
     if (!append) {
-      currentFetchRef.current = { platform: provider, controller };
+      currentFetchRef.current = { platform: provider, controller, key: requestKey };
     }
 
     if (append) {
@@ -124,34 +117,29 @@ const Markets = () => {
     
     try {
       let result;
+      const cacheKey = provider === 'kalshi' 
+        ? 'kalshi-events' 
+        : `polymarket-${searchTerm || 'all'}-${loadOffset}`;
       
-      if (provider === 'kalshi') {
-        const cacheKey = 'kalshi-events';
-        const cached = apiCache.get(cacheKey);
-        if (cached) {
-          console.log('[Markets] Using cached Kalshi events from apiCache');
-          result = { data: cached, error: null };
-        } else {
-          result = await supabase.functions.invoke('kalshi-events', {
-            body: {}
-          });
-          if (result.data && !result.error) {
-            apiCache.set(cacheKey, result.data);
-          }
-        }
+      // Check cache first
+      const cached = apiCache.get(cacheKey);
+      if (cached) {
+        console.log(`[Markets] Cache hit for ${provider}`);
+        result = { data: cached, error: null };
       } else {
-        const cacheKey = `polymarket-${searchTerm || 'all'}-${loadOffset}`;
-        const cached = apiCache.get(cacheKey);
-        if (cached) {
-          console.log('[Markets] Using cached Polymarket markets from apiCache');
-          result = { data: cached, error: null };
+        console.log(`[Markets] Cache miss, fetching ${provider}`);
+        // Fetch from backend
+        if (provider === 'kalshi') {
+          result = await supabase.functions.invoke('kalshi-events', { body: {} });
         } else {
           result = await supabase.functions.invoke('polymarket-markets', {
             body: { searchTerm, offset: loadOffset }
           });
-          if (result.data && !result.error) {
-            apiCache.set(cacheKey, result.data);
-          }
+        }
+        
+        // Cache successful responses
+        if (result.data && !result.error) {
+          apiCache.set(cacheKey, result.data);
         }
       }
 
@@ -204,21 +192,14 @@ const Markets = () => {
           }
 
           if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
             filteredMarkets = filteredMarkets.filter((market: any) =>
-              (market.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-              (market.ticker || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-              (market.eventTicker || '').toLowerCase().includes(searchTerm.toLowerCase())
+              (market.title || '').toLowerCase().includes(searchLower) ||
+              (market.ticker || '').toLowerCase().includes(searchLower) ||
+              (market.eventTicker || '').toLowerCase().includes(searchLower)
             );
           }
           console.log(`[Markets] After search filter: ${filteredMarkets.length} items`);
-          
-          // Update cache for Polymarket only
-          if (provider !== 'kalshi') {
-            marketCacheRef.current.set(cacheKey, {
-              data: filteredMarkets,
-              timestamp: Date.now()
-            });
-          }
           
           // Double-check before updating state
           if (append || (currentFetchRef.current?.platform === provider)) {
@@ -301,13 +282,17 @@ const Markets = () => {
     fetchMarkets(searchTerm, platform as 'kalshi' | 'polymarket', newOffset, true);
   };
 
-  // Apply all filters and sorting
+  // Optimized filtering and sorting with early returns
   const filteredAndSortedMarkets = React.useMemo(() => {
-    let result = [...markets];
+    // Early return if no markets
+    if (markets.length === 0) return [];
+    
+    let result = markets;
     
     // Time filter - filter by when markets will end
     if (timeFilter !== 'all-time') {
       const now = new Date();
+      const nowTime = now.getTime();
       let maxEndDate = new Date();
       
       if (timeFilter === 'today') {
@@ -318,58 +303,54 @@ const Markets = () => {
         maxEndDate.setDate(now.getDate() + 30);
       }
       
+      const maxEndTime = maxEndDate.getTime();
       result = result.filter((market: any) => {
         if (!market.endDate || market.endDate === 'TBD') return true;
-        const endDate = new Date(market.endDate);
-        return endDate >= now && endDate <= maxEndDate;
+        const endTime = new Date(market.endDate).getTime();
+        return endTime >= nowTime && endTime <= maxEndTime;
       });
     }
     
     // Category filter
     if (categoryFilter !== 'all') {
+      const categoryLower = categoryFilter.toLowerCase();
       result = result.filter((market: any) => 
-        market.category?.toLowerCase() === categoryFilter.toLowerCase()
+        market.category?.toLowerCase() === categoryLower
       );
     }
     
-    // Volume filter
-    result = result.filter((market: any) => {
-      const vol = market.volumeRaw || 0;
-      const passes = vol >= minVolume && vol <= maxVolume;
-      if (!passes && vol > 0 && platform === 'kalshi') {
-        console.log(`[Filter] Kalshi market filtered by volume: ${market.title} (vol: $${vol}, min: $${minVolume}, max: $${maxVolume})`);
-      }
-      return passes;
-    });
-    
-    // Liquidity filter
-    result = result.filter((market: any) => {
-      const liq = market.liquidityRaw || 0;
-      return liq >= minLiquidity && liq <= maxLiquidity;
-    });
+    // Volume filter (combined with liquidity for single pass)
+    if (minVolume > 0 || maxVolume < 10000000 || minLiquidity > 0 || maxLiquidity < 1000000) {
+      result = result.filter((market: any) => {
+        const vol = market.volumeRaw || 0;
+        const liq = market.liquidityRaw || 0;
+        return vol >= minVolume && vol <= maxVolume && liq >= minLiquidity && liq <= maxLiquidity;
+      });
+    }
     
     // Price filter
-    result = result.filter((market: any) => {
-      const price = market.yesPrice || 50;
-      return price >= minPrice && price <= maxPrice;
-    });
+    if (minPrice > 0 || maxPrice < 100) {
+      result = result.filter((market: any) => {
+        const price = market.yesPrice || 50;
+        return price >= minPrice && price <= maxPrice;
+      });
+    }
     
     // Status filter
     if (statusFilter !== 'all') {
+      const statusLower = statusFilter.toLowerCase();
       result = result.filter((market: any) => 
-        market.status?.toLowerCase() === statusFilter.toLowerCase()
+        market.status?.toLowerCase() === statusLower
       );
     }
     
-    // Apply sorting
+    // Apply sorting (in-place for better performance)
     if (sortBy === 'trending') {
-      // Trending: sort by 24hr volume (recent activity)
-      result.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
+      result = [...result].sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
     } else if (sortBy === 'top') {
-      // Top: sort by liquidity (market depth/total size)
-      result.sort((a: any, b: any) => (b.liquidityRaw || 0) - (a.liquidityRaw || 0));
+      result = [...result].sort((a: any, b: any) => (b.liquidityRaw || 0) - (a.liquidityRaw || 0));
     } else if (sortBy === 'new') {
-      result.reverse();
+      result = [...result].reverse();
     }
     
     return result;
@@ -395,6 +376,9 @@ const Markets = () => {
   };
 
   const groupedMarkets = React.useMemo(() => {
+    // Early return for empty markets
+    if (filteredAndSortedMarkets.length === 0) return [];
+    
     // If not grouping, return as-is
     if (!groupByEvent || platform !== 'kalshi') {
       // For Polymarket, apply existing grouping logic
@@ -439,12 +423,7 @@ const Markets = () => {
       }));
     }
 
-    // Group Kalshi markets by event_ticker
-    const startTime = performance.now();
-    console.log('🔍 [GROUPING DEBUG] Starting grouping process');
-    console.log('🔍 Platform:', platform, '| groupByEvent:', groupByEvent);
-    console.log('🔍 Total markets to process:', filteredAndSortedMarkets.length);
-    
+    // Optimized Kalshi grouping by event_ticker
     const eventGroups = new Map<string, any[]>();
     
     for (const market of filteredAndSortedMarkets) {
@@ -455,41 +434,36 @@ const Markets = () => {
       eventGroups.get(eventTicker)!.push(market);
     }
     
-    console.log('🔍 Unique event tickers found:', eventGroups.size);
-    
-    // Sample first 5 events for inspection
-    let sampleCount = 0;
-    for (const [ticker, markets] of eventGroups) {
-      if (sampleCount < 5) {
-        console.log(`🔍 Sample ${sampleCount + 1}: ${ticker} has ${markets.length} market(s)`);
-        sampleCount++;
-      }
-    }
-
     const result: any[] = [];
-    let singleMarketCount = 0;
-    let multiMarketCount = 0;
+    const resultSize = eventGroups.size;
     
     for (const [eventTicker, markets] of eventGroups) {
       if (markets.length === 1) {
         // Single market - show as-is with category image
-        singleMarketCount++;
         result.push({
           ...markets[0],
           image: markets[0].image || getCategoryImage(markets[0].category)
         });
       } else {
-        // Multiple markets - create grouped event
-        multiMarketCount++;
-        const sortedMarkets = markets.sort((a: any, b: any) => (b.volumeRaw || 0) - (a.volumeRaw || 0));
-        const headlineMarket = sortedMarkets[0];
-        const subMarkets = sortedMarkets.slice(1);
+        // Multiple markets - create grouped event (optimized)
+        let headlineMarket = markets[0];
+        let maxVolume = markets[0].volumeRaw || 0;
+        let totalVolume = 0;
+        let totalLiquidity = 0;
         
-        // Aggregate volume and liquidity
-        const totalVolume = markets.reduce((sum: number, m: any) => sum + (m.volumeRaw || 0), 0);
-        const totalLiquidity = markets.reduce((sum: number, m: any) => sum + (m.liquidityRaw || 0), 0);
+        // Single pass to find max and calculate totals
+        for (const market of markets) {
+          const vol = market.volumeRaw || 0;
+          const liq = market.liquidityRaw || 0;
+          totalVolume += vol;
+          totalLiquidity += liq;
+          if (vol > maxVolume) {
+            maxVolume = vol;
+            headlineMarket = market;
+          }
+        }
         
-        console.log(`✅ Multi-market group: ${eventTicker} with ${markets.length} markets`);
+        const subMarkets = markets.filter(m => m !== headlineMarket);
         
         result.push({
           ...headlineMarket,
@@ -506,14 +480,6 @@ const Markets = () => {
         });
       }
     }
-    
-    const endTime = performance.now();
-    console.log('📊 [GROUPING SUMMARY]');
-    console.log(`   Total events: ${eventGroups.size}`);
-    console.log(`   Single-market events: ${singleMarketCount}`);
-    console.log(`   Multi-market events: ${multiMarketCount}`);
-    console.log(`   Final result count: ${result.length}`);
-    console.log(`   ⚡ Processing time: ${(endTime - startTime).toFixed(2)}ms`);
 
     return result;
   }, [filteredAndSortedMarkets, platform, groupByEvent]);
