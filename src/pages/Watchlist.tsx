@@ -318,7 +318,7 @@ const Watchlist = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
       <main className="flex-1 pt-6 pb-24">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto">
           <div className="max-w-7xl mx-auto">
             {/* Header with Filters */}
             <div className="mb-6">

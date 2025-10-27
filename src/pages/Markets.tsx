@@ -878,7 +878,7 @@ const Markets = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
       <main className="flex-1 pt-6 pb-24">
-        <div className="container mx-auto px-4 max-w-[1600px]">
+        <div className="container mx-auto max-w-[1600px]">
           {/* Filter Bar with Platform Selector */}
           <div className="flex items-center gap-3 mb-6 flex-wrap">
             {/* Platform Selector - Compact */}

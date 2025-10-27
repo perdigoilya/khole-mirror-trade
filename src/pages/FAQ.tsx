@@ -45,7 +45,7 @@ const FAQ = () => {
     <div className="min-h-screen bg-background flex flex-col pt-14">
       
       <main className="flex-1 pt-10 pb-24">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto">
           <div className="max-w-3xl mx-auto">
             <div className="mb-12 text-center">
               <h1 className="text-4xl font-bold mb-4">{t.faq.title}</h1>

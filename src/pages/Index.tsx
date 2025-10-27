@@ -30,7 +30,7 @@ const Index = () => {
   return (
     <div className="h-screen bg-background overflow-hidden flex flex-col pt-14">
       
-      <main className="flex-1 flex items-center justify-center px-4 py-8 pb-24">
+      <main className="flex-1 flex items-center justify-center py-8 pb-24">
         {/* Hero Section */}
         <section className="container mx-auto text-center">
           <div className="max-w-5xl mx-auto space-y-8">

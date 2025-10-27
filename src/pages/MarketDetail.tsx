@@ -860,7 +860,7 @@ const MarketDetail = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col pt-14">
       <main className="flex-1 pt-6 pb-24">
-        <div className="container mx-auto px-4">
+        <div className="container mx-auto">
           <div className="max-w-[1600px] mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
