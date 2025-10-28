@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Languages, Palette, Twitter } from "lucide-react";
+import { CheckCircle2, AlertCircle, Activity, MessageSquare, HelpCircle, X, Palette, Twitter } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useTrading } from "@/contexts/TradingContext";
 import {
@@ -36,7 +35,6 @@ interface Tweet {
 }
 
 const Footer = () => {
-  const { language, setLanguage, t } = useLanguage();
   const { themeColor, setThemeColor } = useTheme();
   const { user } = useTrading();
   const [systemStatus, setSystemStatus] = useState<'operational' | 'degraded' | 'down'>('operational');
@@ -116,10 +114,10 @@ const Footer = () => {
     : 'text-red-500';
 
   const statusText = systemStatus === 'operational'
-    ? t.footer.systemOperational
+    ? "All Systems Operational"
     : systemStatus === 'degraded'
-    ? t.footer.systemDegraded
-    : t.footer.systemDown;
+    ? "System Degraded"
+    : "System Down";
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-sm border-t border-border">
@@ -135,14 +133,14 @@ const Footer = () => {
           <SheetTrigger asChild>
             <Button variant="ghost" size="sm" className="gap-2">
               <Activity className="h-4 w-4" />
-              <span className="text-sm font-medium">{t.footer.feedTracker}</span>
+              <span className="text-sm font-medium">Feed Tracker</span>
             </Button>
           </SheetTrigger>
           <SheetContent side="bottom" className="h-[60vh]">
             <SheetHeader>
-              <SheetTitle>{t.footer.feedTrackerTitle}</SheetTitle>
+              <SheetTitle>Real-Time Feed Tracker</SheetTitle>
               <SheetDescription>
-                {t.footer.feedTrackerDesc}
+                Monitor latest activity and trending topics from prediction markets
               </SheetDescription>
             </SheetHeader>
             
@@ -153,7 +151,7 @@ const Footer = () => {
                 </div>
               ) : latestTweets.length === 0 ? (
                 <div className="text-center p-8 text-muted-foreground">
-                  {t.footer.noActivity}
+                  No recent activity
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -241,16 +239,6 @@ const Footer = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
-            className="gap-2"
-          >
-            <Languages className="h-4 w-4" />
-            <span className="text-sm font-medium">{language === 'en' ? '中文' : 'EN'}</span>
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
             asChild
             className="gap-2"
           >
@@ -273,7 +261,7 @@ const Footer = () => {
               className="gap-2"
             >
               <HelpCircle className="h-4 w-4" />
-              <span className="text-sm">{t.footer.helpSupport}</span>
+              <span className="text-sm">Help & Support</span>
             </a>
           </Button>
         </div>

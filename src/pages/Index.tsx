@@ -4,26 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Footer from "@/components/Footer";
 import nameLogo from "@/assets/name-logo.png";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 const Index = () => {
-  const { t } = useLanguage();
-  
   const features = [
     {
       icon: Zap,
-      title: t.home.featureTitle1,
-      description: t.home.featureDesc1,
+      title: "Lightning Fast Trading",
+      description: "Execute trades instantly across multiple platforms with real-time price updates and market data.",
     },
     {
       icon: BarChart3,
-      title: t.home.featureTitle2,
-      description: t.home.featureDesc2,
+      title: "Advanced Analytics",
+      description: "Track your portfolio performance with detailed charts, statistics, and market insights.",
     },
     {
       icon: Shield,
-      title: t.home.featureTitle3,
-      description: t.home.featureDesc3,
+      title: "Secure & Reliable",
+      description: "Your credentials and trades are protected with enterprise-grade security and encryption.",
     },
   ];
 
@@ -40,12 +37,12 @@ const Index = () => {
                 variant="outline" 
                 className="border-primary text-primary text-sm px-3 py-1 font-display"
               >
-                {t.home.badge}
+                Beta
               </Badge>
             </div>
 
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed animate-fade-in opacity-0 [animation-delay:300ms] [animation-fill-mode:forwards]">
-              {t.home.tagline}
+              Your unified platform for prediction market trading across Polymarket, Kalshi, and beyond
             </p>
 
             <a 
@@ -54,7 +51,7 @@ const Index = () => {
               rel="noopener noreferrer"
               className="inline-flex items-center space-x-2 px-5 py-3 rounded-md border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer animate-fade-in opacity-0 [animation-delay:500ms] [animation-fill-mode:forwards]"
             >
-              <span className="text-base text-foreground font-medium">{t.home.liveLink}</span>
+              <span className="text-base text-foreground font-medium">$FOMO is LIVE on Four.meme</span>
               <ExternalLink className="h-5 w-5 text-primary" />
             </a>
 
@@ -65,7 +62,7 @@ const Index = () => {
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-display text-lg px-8 py-6 group"
               >
                 <Link to="/markets">
-                  {t.home.startTrading}
+                  Start Trading
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </Button>
@@ -77,7 +74,7 @@ const Index = () => {
                 className="border-border hover:bg-muted font-display text-lg px-8 py-6"
               >
                 <Link to="/feed">
-                  {t.home.viewMarkets}
+                  View Markets
                 </Link>
               </Button>
             </div>

@@ -5,39 +5,36 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 const FAQ = () => {
-  const { t } = useLanguage();
-  
   const faqs = [
     {
-      question: t.faq.question1,
-      answer: t.faq.answer1,
+      question: "What is FOMO APP?",
+      answer: "FOMO APP is a unified prediction market trading platform that connects you to multiple markets including Polymarket and Kalshi. Trade on real-world events, politics, sports, and more from one convenient interface.",
     },
     {
-      question: t.faq.question2,
-      answer: t.faq.answer2,
+      question: "How do I get started?",
+      answer: "Simply connect your wallet or create an account, then link your Polymarket or Kalshi credentials. You'll have instant access to thousands of prediction markets across multiple platforms.",
     },
     {
-      question: t.faq.question3,
-      answer: t.faq.answer3,
+      question: "What markets can I trade?",
+      answer: "Trade on a wide variety of prediction markets including politics, economics, sports, weather, and current events. Both Polymarket and Kalshi offer unique markets with real money trading.",
     },
     {
-      question: t.faq.question4,
-      answer: t.faq.answer4,
+      question: "Is my data secure?",
+      answer: "Yes, we take security seriously. Your credentials are encrypted and stored securely. We never have access to your private keys or passwords.",
     },
     {
-      question: t.faq.question5,
-      answer: t.faq.answer5,
+      question: "What are the fees?",
+      answer: "FOMO APP itself is free to use. You'll only pay the standard fees charged by the underlying platforms (Polymarket and Kalshi) when you execute trades.",
     },
     {
-      question: t.faq.question6,
-      answer: t.faq.answer6,
+      question: "Can I use FOMO APP on mobile?",
+      answer: "Yes! FOMO APP is fully responsive and works great on mobile devices. Access your markets anywhere, anytime.",
     },
     {
-      question: t.faq.question7,
-      answer: t.faq.answer7,
+      question: "How do I withdraw my funds?",
+      answer: "Withdrawals are processed through the respective platforms (Polymarket or Kalshi). Visit your portfolio and follow the withdrawal instructions for each platform.",
     },
   ];
 
@@ -48,9 +45,9 @@ const FAQ = () => {
         <div className="container mx-auto">
           <div className="max-w-3xl mx-auto">
             <div className="mb-12 text-center">
-              <h1 className="text-4xl font-bold mb-4">{t.faq.title}</h1>
+              <h1 className="text-4xl font-bold mb-4">Frequently Asked Questions</h1>
               <p className="text-muted-foreground text-lg">
-                {t.faq.subtitle}
+                Everything you need to know about FOMO APP
               </p>
             </div>
 
@@ -72,9 +69,9 @@ const FAQ = () => {
             </Accordion>
 
             <div className="mt-12 p-8 rounded-lg border border-border bg-card text-center">
-              <h2 className="text-2xl font-bold mb-2">{t.faq.stillHaveQuestions}</h2>
+              <h2 className="text-2xl font-bold mb-2">Still have questions?</h2>
               <p className="text-muted-foreground mb-4">
-                {t.faq.reachOut}
+                We're here to help! Reach out to our support team.
               </p>
               <a
                 href="https://x.com/FOMOAPPbet"
@@ -82,7 +79,7 @@ const FAQ = () => {
                 rel="noopener noreferrer"
                 className="text-primary hover:underline font-semibold"
               >
-                {t.faq.contactSupport}
+                Contact Support
               </a>
             </div>
           </div>

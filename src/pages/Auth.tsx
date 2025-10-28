@@ -6,10 +6,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import logo from "@/assets/logo.png";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 const Auth = () => {
-  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,8 +29,8 @@ const Auth = () => {
         if (error) throw error;
         
         toast({
-          title: t.auth.welcomeBackToast,
-          description: t.auth.loggedInSuccess,
+          title: "Welcome back!",
+          description: "You've successfully logged in.",
         });
         navigate("/markets");
       } else {
@@ -47,14 +45,14 @@ const Auth = () => {
         if (error) throw error;
         
         toast({
-          title: t.auth.accountCreated,
-          description: t.auth.canLoginNow,
+          title: "Account created!",
+          description: "You can now log in with your credentials.",
         });
         setIsLogin(true);
       }
     } catch (error: any) {
       toast({
-        title: t.auth.error,
+        title: "Error",
         description: error.message,
         variant: "destructive",
       });
@@ -69,21 +67,21 @@ const Auth = () => {
         <div className="text-center">
           <img src={logo} alt="khole" className="h-16 w-auto mx-auto mb-4" />
           <h2 className="text-3xl font-bold">
-            {isLogin ? t.auth.welcomeBack : t.auth.createAccount}
+            {isLogin ? "Welcome back" : "Create an account"}
           </h2>
           <p className="text-muted-foreground mt-2">
-            {isLogin ? t.auth.signInDesc : t.auth.signUpDesc}
+            {isLogin ? "Sign in to your account to continue" : "Sign up to start trading prediction markets"}
           </p>
         </div>
 
         <form onSubmit={handleAuth} className="space-y-6">
           <div className="space-y-4">
             <div>
-              <Label htmlFor="email">{t.auth.email}</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder={t.auth.emailPlaceholder}
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -92,11 +90,11 @@ const Auth = () => {
             </div>
 
             <div>
-              <Label htmlFor="password">{t.auth.password}</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder={t.auth.passwordPlaceholder}
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -106,7 +104,7 @@ const Auth = () => {
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? t.auth.pleaseWait : isLogin ? t.auth.signIn : t.auth.signUp}
+            {loading ? "Please wait..." : isLogin ? "Sign In" : "Sign Up"}
           </Button>
 
           <div className="text-center">
@@ -115,7 +113,7 @@ const Auth = () => {
               onClick={() => setIsLogin(!isLogin)}
               className="text-sm text-primary hover:underline"
             >
-              {isLogin ? t.auth.noAccount : t.auth.hasAccount}
+              {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
             </button>
           </div>
         </form>
