@@ -497,8 +497,24 @@ async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
         // Get CLOB token ID for charts - try multiple sources
         let clobTokenId = '';
         
+        // Helper to safely extract string token ID from various formats
+        const safeExtractTokenId = (value: any): string => {
+          if (!value) return '';
+          if (typeof value === 'string') return value.trim();
+          if (typeof value === 'number') return String(value);
+          if (Array.isArray(value) && value.length > 0) {
+            // If it's an array, get the first element
+            return safeExtractTokenId(value[0]);
+          }
+          // For objects or other types, return empty
+          return '';
+        };
+        
         // First, try to get from the main market directly
-        clobTokenId = mainMarket.clobTokenIds?.[0] || mainMarket.clob_token_ids?.[0] || '';
+        const marketTokenId = safeExtractTokenId(mainMarket.clobTokenIds?.[0] || mainMarket.clob_token_ids?.[0]);
+        if (marketTokenId) {
+          clobTokenId = marketTokenId;
+        }
         
         // If not found, try from tokens array - prioritize YES token for binary markets
         if (!clobTokenId && tokens.length > 0) {
@@ -511,15 +527,16 @@ async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
           // If no YES token found, use first token
           const targetToken = yesToken || tokens[0];
           
-          // Extract token ID from various possible field names
-          clobTokenId = String(
+          // Extract token ID from various possible field names, handling arrays
+          clobTokenId = safeExtractTokenId(
             targetToken?.token_id || 
             targetToken?.tokenId || 
-            targetToken?.id || 
-            ''
+            targetToken?.id
           );
           
-          console.log(`Extracted token ID from tokens array: ${clobTokenId}`);
+          if (clobTokenId) {
+            console.log(`Extracted token ID from tokens array: ${clobTokenId}`);
+          }
         }
         
         // If still no token ID, try from simplified market data
@@ -529,19 +546,30 @@ async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
             const yesToken = simpTokens.find((t: any) => 
               String(t?.outcome ?? '').toLowerCase() === 'yes'
             ) || simpTokens[0];
-            clobTokenId = String(yesToken?.token_id || yesToken?.tokenId || '');
-            console.log(`Extracted token ID from simplified market: ${clobTokenId}`);
+            clobTokenId = safeExtractTokenId(yesToken?.token_id || yesToken?.tokenId);
+            if (clobTokenId) {
+              console.log(`Extracted token ID from simplified market: ${clobTokenId}`);
+            }
           }
         }
         
         // Fallback: use condition ID (will be resolved by price-history function)
         if (!clobTokenId && cid) {
-          clobTokenId = cid;
-          console.log(`Using condition ID as fallback: ${clobTokenId}`);
+          clobTokenId = safeExtractTokenId(cid);
+          if (clobTokenId) {
+            console.log(`Using condition ID as fallback: ${clobTokenId}`);
+          }
         }
         
+        // Validate that we have proper IDs before adding the market
+        // Token ID should be numeric or a valid hex string
+        const isValidTokenId = clobTokenId && (
+          /^\d+$/.test(clobTokenId) || // numeric
+          /^0x[0-9a-fA-F]+$/.test(clobTokenId) // hex string
+        );
+        
         // Only add markets with valid condition IDs and token IDs for pricing
-        if (cid && clobTokenId) {
+        if (cid && isValidTokenId) {
           const marketData = {
             id: cid,
             title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
