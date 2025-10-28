@@ -9,6 +9,7 @@ import { useTrading } from "@/contexts/TradingContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Clock, RefreshCw, Heart, Repeat, Eye, Filter, TrendingUp, UserPlus, X } from "lucide-react";
+import { MarketChart } from "@/components/MarketChart";
 import {
   Select,
   SelectContent,
@@ -558,6 +559,17 @@ const Feed = () => {
                             <h4 className="text-sm font-semibold mb-2 line-clamp-2">
                               {market.title}
                             </h4>
+                            
+                            {/* Mini Chart */}
+                            <div className="h-24 mb-3 rounded overflow-hidden">
+                              <MarketChart
+                                marketId={market.provider === 'polymarket' ? (market.clobTokenId || market.id) : market.id}
+                                timeRange="1D"
+                                provider={market.provider}
+                                minimal={true}
+                              />
+                            </div>
+                            
                             <div className="flex items-center justify-between text-xs">
                               <div className="flex gap-2">
                                 <span className="text-green-600 font-medium">
