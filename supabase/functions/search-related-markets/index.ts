@@ -561,15 +561,20 @@ async function searchPolymarketEvents(tweetText: string): Promise<any[]> {
           }
         }
         
-        // Validate that we have proper IDs before adding the market
-        // Token ID should be numeric or a valid hex string
+        // Validate token ID format if we have one
         const isValidTokenId = clobTokenId && (
           /^\d+$/.test(clobTokenId) || // numeric
           /^0x[0-9a-fA-F]+$/.test(clobTokenId) // hex string
         );
         
-        // Only add markets with valid condition IDs and token IDs for pricing
-        if (cid && isValidTokenId) {
+        // If no valid token ID, use condition ID as fallback
+        if (!isValidTokenId && cid) {
+          clobTokenId = cid;
+          console.log(`Using condition ID as token ID fallback: ${clobTokenId}`);
+        }
+        
+        // Add markets with valid condition IDs
+        if (cid && clobTokenId) {
           const marketData = {
             id: cid,
             title: event.title || mainMarket.question || mainMarket.title || 'Unknown Market',
